@@ -294,6 +294,26 @@ class ChemistryModelTest {
         }
 
         @Test
+        @DisplayName("Species data should calculate entropy")
+        void speciesDataShouldCalculateEntropy() {
+            ChemistryModel.SpeciesData h2o = new ChemistryModel.SpeciesData(
+                    "H2O", 18.015,
+                    new double[]{4.198640560e+00, -2.036434100e-03, 6.520402110e-06, -5.487970620e-09, 1.771978170e-12, -3.029372670e+04, -8.490322080e-01},
+                    new double[]{3.033992490e+00, 2.176918040e-03, -1.640725180e-07, -9.704198700e-11, 1.682009920e-14, -3.000429710e+04, 4.966770100e+00}
+            );
+
+            double s = h2o.entropy(2000);
+            assertThat(s).isNotNaN();
+            assertThat(s).isFinite();
+            // H2O standard molar entropy at 2000K is ~264 J/(mol·K), so per-mass ~14,650 J/(kg·K)
+            assertThat(s).isBetween(12_000.0, 17_000.0);
+
+            // Entropy should increase with temperature
+            double sLow = h2o.entropy(500);
+            assertThat(s).isGreaterThan(sLow);
+        }
+
+        @Test
         @DisplayName("Species data should calculate gibbsOverRT")
         void speciesDataShouldCalculateGibbsOverRT() {
             ChemistryModel.SpeciesData h2o = new ChemistryModel.SpeciesData(
