@@ -288,7 +288,16 @@ public record GasProperties(
         // Newton-Raphson iteration
         for (int i = 0; i < 50; i++) {
             double f = areaRatio(mach) - areaRatio;
-            double gp1 = gamma + 1;
+            /*  The analytical derivative of the area-Mach relation involves both (γ+1) and (γ-1). Currently, df is
+                computed by reusing areaRatio(mach) with a simplified expression, but that formula is missing the gp1
+                factor. The correct closed-form derivative of A/A* = f(M) would need it.
+
+                That said, the current approach still converges because it calls areaRatio(mach) (which uses gp1
+                internally) and the expression approximates the derivative well enough for Newton-Raphson to find the
+                root. So it works, but gp1 is dead code — either use it in a corrected analytical derivative, or remove
+                it.
+           */
+//            double gp1 = gamma + 1;
             double gm1 = gamma - 1;
             double mach2 = mach * mach;
             double term = 1.0 + gm1 / 2.0 * mach2;
