@@ -67,6 +67,21 @@ class ChemistryModelTest {
         }
         
         @Test
+        @DisplayName("Should set LOX/CH4 composition")
+        void shouldSetLoxCh4Composition() {
+            ChemistryModel ch4Model = ChemistryModel.frozen(GasProperties.LOX_CH4_PRODUCTS);
+            ch4Model.setLoxCh4Composition(3.5);
+
+            Map<String, Double> fractions = ch4Model.getSpeciesMassFractions();
+            assertThat(fractions).isNotEmpty();
+            assertThat(fractions).containsKey("H2O");
+            assertThat(fractions).containsKey("CO2");
+
+            double sum = fractions.values().stream().mapToDouble(Double::doubleValue).sum();
+            assertThat(sum).isCloseTo(1.0, within(1e-6));
+        }
+
+        @Test
         @DisplayName("Should normalize composition")
         void shouldNormalizeComposition() {
             frozenModel.setSpeciesMassFractions(Map.of("H2O", 0.5, "CO2", 0.5, "CO", 0.5));
@@ -235,6 +250,44 @@ class ChemistryModelTest {
             double sum = equilibriumModel.getSpeciesMassFractions().values()
                     .stream().mapToDouble(Double::doubleValue).sum();
             assertThat(sum).isCloseTo(1.0, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("LOX/CH4 equilibrium should conserve elements and respond to temperature")
+        void loxCh4EquilibriumShouldWork() {
+            ChemistryModel ch4Model = ChemistryModel.equilibrium(GasProperties.LOX_CH4_PRODUCTS);
+            ch4Model.setLoxCh4Composition(3.5);
+
+            double[] elementsBefore = computeElementalMoles(ch4Model.getSpeciesMassFractions());
+
+            ch4Model.calculateEquilibrium(3200, 7e6);
+            Map<String, Double> after = ch4Model.getSpeciesMassFractions();
+
+            // Mass fractions sum to 1
+            double sum = after.values().stream().mapToDouble(Double::doubleValue).sum();
+            assertThat(sum).isCloseTo(1.0, within(1e-6));
+
+            // Elemental conservation (H, C, O)
+            double[] elementsAfter = computeElementalMoles(after);
+            for (int i = 0; i < elementsBefore.length; i++) {
+                if (elementsBefore[i] > 1e-15) {
+                    assertThat(elementsAfter[i]).isCloseTo(elementsBefore[i],
+                            within(elementsBefore[i] * 1e-4));
+                }
+            }
+
+            // Higher temperature should increase dissociation
+            ChemistryModel lowT = ChemistryModel.equilibrium(GasProperties.LOX_CH4_PRODUCTS);
+            lowT.setLoxCh4Composition(3.5);
+            lowT.calculateEquilibrium(1500, 7e6);
+
+            ChemistryModel highT = ChemistryModel.equilibrium(GasProperties.LOX_CH4_PRODUCTS);
+            highT.setLoxCh4Composition(3.5);
+            highT.calculateEquilibrium(4000, 7e6);
+
+            double h2oLowT = lowT.getSpeciesMassFractions().getOrDefault("H2O", 0.0);
+            double h2oHighT = highT.getSpeciesMassFractions().getOrDefault("H2O", 0.0);
+            assertThat(h2oLowT).isGreaterThan(h2oHighT);
         }
 
         /**

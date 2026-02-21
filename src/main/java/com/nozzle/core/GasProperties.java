@@ -86,7 +86,19 @@ public record GasProperties(
             3200.0,
             200.0
     );
-    
+
+    /**
+     * Standard gas properties for combustion products (typical LOX/CH4).
+     */
+    public static final GasProperties LOX_CH4_PRODUCTS = new GasProperties(
+            1.23,
+            22.0,
+            377.9,
+            4.5e-5,
+            3500.0,
+            240.0
+    );
+
     /**
      * Compact constructor with validation.
      */

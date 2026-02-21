@@ -195,6 +195,43 @@ public class ChemistryModel {
     }
     
     /**
+     * Sets LOX/CH4 combustion products composition.
+     * CH4 + 2O2 → CO2 + 2H2O; stoichiometric O/F ≈ 4.0.
+     *
+     * @param mixtureRatio O/F mixture ratio
+     */
+    public void setLoxCh4Composition(double mixtureRatio) {
+        speciesMassFractions.clear();
+
+        if (mixtureRatio < 3.0) {
+            // Fuel rich
+            speciesMassFractions.put("CO", 0.40);
+            speciesMassFractions.put("H2O", 0.20);
+            speciesMassFractions.put("H2", 0.20);
+            speciesMassFractions.put("CO2", 0.10);
+            speciesMassFractions.put("OH", 0.05);
+            speciesMassFractions.put("H", 0.05);
+        } else if (mixtureRatio < 4.0) {
+            // Near stoichiometric
+            speciesMassFractions.put("H2O", 0.35);
+            speciesMassFractions.put("CO2", 0.25);
+            speciesMassFractions.put("CO", 0.20);
+            speciesMassFractions.put("H2", 0.10);
+            speciesMassFractions.put("OH", 0.08);
+            speciesMassFractions.put("O2", 0.02);
+        } else {
+            // Oxidizer rich
+            speciesMassFractions.put("CO2", 0.40);
+            speciesMassFractions.put("H2O", 0.30);
+            speciesMassFractions.put("O2", 0.15);
+            speciesMassFractions.put("OH", 0.10);
+            speciesMassFractions.put("CO", 0.05);
+        }
+
+        normalizeComposition();
+    }
+
+    /**
      * Sets LOX/LH2 combustion products composition.
      *
      * @param mixtureRatio O/F mixture ratio
