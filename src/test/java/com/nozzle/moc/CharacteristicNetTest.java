@@ -216,7 +216,7 @@ class CharacteristicNetTest {
             CharacteristicNet net = new CharacteristicNet(params).generate();
             List<List<CharacteristicPoint>> netPoints = net.getNetPoints();
             
-            assertThatThrownBy(() -> netPoints.clear())
+            assertThatThrownBy(netPoints::clear)
                     .isInstanceOf(UnsupportedOperationException.class);
         }
         
@@ -227,7 +227,7 @@ class CharacteristicNetTest {
             CharacteristicNet net = new CharacteristicNet(params).generate();
             List<CharacteristicPoint> wallPoints = net.getWallPoints();
             
-            assertThatThrownBy(() -> wallPoints.clear())
+            assertThatThrownBy(wallPoints::clear)
                     .isInstanceOf(UnsupportedOperationException.class);
         }
         

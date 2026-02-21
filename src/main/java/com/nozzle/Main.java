@@ -7,7 +7,6 @@ import com.nozzle.core.PerformanceCalculator;
 import com.nozzle.export.*;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.moc.CharacteristicNet;
-import com.nozzle.moc.CharacteristicPoint;
 import com.nozzle.moc.RaoNozzle;
 import com.nozzle.optimization.AltitudeAdaptiveOptimizer;
 import com.nozzle.optimization.MonteCarloUncertainty;
@@ -33,7 +32,7 @@ import java.util.List;
  */
 public class Main {
     
-    public static void main(String[] args) {
+    static void main() {
         System.out.println("=".repeat(70));
         System.out.println("  SUPERSONIC NOZZLE DESIGN - METHOD OF CHARACTERISTICS");
         System.out.println("  Java 21 Implementation with Virtual Threads");
@@ -47,7 +46,7 @@ public class Main {
             
             // Run demonstrations
             demonstrateBasicDesign(outputDir);
-            demonstrateRaoComparison(outputDir);
+            demonstrateRaoComparison();
             demonstrateThermalAnalysis(outputDir);
             demonstrateChemistryModeling();
             demonstrateValidation();
@@ -126,7 +125,7 @@ public class Main {
     /**
      * Demonstrates Rao bell nozzle comparison.
      */
-    private static void demonstrateRaoComparison(Path outputDir) throws Exception {
+    private static void demonstrateRaoComparison() {
         System.out.println("\n--- RAO BELL NOZZLE COMPARISON ---\n");
         
         NozzleDesignParameters params = NozzleDesignParameters.builder()

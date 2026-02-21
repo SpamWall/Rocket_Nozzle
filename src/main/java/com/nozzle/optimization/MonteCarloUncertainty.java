@@ -22,7 +22,7 @@ public class MonteCarloUncertainty {
     private final int numSamples;
     private final long randomSeed;
     
-    private List<SampleResult> sampleResults;
+    private final List<SampleResult> sampleResults;
     private StatisticalSummary summary;
     private Random random;
     
@@ -302,7 +302,7 @@ public class MonteCarloUncertainty {
                 .mapToDouble(r -> r.inputs().getOrDefault(paramName, 0.0))
                 .toArray();
         double[] outputs = sampleResults.stream()
-                .mapToDouble(r -> outputExtractor.apply(r))
+                .mapToDouble(outputExtractor::apply)
                 .toArray();
         
         return pearsonCorrelation(inputs, outputs);
