@@ -52,8 +52,15 @@ public class NozzleContour {
     public static NozzleContour fromMOCWallPoints(NozzleDesignParameters parameters,
                                                    List<CharacteristicPoint> wallPoints) {
         NozzleContour contour = new NozzleContour(ContourType.MOC_GENERATED, parameters);
+        // Minimum x-spacing to keep cubic spline well-conditioned.
+        // Closely-spaced control points (h -> 0) cause 3/h terms to explode.
+        double minSpacing = parameters.throatRadius() * 0.05;
+        double lastX = Double.NEGATIVE_INFINITY;
         for (CharacteristicPoint point : wallPoints) {
-            contour.controlPoints.add(new Point2D(point.x(), point.y()));
+            if (point.x() - lastX >= minSpacing) {
+                contour.controlPoints.add(new Point2D(point.x(), point.y()));
+                lastX = point.x();
+            }
         }
         contour.generateSpline();
         return contour;

@@ -242,11 +242,18 @@ public class CharacteristicNet {
             x = prevWall.x() + rt * 0.02;
         }
         
+        // Validate wall point is physically reasonable
+        double re = parameters.exitRadius();
+        if (Double.isNaN(x) || Double.isNaN(y) || Double.isInfinite(x) || Double.isInfinite(y) ||
+                y < parameters.throatRadius() * 0.8 || y > re * 3.0 || x < 0) {
+            return null;
+        }
+
         double T = parameters.chamberTemperature() * gas.isentropicTemperatureRatio(mach);
         double P = parameters.chamberPressure() * gas.isentropicPressureRatio(mach);
         double rho = P / (gas.gasConstant() * T);
         double V = mach * gas.speedOfSound(T);
-        
+
         return CharacteristicPoint.create(x, y, mach, theta, nu, mu, P, T, rho, V,
                 CharacteristicPoint.PointType.WALL);
     }
@@ -353,7 +360,7 @@ public class CharacteristicNet {
         // Validate
         if (Double.isNaN(x) || Double.isNaN(y) || Double.isNaN(mach) ||
             Double.isInfinite(x) || Double.isInfinite(y) ||
-            mach < 1.0 || y < 0) {
+            mach < 1.0 || y < 0 || y > parameters.exitRadius() * 5.0) {
             return null;
         }
         
