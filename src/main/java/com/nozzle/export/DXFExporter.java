@@ -24,7 +24,11 @@ public class DXFExporter {
             9
             $ACADVER
             1
-            AC1009
+            AC1015
+            9
+            $INSUNITS
+            70
+            4
             0
             ENDSEC
             0

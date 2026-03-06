@@ -18,7 +18,7 @@ import java.util.List;
  */
 public class STEPExporter {
     
-    private double scaleFactor = 1.0; // STEP uses meters by default
+    private double scaleFactor = 1000.0; // STEP AUTOMOTIVE_DESIGN schema uses millimeters
     private String authorName = "Supersonic Nozzle MOC";
     private String organizationName = "Nozzle Design Tool";
     
