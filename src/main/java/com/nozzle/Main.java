@@ -16,6 +16,7 @@ import com.nozzle.validation.NASASP8120Validator;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -53,15 +54,14 @@ public class Main {
             demonstrateOptimization();
             demonstrateUncertaintyAnalysis();
             demonstrateExports(outputDir);
-            
-            System.out.println("\n" + "=".repeat(70));
+
+            System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
-            System.out.println("  Output files saved to: " + outputDir.toAbsolutePath());
+           System.out.printf("  Output files saved to: %s%n", outputDir.toAbsolutePath());
             System.out.println("=".repeat(70));
-            
+
         } catch (Exception e) {
-            System.err.println("Error: " + e.getMessage());
-            e.printStackTrace();
+           System.err.printf("Error: %s\n%s%n", e.getMessage(), Arrays.toString(e.getStackTrace()));
         }
     }
     
@@ -267,17 +267,17 @@ public class Main {
         
         NASASP8120Validator validator = new NASASP8120Validator(params.gasProperties().gamma());
         NASASP8120Validator.ValidationResult result = validator.validate(params);
-        
-        System.out.println("Validation Result: " + (result.isValid() ? "PASSED" : "FAILED"));
+
+        System.out.printf("Validation Result: %s%n", result.isValid() ? "PASSED" : "FAILED");
         
         if (!result.errors().isEmpty()) {
             System.out.println("Errors:");
-            result.errors().forEach(e -> System.out.println("  - " + e));
+            result.errors().forEach(e -> System.out.printf("  - %s%n", e));
         }
         
         if (!result.warnings().isEmpty()) {
             System.out.println("Warnings:");
-            result.warnings().forEach(w -> System.out.println("  - " + w));
+            result.warnings().forEach(w -> System.out.printf("  - %s%n", w));
         }
         
         System.out.println("Key Metrics:");
@@ -428,7 +428,7 @@ public class Main {
                 .setScaleFactor(1000)
                 .setBinaryFormat(true);
         stlExporter.exportMesh(contour, outputDir.resolve("nozzle.stl"));
-        System.out.println("Exported STL mesh (" + stlExporter.estimateTriangleCount(100) + " triangles)");
+        System.out.printf("Exported STL mesh (%d triangles)%n", stlExporter.estimateTriangleCount(100));
         
         // CFD Mesh Export
         CFDMeshExporter cfdExporter = new CFDMeshExporter()
