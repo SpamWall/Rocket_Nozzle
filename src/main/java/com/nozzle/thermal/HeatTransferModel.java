@@ -25,6 +25,9 @@ public class HeatTransferModel {
     private double coolantTemperature = 300.0; // K
     private double coolantHeatTransferCoeff = 5000.0; // W/(m²·K)
     
+    // Optional position-varying coolant channel (overrides coolantHeatTransferCoeff when set)
+    private CoolantChannel coolantChannel = null;
+
     // Radiation properties
     private double wallEmissivity = 0.8;
     private static final double STEFAN_BOLTZMANN = 5.67e-8; // W/(m²·K⁴)
@@ -68,6 +71,19 @@ public class HeatTransferModel {
     }
     
     /**
+     * Configures a coolant channel model whose position-varying heat transfer
+     * coefficient replaces the fixed {@code coolantHeatTransferCoeff} scalar.
+     * Call {@link CoolantChannel#calculate()} before passing the channel here.
+     *
+     * @param channel Sized coolant channel
+     * @return This instance
+     */
+    public HeatTransferModel setCoolantChannel(CoolantChannel channel) {
+        this.coolantChannel = channel;
+        return this;
+    }
+
+    /**
      * Sets radiation emissivity.
      *
      * @param emissivity Wall emissivity (0-1)
@@ -110,11 +126,16 @@ public class HeatTransferModel {
             // Adiabatic wall (recovery) temperature
             double recoveryTemp = gasTemp * (1.0 + recoveryFactor * (gamma - 1.0) / 2.0 * mach * mach);
 
+            // Local coolant-side h: from channel profile if available, else fixed scalar
+            double hCoolant = (coolantChannel != null && !coolantChannel.getProfile().isEmpty())
+                    ? coolantChannel.getHeatTransferCoeffAt(point.x())
+                    : coolantHeatTransferCoeff;
+
             // Calculate convective heat transfer coefficient using Bartz equation
-            double hGas = calculateBartzHeatTransfer(point.x(), point.y(), gasTemp, recoveryTemp);
-            
+            double hGas = calculateBartzHeatTransfer(point.x(), point.y(), gasTemp, recoveryTemp, hCoolant);
+
             // Calculate wall temperature (steady state)
-            double wallTemp = calculateWallTemperature(recoveryTemp, hGas);
+            double wallTemp = calculateWallTemperature(recoveryTemp, hGas, hCoolant);
             
             // Calculate heat flux
             double qConv = hGas * (recoveryTemp - wallTemp);
@@ -164,13 +185,15 @@ public class HeatTransferModel {
      * The curvature correction term uses the local wall radius of curvature derived
      * from the nozzle contour at axial position x.
      *
-     * @param x    Axial position (m)
-     * @param r    Local wall radius (m)
-     * @param temp Local static gas temperature (K)
-     * @param T_aw Adiabatic wall (recovery) temperature (K)
-     * @return Heat transfer coefficient in W/(m²·K)
+     * @param x        Axial position (m)
+     * @param r        Local wall radius (m)
+     * @param temp     Local static gas temperature (K)
+     * @param T_aw     Adiabatic wall (recovery) temperature (K)
+     * @param hCoolant Coolant-side heat transfer coefficient W/(m²·K)
+     * @return Gas-side heat transfer coefficient in W/(m²·K)
      */
-    private double calculateBartzHeatTransfer(double x, double r, double temp, double T_aw) {
+    private double calculateBartzHeatTransfer(double x, double r, double temp, double T_aw,
+                                               double hCoolant) {
         GasProperties gas = parameters.gasProperties();
         double gamma = gas.gamma();
         double Pr = 4.0 * gamma / (9.0 * gamma - 5.0);  // Eucken relation
@@ -203,7 +226,7 @@ public class HeatTransferModel {
                     * Math.pow(Dt / r_c, 0.1)
                     * Math.pow(At / A, 0.9);
 
-            T_w = calculateWallTemperature(T_aw, h);
+            T_w = calculateWallTemperature(T_aw, h, hCoolant);
         }
         return h;
     }
@@ -259,11 +282,11 @@ public class HeatTransferModel {
     /**
      * Calculates steady-state wall temperature.
      */
-    private double calculateWallTemperature(double recoveryTemp, double hGas) {
+    private double calculateWallTemperature(double recoveryTemp, double hGas, double hCoolant) {
         // Thermal resistance network
-        double Rgas = 1.0 / hGas;
-        double Rwall = wallThickness / wallThermalConductivity;
-        double Rcoolant = 1.0 / coolantHeatTransferCoeff;
+        double Rgas     = 1.0 / hGas;
+        double Rwall    = wallThickness / wallThermalConductivity;
+        double Rcoolant = 1.0 / hCoolant;
         double Rtotal = Rgas + Rwall + Rcoolant;
         
         // Wall temperature (gas side)

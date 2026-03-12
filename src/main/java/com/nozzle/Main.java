@@ -11,6 +11,7 @@ import com.nozzle.moc.RaoNozzle;
 import com.nozzle.optimization.AltitudeAdaptiveOptimizer;
 import com.nozzle.optimization.MonteCarloUncertainty;
 import com.nozzle.thermal.BoundaryLayerCorrection;
+import com.nozzle.thermal.CoolantChannel;
 import com.nozzle.thermal.HeatTransferModel;
 import com.nozzle.validation.NASASP8120Validator;
 
@@ -186,17 +187,47 @@ public class Main {
         NozzleContour contour = NozzleContour.fromMOCWallPoints(params, net.getWallPoints());
         contour.generate(100);
         
-        // Heat transfer analysis
+        // --- Coolant channel sizing ---
+        // 120 rectangular RP-1 channels, 3×5 mm cross-section, 1 mm hot-wall liner
+        CoolantChannel channel = new CoolantChannel(params, contour)
+                .setChannelGeometry(120, 0.003, 0.005, 0.001)
+                .setWallConductivity(20.0)                          // Inconel
+                .setCoolant(CoolantChannel.CoolantProperties.RP1,
+                            2.0,   // kg/s total mass flow
+                            300.0, // inlet temperature (K)
+                            8.5e6) // inlet pressure (Pa, slightly above Pc)
+                .calculate();
+
+        System.out.println("Coolant Channel Sizing (hydraulics only):");
+        System.out.printf("  Hydraulic diameter:   %.2f mm%n",  channel.hydraulicDiameter() * 1000);
+        System.out.printf("  Flow area (total):    %.2f mm²%n", channel.totalFlowArea() * 1e6);
+        CoolantChannel.ChannelPoint throatChannel = channel.getProfile().getFirst();
+        System.out.printf("  Velocity:             %.2f m/s%n",  throatChannel.velocity());
+        System.out.printf("  Reynolds number:      %.0f%n",      throatChannel.reynoldsNumber());
+        System.out.printf("  Nusselt number:       %.1f%n",      throatChannel.nusseltNumber());
+        System.out.printf("  h_coolant:            %.0f W/(m²·K)%n", throatChannel.heatTransferCoeff());
+        System.out.printf("  Total pressure drop:  %.2f kPa%n", channel.getTotalPressureDrop() / 1000);
+
+        // --- Heat transfer with position-varying coolant h ---
         HeatTransferModel heatModel = new HeatTransferModel(params, contour)
-                .setWallProperties(20.0, 0.003)  // Inconel, 3mm thick
-                .setCoolantProperties(300, 5000) // Regenerative cooling
+                .setWallProperties(20.0, 0.003)  // Inconel, 3 mm total wall
                 .setEmissivity(0.8)
+                .setCoolantChannel(channel)       // replaces fixed scalar h_coolant
                 .calculate(net.getAllPoints());
-        
-        System.out.println("Heat Transfer Results:");
-        System.out.printf("  Max Wall Temp:    %.0f K%n", heatModel.getMaxWallTemperature());
+
+        System.out.println("\nHeat Transfer Results (with sized channel):");
+        System.out.printf("  Max Wall Temp:    %.0f K%n",    heatModel.getMaxWallTemperature());
         System.out.printf("  Max Heat Flux:    %.2e W/m²%n", heatModel.getMaxHeatFlux());
-        System.out.printf("  Total Heat Load:  %.2f kW%n", heatModel.getTotalHeatLoad() / 1000);
+        System.out.printf("  Total Heat Load:  %.2f kW%n",   heatModel.getTotalHeatLoad() / 1000);
+
+        // --- Full thermal analysis of channel (boiling margin) ---
+        channel.calculate(heatModel.getWallThermalProfile());
+
+        System.out.println("\nCoolant Channel Thermal Analysis:");
+        System.out.printf("  Coolant temp rise:    %.1f K%n",  channel.getCoolantTemperatureRise());
+        System.out.printf("  Min boiling margin:   %.1f K%n",  channel.getMinBoilingMargin());
+        System.out.printf("  Fully subcooled:      %s%n",
+                channel.isFullySubcooled() ? "YES" : "NO — nucleate boiling predicted");
         
         // Boundary layer analysis
         BoundaryLayerCorrection blModel = new BoundaryLayerCorrection(params, contour)
