@@ -44,14 +44,14 @@ class CoolantChannel_UT {
         @Test
         @DisplayName("Should produce a non-empty profile")
         void shouldProduceNonEmptyProfile() {
-            CoolantChannel channel = new CoolantChannel(params, contour).calculate();
+            CoolantChannel channel = new CoolantChannel(contour).calculate();
             assertThat(channel.getProfile()).isNotEmpty();
         }
 
         @Test
         @DisplayName("Heat transfer coefficient should be positive at every station")
         void heatTransferCoeffShouldBePositive() {
-            CoolantChannel channel = new CoolantChannel(params, contour).calculate();
+            CoolantChannel channel = new CoolantChannel(contour).calculate();
             for (CoolantChannel.ChannelPoint pt : channel.getProfile()) {
                 assertThat(pt.heatTransferCoeff())
                         .as("h at x=%.4f", pt.x())
@@ -62,7 +62,7 @@ class CoolantChannel_UT {
         @Test
         @DisplayName("High mass flow rate should produce turbulent flow (Re > 4000)")
         void highFlowRateShouldBeTurbulent() {
-            CoolantChannel channel = new CoolantChannel(params, contour)
+            CoolantChannel channel = new CoolantChannel(contour)
                     .setCoolant(CoolantChannel.CoolantProperties.RP1, 5.0, 300, 8e6)
                     .calculate();
             for (CoolantChannel.ChannelPoint pt : channel.getProfile()) {
@@ -76,7 +76,7 @@ class CoolantChannel_UT {
         @DisplayName("Pressure should decrease monotonically in the flow direction")
         void pressureShouldDecreaseAlongFlowPath() {
             // Counter-flow: inlet is at exit (last axial point), outlet at throat (first axial)
-            CoolantChannel channel = new CoolantChannel(params, contour).calculate();
+            CoolantChannel channel = new CoolantChannel(contour).calculate();
             List<CoolantChannel.ChannelPoint> profile = channel.getProfile();
 
             // Pressure at the inlet (exit end) should exceed pressure at the outlet (throat end)
@@ -88,17 +88,17 @@ class CoolantChannel_UT {
         @Test
         @DisplayName("Total pressure drop should be positive")
         void totalPressureDropShouldBePositive() {
-            CoolantChannel channel = new CoolantChannel(params, contour).calculate();
+            CoolantChannel channel = new CoolantChannel(contour).calculate();
             assertThat(channel.getTotalPressureDrop()).isGreaterThan(0.0);
         }
 
         @Test
         @DisplayName("Higher mass flow rate should increase pressure drop")
         void higherFlowRateShouldIncreasePressureDrop() {
-            double dP_low  = new CoolantChannel(params, contour)
+            double dP_low  = new CoolantChannel(contour)
                     .setCoolant(CoolantChannel.CoolantProperties.RP1, 1.0, 300, 8e6)
                     .calculate().getTotalPressureDrop();
-            double dP_high = new CoolantChannel(params, contour)
+            double dP_high = new CoolantChannel(contour)
                     .setCoolant(CoolantChannel.CoolantProperties.RP1, 5.0, 300, 8e6)
                     .calculate().getTotalPressureDrop();
 
@@ -109,7 +109,7 @@ class CoolantChannel_UT {
         @DisplayName("Hydraulic diameter should match analytical formula")
         void hydraulicDiameterShouldMatchFormula() {
             double w = 0.003, h = 0.004;
-            CoolantChannel channel = new CoolantChannel(params, contour)
+            CoolantChannel channel = new CoolantChannel(contour)
                     .setChannelGeometry(100, w, h, 0.001)
                     .calculate();
 
@@ -134,7 +134,7 @@ class CoolantChannel_UT {
         @Test
         @DisplayName("Coolant temperature should rise with heat input")
         void coolantTemperatureShouldRise() {
-            CoolantChannel channel = new CoolantChannel(params, contour)
+            CoolantChannel channel = new CoolantChannel(contour)
                     .setCoolant(CoolantChannel.CoolantProperties.RP1, 1.0, 300, 8e6)
                     .calculate(thermalProfile);
 
@@ -144,10 +144,10 @@ class CoolantChannel_UT {
         @Test
         @DisplayName("Higher mass flow should reduce temperature rise")
         void higherMassFlowShouldReduceTemperatureRise() {
-            double rise_low = new CoolantChannel(params, contour)
+            double rise_low = new CoolantChannel(contour)
                     .setCoolant(CoolantChannel.CoolantProperties.RP1, 0.5, 300, 8e6)
                     .calculate(thermalProfile).getCoolantTemperatureRise();
-            double rise_high = new CoolantChannel(params, contour)
+            double rise_high = new CoolantChannel(contour)
                     .setCoolant(CoolantChannel.CoolantProperties.RP1, 5.0, 300, 8e6)
                     .calculate(thermalProfile).getCoolantTemperatureRise();
 
@@ -157,7 +157,7 @@ class CoolantChannel_UT {
         @Test
         @DisplayName("Boiling margin should be computed (non-zero) for all profile points")
         void boilingMarginShouldBeComputed() {
-            CoolantChannel channel = new CoolantChannel(params, contour)
+            CoolantChannel channel = new CoolantChannel(contour)
                     .setCoolant(CoolantChannel.CoolantProperties.RP1, 2.0, 300, 8e6)
                     .calculate(thermalProfile);
 
@@ -170,10 +170,10 @@ class CoolantChannel_UT {
         @Test
         @DisplayName("Higher inlet pressure should improve boiling margin (higher T_sat)")
         void higherInletPressureShouldImproveBoilingMargin() {
-            CoolantChannel channelLow = new CoolantChannel(params, contour)
+            CoolantChannel channelLow = new CoolantChannel(contour)
                     .setCoolant(CoolantChannel.CoolantProperties.RP1, 2.0, 300, 5e6)
                     .calculate(thermalProfile);
-            CoolantChannel channelHigh = new CoolantChannel(params, contour)
+            CoolantChannel channelHigh = new CoolantChannel(contour)
                     .setCoolant(CoolantChannel.CoolantProperties.RP1, 2.0, 300, 15e6)
                     .calculate(thermalProfile);
             assertThat(channelHigh.getMinBoilingMargin())
@@ -187,6 +187,33 @@ class CoolantChannel_UT {
             double tHigh = CoolantChannel.CoolantProperties.RP1.saturationTemperature(10e6);
             assertThat(tHigh).isGreaterThan(tLow);
         }
+
+        @Test
+        @DisplayName("Counter-flow should warm coolant toward throat; co-current toward exit")
+        void counterflowShouldReverseTemperatureGradient() {
+            // Counter-flow (default): coolant enters at the exit end, absorbs heat as it
+            // travels toward the throat.  In the axially-ordered profile the throat (first
+            // point) is the warmest end and the exit (last point) is the coolest (inlet).
+            CoolantChannel counterflow = new CoolantChannel(contour)
+                    .setCoolant(CoolantChannel.CoolantProperties.RP1, 1.0, 300, 8e6)
+                    .setCounterflow(true)
+                    .calculate(thermalProfile);
+
+            double cfThroatTemp = counterflow.getProfile().getFirst().coolantTemperature();
+            double cfExitTemp   = counterflow.getProfile().getLast().coolantTemperature();
+            assertThat(cfThroatTemp).isGreaterThan(cfExitTemp);
+
+            // Co-current: coolant enters at the throat end, warms toward the exit.
+            // In the axially-ordered profile the exit (last point) is the warmest end.
+            CoolantChannel coflow = new CoolantChannel(contour)
+                    .setCoolant(CoolantChannel.CoolantProperties.RP1, 1.0, 300, 8e6)
+                    .setCounterflow(false)
+                    .calculate(thermalProfile);
+
+            double coThroatTemp = coflow.getProfile().getFirst().coolantTemperature();
+            double coExitTemp   = coflow.getProfile().getLast().coolantTemperature();
+            assertThat(coExitTemp).isGreaterThan(coThroatTemp);
+        }
     }
 
     @Nested
@@ -196,7 +223,7 @@ class CoolantChannel_UT {
         @Test
         @DisplayName("Setting a channel should not break the thermal calculation")
         void settingChannelShouldNotBreakThermalCalculation() {
-            CoolantChannel channel = new CoolantChannel(params, contour).calculate();
+            CoolantChannel channel = new CoolantChannel(contour).calculate();
 
             HeatTransferModel model = new HeatTransferModel(params, contour)
                     .setCoolantChannel(channel)
@@ -215,7 +242,7 @@ class CoolantChannel_UT {
                     .calculate(List.of());
 
             // Sized channel will have much higher h than 500 W/(m²·K)
-            CoolantChannel channel = new CoolantChannel(params, contour)
+            CoolantChannel channel = new CoolantChannel(contour)
                     .setCoolant(CoolantChannel.CoolantProperties.RP1, 3.0, 300, 8e6)
                     .calculate();
 
@@ -230,7 +257,7 @@ class CoolantChannel_UT {
         @Test
         @DisplayName("getHeatTransferCoeffAt should interpolate within profile bounds")
         void getHCoeffAtShouldReturnPositiveValue() {
-            CoolantChannel channel = new CoolantChannel(params, contour).calculate();
+            CoolantChannel channel = new CoolantChannel(contour).calculate();
             double xMid = channel.getProfile().get(channel.getProfile().size() / 2).x();
             assertThat(channel.getHeatTransferCoeffAt(xMid)).isGreaterThan(0.0);
         }

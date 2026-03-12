@@ -194,7 +194,7 @@ public class Main {
         
         // --- Coolant channel sizing ---
         // 120 rectangular RP-1 channels, 3×5 mm cross-section, 1 mm hot-wall liner
-        CoolantChannel channel = new CoolantChannel(params, contour)
+        CoolantChannel channel = new CoolantChannel(contour)
                 .setChannelGeometry(120, 0.003, 0.005, 0.001)
                 .setWallConductivity(20.0)                          // Inconel
                 .setCoolant(CoolantChannel.CoolantProperties.RP1,
@@ -430,7 +430,7 @@ public class Main {
     private static void demonstrateFlowSeparationAndShockExpansion() {
         System.out.println("\n--- FLOW SEPARATION & SHOCK-EXPANSION OFF-DESIGN ---\n");
 
-        // Two nozzles: sea-level optimised (Me=3) and a vacuum bell (Me=6).
+        // Two nozzles: sea-level optimized (Me=3) and a vacuum bell (Me=6).
         NozzleDesignParameters seaLevel = NozzleDesignParameters.builder()
                 .throatRadius(0.05)
                 .exitMach(3.0)

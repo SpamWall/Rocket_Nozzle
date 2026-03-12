@@ -1,6 +1,5 @@
 package com.nozzle.thermal;
 
-import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 
@@ -20,7 +19,7 @@ import java.util.List;
  *
  * <p>Typical usage:
  * <pre>
- *   CoolantChannel channel = new CoolantChannel(params, contour)
+ *   CoolantChannel channel = new CoolantChannel(contour)
  *       .setChannelGeometry(120, 0.003, 0.005, 0.001)
  *       .setCoolant(CoolantProperties.RP1, 2.0, 300.0, 8e6)
  *       .calculate(heatModel.getWallThermalProfile());
@@ -44,9 +43,8 @@ public class CoolantChannel {
     private double            inletPressure    = 8e6;   // Pa
     private boolean           counterflow      = true;  // exit → throat
 
-    private final NozzleDesignParameters parameters;
-    private final NozzleContour          contour;
-    private List<ChannelPoint>           channelProfile = new ArrayList<>();
+    private final NozzleContour contour;
+    private final List<ChannelPoint>     channelProfile = new ArrayList<>();
 
     // -------------------------------------------------------------------------
     // Coolant property definitions
@@ -155,14 +153,12 @@ public class CoolantChannel {
     // -------------------------------------------------------------------------
 
     /**
-     * Creates a coolant channel model for the given nozzle.
+     * Creates a coolant channel model for the given nozzle contour.
      *
-     * @param parameters Design parameters
-     * @param contour    Nozzle wall contour (must be generated before calling calculate)
+     * @param contour Nozzle wall contour (must be generated before calling calculate)
      */
-    public CoolantChannel(NozzleDesignParameters parameters, NozzleContour contour) {
-        this.parameters = parameters;
-        this.contour    = contour;
+    public CoolantChannel(NozzleContour contour) {
+        this.contour = contour;
     }
 
     // -------------------------------------------------------------------------
@@ -340,12 +336,12 @@ public class CoolantChannel {
      */
     private double nusseltNumber(double Re, double Pr) {
         if (Re <= 2300) return 3.66;
-        double Nu_turb = gnielinskiNusselt(Re, Pr);
+        double Nu_turbulent = gnielinskiNusselt(Re, Pr);
         if (Re < 4000) {
             double t = (Re - 2300.0) / (4000.0 - 2300.0);
-            return 3.66 + t * (Nu_turb - 3.66);
+            return 3.66 + t * (Nu_turbulent - 3.66);
         }
-        return Nu_turb;
+        return Nu_turbulent;
     }
 
     /**
@@ -372,7 +368,7 @@ public class CoolantChannel {
     // Interpolation
     // -------------------------------------------------------------------------
 
-    /** Nearest-neighbour interpolation of convective heat flux at axial position x. */
+    /** Nearest-neighbor interpolation of convective heat flux at axial position x. */
     private double interpolateConvectiveFlux(double x,
                                               List<HeatTransferModel.WallThermalPoint> profile) {
         HeatTransferModel.WallThermalPoint nearest = profile.getFirst();
@@ -399,7 +395,7 @@ public class CoolantChannel {
 
     /**
      * Returns the coolant-side heat transfer coefficient at axial position x
-     * by nearest-neighbour lookup in the computed profile.
+     * by nearest-neighbor lookup in the computed profile.
      * Falls back to 5 000 W/(m²·K) if the channel has not been calculated.
      *
      * @param x Axial position (m)

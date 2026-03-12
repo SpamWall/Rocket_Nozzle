@@ -374,6 +374,7 @@ public class ShockExpansionModel {
             return regime != FlowRegime.SEPARATED;
         }
 
+        @SuppressWarnings("NullableProblems")
         @Override
         public String toString() {
             if (regime == FlowRegime.SEPARATED) {

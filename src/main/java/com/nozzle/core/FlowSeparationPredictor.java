@@ -42,7 +42,7 @@ package com.nozzle.core;
  *       design exit Mach.</li>
  *   <li><b>Restricted Shock Separation (RSS)</b> — separation near the exit; a
  *       re-circulation bubble forms and the shock is confined.  More typical of
- *       thrust-optimised bell nozzles and associated with larger side loads.
+ *       thrust-optimized bell nozzles and associated with larger side loads.
  *       Separation Mach ≥ 70 % of design exit Mach.</li>
  * </ul>
  *
@@ -123,7 +123,7 @@ public class FlowSeparationPredictor {
         double gamma = parameters.gasProperties().gamma();
         double mExit = parameters.exitMach();
 
-        double pSep = separationPressure(criterion, p0, pa, pe, gamma);
+        double pSep = separationPressure(criterion, pa, pe, gamma);
 
         if (pe >= pSep) {
             // Nozzle is not overexpanded enough to cause separation.
@@ -154,7 +154,7 @@ public class FlowSeparationPredictor {
     /**
      * Computes the critical wall pressure at which separation begins.
      */
-    private double separationPressure(Criterion c, double p0, double pa, double pe, double gamma) {
+    private double separationPressure(Criterion c, double pa, double pe, double gamma) {
         return switch (c) {
             // Summerfield (1954): constant fraction of ambient.
             case SUMMERFIELD -> 0.374 * pa;
@@ -200,8 +200,8 @@ public class FlowSeparationPredictor {
      */
     private double estimateSideLoad(double pSep, double pa, double arSep) {
         double aSep = parameters.throatArea() * arSep;
-        double deltap = pa - pSep; // pressure rise across separation shock ≥ 0
-        return SIDE_LOAD_ASYMMETRY * deltap * aSep;
+        double delta_p = pa - pSep; // pressure rise across separation shock ≥ 0
+        return SIDE_LOAD_ASYMMETRY * delta_p * aSep;
     }
 
     // -------------------------------------------------------------------------
@@ -244,6 +244,7 @@ public class FlowSeparationPredictor {
         /**
          * Returns a concise description of the separation state.
          */
+        @SuppressWarnings("NullableProblems")
         @Override
         public String toString() {
             if (!separated) {

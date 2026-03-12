@@ -3,9 +3,6 @@ Here's an organized assessment of the most impactful additions, grouped by value
   ---
   High Impact — Physics Completeness
 
-  Oblique Shock / Overexpansion Model
-  Currently only ideal flow is modeled. A proper shock-expansion model for overexpanded/underexpanded exit conditions would let the library compute off-design performance accurately — essential for altitude-adaptive work.
-
   Truncated Ideal Contour (TIC) and Thrust-Optimized Parabola (TOP)
   The library has Rao bell and MOC. TIC and TOP are the two other standard contour families used in industry (SpaceX Merlin, Raptor). Adding them rounds out the contour comparison capability.
 

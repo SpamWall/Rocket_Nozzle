@@ -269,6 +269,7 @@ public class PerformanceCalculator {
             double thrustNewtons,
             double massFlowRateKgPerSec
     ) {
+        @SuppressWarnings("NullableProblems")
         @Override
         public String toString() {
             return String.format("""

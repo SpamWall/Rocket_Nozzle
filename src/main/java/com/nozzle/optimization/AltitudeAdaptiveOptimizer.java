@@ -1,7 +1,6 @@
 package com.nozzle.optimization;
 
 import com.nozzle.core.NozzleDesignParameters;
-import com.nozzle.core.PerformanceCalculator;
 import com.nozzle.core.ShockExpansionModel;
 
 import java.util.ArrayList;
@@ -181,16 +180,14 @@ public class AltitudeAdaptiveOptimizer {
             ShockExpansionModel.OffDesignResult offDesign = shockModel.compute(condition.pressure());
 
             double cf = offDesign.thrustCoefficient();
-            double isp = offDesign.specificImpulse();
+            double performanceMetric = offDesign.specificImpulse();
             boolean separated = !offDesign.isFullyFlowing();
 
             // Thrust from corrected Cf (already accounts for separation truncation).
             double thrust = cf * candidate.chamberPressure() * candidate.throatArea();
 
-            double performanceMetric = isp;
-            
-            performances.add(new AltitudePerformance(condition.altitude(), 
-                    cf, isp, thrust, separated));
+           performances.add(new AltitudePerformance(condition.altitude(),
+                    cf, performanceMetric, thrust, separated));
             
             totalObjective += condition.weight() * condition.dwellTime() * performanceMetric;
             totalWeight += condition.weight() * condition.dwellTime();
