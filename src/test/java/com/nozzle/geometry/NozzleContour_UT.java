@@ -12,7 +12,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("NozzleContour Tests")
-class NozzleContourTest {
+class NozzleContour_UT {
     
     private NozzleDesignParameters params;
     

@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("PerformanceCalculator Tests")
-class PerformanceCalculatorTest {
+class PerformanceCalculator_UT {
     
     private NozzleDesignParameters params;
     

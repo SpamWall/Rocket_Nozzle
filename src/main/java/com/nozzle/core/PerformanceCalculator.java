@@ -35,10 +35,10 @@ public class PerformanceCalculator {
      * Creates a performance calculator.
      *
      * @param parameters      Design parameters
-     * @param characteristicNet Characteristic net (may be null)
-     * @param contour         Nozzle contour (may be null)
-     * @param boundaryLayer   Boundary layer model (may be null)
-     * @param chemistry       Chemistry model (may be null)
+     * @param characteristicNet Characteristic net (Could be null)
+     * @param contour         Nozzle contour (Could be null)
+     * @param boundaryLayer   Boundary layer model (Could be null)
+     * @param chemistry       Chemistry model (Could be null)
      */
     public PerformanceCalculator(NozzleDesignParameters parameters,
                                   CharacteristicNet characteristicNet,
@@ -113,8 +113,25 @@ public class PerformanceCalculator {
      * Calculates thrust loss due to flow divergence at exit.
      */
     private void calculateDivergenceLoss() {
-        double exitAngle = 0;
+        double lambda = getLambda();
+
+        // Divergence loss is (1 - lambda) times momentum contribution
+        GasProperties gas = parameters.gasProperties();
+        double gamma = gas.gamma();
+        double gp1 = gamma + 1;
+        double gm1 = gamma - 1;
         
+        double term1 = 2 * gamma * gamma / gm1 * Math.pow(2.0 / gp1, gp1 / gm1);
+        double prRatio = gas.isentropicPressureRatio(parameters.exitMach());
+        double term2 = 1 - Math.pow(prRatio, gm1 / gamma);
+        double cfMomentum = Math.sqrt(term1 * term2);
+        
+        divergenceLoss = (1 - lambda) * cfMomentum;
+    }
+
+    private double getLambda() {
+        double exitAngle = 0;
+
         if (characteristicNet != null) {
             List<CharacteristicPoint> wallPoints = characteristicNet.getWallPoints();
             if (!wallPoints.isEmpty()) {
@@ -131,24 +148,11 @@ public class PerformanceCalculator {
             // Estimate from initial wall angle
             exitAngle = parameters.wallAngleInitial() * 0.3;
         }
-        
+
         // Divergence factor (lambda)
-        double lambda = (1 + Math.cos(exitAngle)) / 2;
-        
-        // Divergence loss is (1 - lambda) times momentum contribution
-        GasProperties gas = parameters.gasProperties();
-        double gamma = gas.gamma();
-        double gp1 = gamma + 1;
-        double gm1 = gamma - 1;
-        
-        double term1 = 2 * gamma * gamma / gm1 * Math.pow(2.0 / gp1, gp1 / gm1);
-        double prRatio = gas.isentropicPressureRatio(parameters.exitMach());
-        double term2 = 1 - Math.pow(prRatio, gm1 / gamma);
-        double cfMomentum = Math.sqrt(term1 * term2);
-        
-        divergenceLoss = (1 - lambda) * cfMomentum;
+        return (1 + Math.cos(exitAngle)) / 2;
     }
-    
+
     /**
      * Calculates thrust loss due to boundary layer.
      */

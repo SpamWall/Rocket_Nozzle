@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("Point2D Tests")
-class Point2DTest {
+class Point2D_UT {
     
     @Nested
     @DisplayName("Construction Tests")
@@ -168,7 +168,7 @@ class Point2DTest {
             Point2D p1 = new Point2D(0, 0);
             Point2D p2 = new Point2D(10, 10);
             
-            Point2D mid = p1.lerp(p2, 0.5);
+            Point2D mid = p1.linearInterpolate(p2, 0.5);
             assertThat(mid.x()).isEqualTo(5);
             assertThat(mid.y()).isEqualTo(5);
         }

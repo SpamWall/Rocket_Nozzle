@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("NASASP8120Validator Tests")
-class NASASP8120ValidatorTest {
+class NASASP8120Validator_UT {
     
     private NozzleDesignParameters params;
     private NASASP8120Validator validator;
@@ -31,7 +31,7 @@ class NASASP8120ValidatorTest {
                 .axisymmetric(true)
                 .build();
         
-        validator = new NASASP8120Validator(params.gasProperties().gamma());
+        validator = new NASASP8120Validator();
     }
     
     @Nested
@@ -39,17 +39,9 @@ class NASASP8120ValidatorTest {
     class ConstructionTests {
         
         @Test
-        @DisplayName("Should create validator with gamma")
-        void shouldCreateValidatorWithGamma() {
-            NASASP8120Validator v = new NASASP8120Validator(1.2);
-            assertThat(v).isNotNull();
-        }
-        
-        @Test
-        @DisplayName("Should create validator with default gamma")
-        void shouldCreateValidatorWithDefaultGamma() {
-            NASASP8120Validator v = new NASASP8120Validator();
-            assertThat(v).isNotNull();
+        @DisplayName("Should create validator")
+        void shouldCreateValidator() {
+            assertThat(new NASASP8120Validator()).isNotNull();
         }
     }
     

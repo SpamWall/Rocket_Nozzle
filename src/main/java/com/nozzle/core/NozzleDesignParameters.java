@@ -49,7 +49,8 @@ public record NozzleDesignParameters(
         if (chamberPressure <= ambientPressure) {
             throw new IllegalArgumentException("Chamber pressure must exceed ambient pressure");
         }
-        if (numberOfCharLines < 5) {
+       //noinspection ConstantValue
+       if (numberOfCharLines < 5) {
             throw new IllegalArgumentException("At least 5 characteristic lines required");
         }
         if (wallAngleInitial <= 0 || wallAngleInitial > Math.PI / 4) {
@@ -152,6 +153,7 @@ public record NozzleDesignParameters(
      *
      * @return C* in m/s
      */
+    @SuppressWarnings("UnnecessaryLocalVariable")
     public double characteristicVelocity() {
         double gamma = gasProperties.gamma();
         double R = gasProperties.gasConstant();

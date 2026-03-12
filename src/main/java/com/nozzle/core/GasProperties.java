@@ -198,12 +198,13 @@ public record GasProperties(
     /**
      * Calculates Prandtl-Meyer function.
      *
-     * @param mach Mach number
+     * @param mach Mach number (must be &gt;= 1.0)
      * @return Prandtl-Meyer angle in radians
+     * @throws IllegalArgumentException if mach is less than 1.0
      */
-    public double prandtlMeyerFunction(double mach) {
+    public double prandtlMeyerFunction(double mach) throws IllegalArgumentException {
         if (mach < 1.0) {
-            return 0.0;
+            throw new IllegalArgumentException("Prandtl-Meyer function is undefined for Mach < 1.0, got: " + mach);
         }
         double gp1 = gamma + 1;
         double gm1 = gamma - 1;

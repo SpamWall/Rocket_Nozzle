@@ -11,7 +11,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("GasProperties Tests")
-class GasPropertiesTest {
+class GasProperties_UT {
     
     private GasProperties air;
     
@@ -170,6 +170,14 @@ class GasPropertiesTest {
     @DisplayName("Prandtl-Meyer Function")
     class PrandtlMeyerTests {
         
+        @Test
+        @DisplayName("Prandtl-Meyer should throw for Mach < 1")
+        void prandtlMeyerShouldThrowForSubsonicMach() {
+            assertThatThrownBy(() -> air.prandtlMeyerFunction(0.8))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("0.8");
+        }
+
         @Test
         @DisplayName("Prandtl-Meyer should be zero at Mach 1")
         void prandtlMeyerShouldBeZeroAtMach1() {

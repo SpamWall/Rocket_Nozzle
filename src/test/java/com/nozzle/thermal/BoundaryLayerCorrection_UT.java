@@ -13,7 +13,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("BoundaryLayerCorrection Tests")
-class BoundaryLayerCorrectionTest {
+class BoundaryLayerCorrection_UT {
     
     private NozzleDesignParameters params;
     private NozzleContour contour;

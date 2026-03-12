@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("CharacteristicPoint Tests")
-class CharacteristicPointTest {
+class CharacteristicPoint_UT {
     
     private CharacteristicPoint point;
     

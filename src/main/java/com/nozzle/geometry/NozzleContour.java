@@ -41,14 +41,6 @@ public class NozzleContour {
         this.contourPoints = new ArrayList<>();
     }
     
-    public static NozzleContour fromControlPoints(NozzleDesignParameters parameters,
-                                                   List<Point2D> controlPoints) {
-        NozzleContour contour = new NozzleContour(ContourType.CUSTOM_SPLINE, parameters);
-        contour.controlPoints.addAll(controlPoints);
-        contour.generateSpline();
-        return contour;
-    }
-    
     public static NozzleContour fromMOCWallPoints(NozzleDesignParameters parameters,
                                                    List<CharacteristicPoint> wallPoints) {
         NozzleContour contour = new NozzleContour(ContourType.MOC_GENERATED, parameters);
@@ -257,10 +249,7 @@ public class NozzleContour {
         return Collections.unmodifiableList(contourPoints);
     }
     
-    public List<Point2D> getControlPoints() {
-        return Collections.unmodifiableList(controlPoints);
-    }
-    
+
     public ContourType getType() {
         return type;
     }

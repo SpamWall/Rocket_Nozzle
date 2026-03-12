@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("AltitudeAdaptiveOptimizer Tests")
-class AltitudeAdaptiveOptimizerTest {
+class AltitudeAdaptiveOptimizer_UT {
     
     private NozzleDesignParameters params;
     

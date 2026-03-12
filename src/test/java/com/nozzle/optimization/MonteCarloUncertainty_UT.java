@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("MonteCarloUncertainty Tests")
-class MonteCarloUncertaintyTest {
+class MonteCarloUncertainty_UT {
     
     private NozzleDesignParameters params;
     

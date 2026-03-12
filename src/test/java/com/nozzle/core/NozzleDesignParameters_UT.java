@@ -4,13 +4,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("NozzleDesignParameters Tests")
-class NozzleDesignParametersTest {
+class NozzleDesignParameters_UT {
     
     private NozzleDesignParameters params;
     
@@ -114,10 +112,11 @@ class NozzleDesignParametersTest {
                     .gasProperties(GasProperties.AIR)
                     .numberOfCharLines(3)
                     .build())
-                    .isInstanceOf(IllegalArgumentException.class);
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("At least 5 characteristic lines required");
         }
     }
-    
+
     @Nested
     @DisplayName("Calculated Properties")
     class CalculatedPropertiesTests {

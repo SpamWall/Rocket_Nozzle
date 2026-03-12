@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("CharacteristicNet Tests")
-class CharacteristicNetTest {
+class CharacteristicNet_UT {
     
     private NozzleDesignParameters params;
     

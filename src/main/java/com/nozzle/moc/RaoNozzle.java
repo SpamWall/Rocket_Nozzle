@@ -18,7 +18,7 @@ public class RaoNozzle {
     private final double lengthFraction;
     private final int numContourPoints;
     
-    private List<Point2D> contourPoints;
+    private final List<Point2D> contourPoints;
     private double actualLength;
     private double exitAngle;
     private double inflectionAngle;
@@ -56,11 +56,10 @@ public class RaoNozzle {
         
         double rt = parameters.throatRadius();
         double re = parameters.exitRadius();
-        double gamma = parameters.gasProperties().gamma();
         double exitMach = parameters.exitMach();
         
         // Calculate key angles
-        calculateAngles(exitMach, gamma);
+        calculateAngles(exitMach);
         
         // 15-degree half angle cone reference length
         double coneLength = (re - rt) / Math.tan(Math.toRadians(15));
@@ -79,9 +78,8 @@ public class RaoNozzle {
      * Calculates the inflection and exit angles using Rao correlations.
      *
      * @param exitMach Exit Mach number
-     * @param gamma    Ratio of specific heats
      */
-    private void calculateAngles(double exitMach, double gamma) {
+    private void calculateAngles(double exitMach) {
         // Rao correlation for inflection angle (degrees)
         // Based on empirical data from NASA studies
         double areaRatio = parameters.exitAreaRatio();
@@ -149,6 +147,7 @@ public class RaoNozzle {
         
         // End point
         double xEnd = actualLength;
+        @SuppressWarnings("UnnecessaryLocalVariable")
         double yEnd = re;
         double slopeEnd = Math.tan(exitAngle);
         
@@ -225,7 +224,6 @@ public class RaoNozzle {
     public double calculateThrustCoefficient() {
         GasProperties gas = parameters.gasProperties();
         double gamma = gas.gamma();
-        double exitMach = parameters.exitMach();
         double pe = parameters.idealExitPressure();
         double pa = parameters.ambientPressure();
         double pc = parameters.chamberPressure();
@@ -399,13 +397,7 @@ public class RaoNozzle {
             return Math.abs(raoThrustCoefficient - mocThrustCoefficient);
         }
         
-        /**
-         * Returns the length difference.
-         */
-        public double lengthDifference() {
-            return Math.abs(raoLength - mocLength);
-        }
-        
+        @SuppressWarnings("NullableProblems")
         @Override
         public String toString() {
             return String.format(

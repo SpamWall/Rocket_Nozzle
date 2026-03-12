@@ -246,6 +246,7 @@ public record CharacteristicPoint(
         return Objects.hash(x, y, mach, theta);
     }
     
+    @SuppressWarnings("NullableProblems")
     @Override
     public String toString() {
         return String.format("Point[x=%.6f, y=%.6f, M=%.4f, θ=%.2f°, ν=%.2f°, type=%s]",

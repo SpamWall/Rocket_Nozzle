@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.assertj.core.api.Assertions.within;
 
 @DisplayName("ChemistryModel Tests")
-class ChemistryModelTest {
+class ChemistryModel_UT {
     
     private ChemistryModel frozenModel;
     private ChemistryModel equilibriumModel;

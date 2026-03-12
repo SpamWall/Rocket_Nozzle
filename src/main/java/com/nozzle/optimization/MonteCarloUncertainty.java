@@ -382,6 +382,7 @@ public class MonteCarloUncertainty {
             return mean > 0 ? stdDev / mean * 100 : 0;
         }
         
+        @SuppressWarnings("NullableProblems")
         @Override
         public String toString() {
             return String.format("%.4f ± %.4f (%.4f - %.4f), CV=%.2f%%",
@@ -396,6 +397,7 @@ public class MonteCarloUncertainty {
             VariableStats efficiency,
             int validSamples
     ) {
+        @SuppressWarnings("NullableProblems")
         @Override
         public String toString() {
             return String.format("""

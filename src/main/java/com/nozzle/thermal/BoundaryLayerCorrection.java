@@ -290,6 +290,7 @@ public class BoundaryLayerCorrection {
             return momentumThickness > 0 ? displacementThickness / momentumThickness : 1.4;
         }
         
+        @SuppressWarnings("NullableProblems")
         @Override
         public String toString() {
             return String.format("BL[x=%.4f, δ*=%.2e, cf=%.4f, %s]",

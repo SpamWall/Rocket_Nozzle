@@ -17,7 +17,7 @@ import java.nio.file.Path;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("Export Tests")
-class ExportTest {
+class Export_UT {
     
     private NozzleDesignParameters params;
     private NozzleContour contour;

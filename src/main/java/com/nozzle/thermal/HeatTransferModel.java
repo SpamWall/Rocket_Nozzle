@@ -93,25 +93,25 @@ public class HeatTransferModel {
             contourPoints = contour.getContourPoints();
         }
         
+        GasProperties gas = parameters.gasProperties();
+        double gamma = gas.gamma();
+        double Pr = 4.0 * gamma / (9.0 * gamma - 5.0);         // Eucken relation
+        double recoveryFactor = Math.pow(Pr, 1.0 / 3.0);       // turbulent boundary layer
+
         for (Point2D point : contourPoints) {
             // Find nearest flow point
             CharacteristicPoint nearestFlow = findNearestFlowPoint(point, flowPoints);
-            
-            // Calculate local conditions
-            double gasTemp = nearestFlow != null ? nearestFlow.temperature() 
+
+            // Local conditions
+            double gasTemp = nearestFlow != null ? nearestFlow.temperature()
                     : parameters.chamberTemperature() * 0.8;
             double mach = nearestFlow != null ? nearestFlow.mach() : 2.0;
-            double pressure = nearestFlow != null ? nearestFlow.pressure() 
-                    : parameters.chamberPressure() * 0.1;
-            double velocity = nearestFlow != null ? nearestFlow.velocity() : 2000.0;
-            
-            // Calculate recovery temperature
-            double recoveryFactor = Math.pow(parameters.gasProperties().gamma(), 1.0/3.0);
-            double recoveryTemp = gasTemp * (1 + recoveryFactor * 
-                    (parameters.gasProperties().gamma() - 1) / 2 * mach * mach);
-            
+
+            // Adiabatic wall (recovery) temperature
+            double recoveryTemp = gasTemp * (1.0 + recoveryFactor * (gamma - 1.0) / 2.0 * mach * mach);
+
             // Calculate convective heat transfer coefficient using Bartz equation
-            double hGas = calculateBartzHeatTransfer(point.x(), point.y(), mach, pressure, gasTemp);
+            double hGas = calculateBartzHeatTransfer(point.x(), point.y(), gasTemp, recoveryTemp);
             
             // Calculate wall temperature (steady state)
             double wallTemp = calculateWallTemperature(recoveryTemp, hGas);
@@ -156,63 +156,104 @@ public class HeatTransferModel {
     }
     
     /**
-     * Calculates convective heat transfer coefficient using Bartz correlation.
+     * Calculates convective heat transfer coefficient using the Bartz correlation
+     * with the Eckert reference temperature method. Gas properties (viscosity, Cp)
+     * are evaluated at the Eckert reference temperature T* rather than fixed throat
+     * conditions, giving more accurate results across the full Mach range.
+     * An iterative loop resolves the circular dependency between T*, h, and T_w.
+     * The curvature correction term uses the local wall radius of curvature derived
+     * from the nozzle contour at axial position x.
      *
-     * @param x        Axial position
-     * @param r        Radius
-     * @param mach     Local Mach number
-     * @param pressure Local pressure
-     * @param temp     Local gas temperature
+     * @param x    Axial position (m)
+     * @param r    Local wall radius (m)
+     * @param temp Local static gas temperature (K)
+     * @param T_aw Adiabatic wall (recovery) temperature (K)
      * @return Heat transfer coefficient in W/(m²·K)
      */
-    private double calculateBartzHeatTransfer(double x, double r, double mach, 
-                                               double pressure, double temp) {
+    private double calculateBartzHeatTransfer(double x, double r, double temp, double T_aw) {
         GasProperties gas = parameters.gasProperties();
         double gamma = gas.gamma();
-        double Pr = 0.72; // Prandtl number (approximate)
-        
-        // Reference conditions (throat)
-        double Pc = parameters.chamberPressure();
-        double Tc = parameters.chamberTemperature();
+        double Pr = 4.0 * gamma / (9.0 * gamma - 5.0);  // Eucken relation
+
         double rt = parameters.throatRadius();
         double At = Math.PI * rt * rt;
-        
-        // C* and mass flow rate
-        double cStar = parameters.characteristicVelocity();
-        double mdot = Pc * At / cStar;
-        
-        // Throat conditions
-        double Dt = 2 * rt;
-        double rhoT = Pc / (gas.gasConstant() * Tc) * Math.pow(2.0 / (gamma + 1), 1.0 / (gamma - 1));
-        double muT = gas.calculateViscosity(Tc * 2.0 / (gamma + 1));
-        double cpT = gas.specificHeatCp();
-        
-        // Area ratio at current position
+        double Dt = 2.0 * rt;
         double A = Math.PI * r * r;
-        double sigma = calculateSigma(mach, gamma);
-        
-        // Bartz equation
-        double term1 = 0.026 / Math.pow(Dt, 0.2);
-        double term2 = Math.pow(muT, 0.2) * cpT / Math.pow(Pr, 0.6);
-        double term3 = Math.pow(Pc / cStar, 0.8);
-        double term4 = Math.pow(Dt / (rt * 2), 0.1); // Curvature correction
-        double term5 = Math.pow(At / A, 0.9);
-        
-        return term1 * term2 * term3 * term4 * term5 * sigma;
+
+        // Mass flux at throat: G* = ṁ/A_t = P_c / c*
+        double G_Star = parameters.chamberPressure() / parameters.characteristicVelocity();
+
+        // Local wall radius of curvature for the (D_t/r_c)^0.1 correction
+        double r_c = localRadiusOfCurvature(x);
+
+        // Iterative convergence: T* depends on T_w, T_w depends on h, h depends on T*
+        // Typically converges within 2–3 iterations
+        double T_w = 0.9 * T_aw;  // initial estimate (typical cooled-wall ratio)
+        double h = 0.0;
+        for (int i = 0; i < 3; i++) {
+            // Eckert reference temperature (Eckert 1955)
+            double T_star = 0.5 * (T_w + temp) + 0.22 * Math.sqrt(Pr) * (T_aw - temp);
+
+            double mu_star = gas.calculateViscosity(T_star);
+            double cp_star = gas.specificHeatCp();
+
+            h = (0.026 / Math.pow(Dt, 0.2))
+                    * (Math.pow(mu_star, 0.2) * cp_star / Math.pow(Pr, 0.6))
+                    * Math.pow(G_Star, 0.8)
+                    * Math.pow(Dt / r_c, 0.1)
+                    * Math.pow(At / A, 0.9);
+
+            T_w = calculateWallTemperature(T_aw, h);
+        }
+        return h;
     }
-    
+
     /**
-     * Calculates the sigma correction factor for Bartz equation.
+     * Estimates the local wall radius of curvature at axial position x using
+     * second-order finite differences on the nozzle contour points.
+     * Falls back to the throat radius if curvature cannot be computed.
      */
-    private double calculateSigma(double mach, double gamma) {
-        double gm1 = gamma - 1;
-        double gp1 = gamma + 1;
-        
-        double Tw_Tc = 0.5; // Approximate wall/chamber temp ratio
-        double term1 = 0.5 * Tw_Tc * (1 + gm1 / 2 * mach * mach) + 0.5;
-        double term2 = 1 + gm1 / 2 * mach * mach;
-        
-        return 1.0 / (Math.pow(term1, 0.68) * Math.pow(term2, 0.12));
+    private double localRadiusOfCurvature(double x) {
+        List<Point2D> pts = contour.getContourPoints();
+        if (pts.size() < 3) {
+            return parameters.throatRadius();
+        }
+
+        // Find the index of the contour point nearest to x
+        int idx = 1;
+        double minDx = Double.MAX_VALUE;
+        for (int i = 0; i < pts.size(); i++) {
+            double dx = Math.abs(pts.get(i).x() - x);
+            if (dx < minDx) {
+                minDx = dx;
+                idx = i;
+            }
+        }
+        idx = Math.max(1, Math.min(idx, pts.size() - 2));
+
+        double x0 = pts.get(idx - 1).x(), y0 = pts.get(idx - 1).y();
+        double x1 = pts.get(idx).x(),     y1 = pts.get(idx).y();
+        double x2 = pts.get(idx + 1).x(), y2 = pts.get(idx + 1).y();
+
+        double h1 = x1 - x0;
+        double h2 = x2 - x1;
+        if (h1 < 1e-12 || h2 < 1e-12) {
+            return parameters.throatRadius();
+        }
+
+        // Non-uniform finite differences
+        double dydx   = (y2 - y0) / (x2 - x0);
+        double d2ydx2 = 2.0 * (h1 * y2 - (h1 + h2) * y1 + h2 * y0)
+                            / (h1 * h2 * (h1 + h2));
+
+        if (Math.abs(d2ydx2) < 1e-10) {
+            // Near-straight wall: cap so the correction term stays bounded
+            return 10.0 * parameters.throatRadius();
+        }
+
+        double r_c = Math.pow(1.0 + dydx * dydx, 1.5) / Math.abs(d2ydx2);
+        // Cap at 10*rt to prevent the correction term from vanishing in straight sections
+        return Math.min(r_c, 10.0 * parameters.throatRadius());
     }
     
     /**
@@ -309,6 +350,7 @@ public class HeatTransferModel {
             double heatTransferCoeff,
             double recoveryTemperature
     ) {
+        @SuppressWarnings("NullableProblems")
         @Override
         public String toString() {
             return String.format("ThermalPoint[x=%.4f, Tw=%.1f K, q=%.2e W/m²]",

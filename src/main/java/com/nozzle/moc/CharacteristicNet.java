@@ -6,19 +6,14 @@ import com.nozzle.core.NozzleDesignParameters;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 /**
  * Computes the characteristic network for a supersonic nozzle using the Method of Characteristics.
- * 
  * The coordinate system:
  * - x: axial direction (downstream positive)
  * - y: radial direction (outward from centerline positive)
  * - Centerline is at y=0
  * - Throat is at x=0, y ranges from 0 to rt (throat radius)
- * 
  * For a minimum-length nozzle:
  * 1. Initial line: vertical line at throat from centerline to wall
  * 2. Expansion: characteristics propagate downstream
@@ -29,7 +24,6 @@ public class CharacteristicNet {
     private final NozzleDesignParameters parameters;
     private final List<List<CharacteristicPoint>> netPoints;
     private final List<CharacteristicPoint> wallPoints;
-    private final List<CharacteristicPoint> centerlinePoints;
     private final boolean axisymmetric;
     private final double convergenceTolerance;
     private final int maxIterations;
@@ -45,7 +39,6 @@ public class CharacteristicNet {
         this.parameters = parameters;
         this.netPoints = new ArrayList<>();
         this.wallPoints = new ArrayList<>();
-        this.centerlinePoints = new ArrayList<>();
         this.axisymmetric = parameters.axisymmetric();
         this.convergenceTolerance = tolerance;
         this.maxIterations = maxIter;
@@ -106,8 +99,6 @@ public class CharacteristicNet {
         
         netPoints.add(initialLine);
         wallPoints.add(initialLine.get(n));  // Last point is wall point
-        centerlinePoints.add(initialLine.get(0));  // First point is centerline
-        
         // Propagate the characteristic net
         List<CharacteristicPoint> currentLine = initialLine;
         int maxRows = 2 * n + 20;
@@ -133,8 +124,8 @@ public class CharacteristicNet {
             }
             
             // Add wall point: extend C+ characteristic from last interior point
-            CharacteristicPoint lastInterior = nextLine.get(nextLine.size() - 1);
-            CharacteristicPoint prevWall = wallPoints.get(wallPoints.size() - 1);
+            CharacteristicPoint lastInterior = nextLine.getLast();
+            CharacteristicPoint prevWall = wallPoints.getLast();
             CharacteristicPoint newWall = computeWallPoint(lastInterior, prevWall);
             
             if (newWall != null && newWall.y() > prevWall.y() && newWall.x() > prevWall.x()) {
@@ -142,11 +133,7 @@ public class CharacteristicNet {
                 wallPoints.add(newWall);
             }
             
-            // Check for centerline point
-            if (nextLine.get(0).y() < rt * 0.02) {
-                centerlinePoints.add(nextLine.get(0).withType(CharacteristicPoint.PointType.CENTERLINE));
-            }
-            
+
             netPoints.add(nextLine);
             currentLine = nextLine;
             
@@ -374,31 +361,17 @@ public class CharacteristicNet {
         ).withIndices(left.leftIndex(), right.rightIndex());
     }
     
-    // Batch generation
-    public static List<CharacteristicNet> generateBatch(List<NozzleDesignParameters> parametersList) {
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<Future<CharacteristicNet>> futures = parametersList.stream()
-                    .map(params -> executor.submit(() -> new CharacteristicNet(params).generate()))
-                    .toList();
-            
-            return futures.stream()
-                    .map(f -> { try { return f.get(); } catch (Exception e) { throw new RuntimeException(e); } })
-                    .toList();
-        }
-    }
-    
     // Accessors
     public NozzleDesignParameters getParameters() { return parameters; }
     public List<List<CharacteristicPoint>> getNetPoints() { return Collections.unmodifiableList(netPoints); }
     public List<CharacteristicPoint> getWallPoints() { return Collections.unmodifiableList(wallPoints); }
-    public List<CharacteristicPoint> getCenterlinePoints() { return Collections.unmodifiableList(centerlinePoints); }
     public int getTotalPointCount() { return netPoints.stream().mapToInt(List::size).sum(); }
     public List<CharacteristicPoint> getAllPoints() { return netPoints.stream().flatMap(List::stream).toList(); }
     
     public double calculateExitAreaRatio() {
         if (wallPoints.isEmpty()) return parameters.exitAreaRatio();
         double rt = parameters.throatRadius();
-        double re = wallPoints.get(wallPoints.size() - 1).y();
+        double re = wallPoints.getLast().y();
         return (re * re) / (rt * rt);
     }
     

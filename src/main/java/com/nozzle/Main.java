@@ -265,7 +265,7 @@ public class Main {
                 .axisymmetric(true)
                 .build();
         
-        NASASP8120Validator validator = new NASASP8120Validator(params.gasProperties().gamma());
+        NASASP8120Validator validator = new NASASP8120Validator();
         NASASP8120Validator.ValidationResult result = validator.validate(params);
 
         System.out.printf("Validation Result: %s%n", result.isValid() ? "PASSED" : "FAILED");

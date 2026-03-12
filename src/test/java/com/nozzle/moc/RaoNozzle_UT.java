@@ -13,7 +13,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.*;
 
 @DisplayName("RaoNozzle Tests")
-class RaoNozzleTest {
+class RaoNozzle_UT {
     
     private NozzleDesignParameters params;
     private RaoNozzle raoNozzle;

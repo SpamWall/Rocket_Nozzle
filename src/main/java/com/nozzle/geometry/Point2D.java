@@ -136,7 +136,7 @@ public record Point2D(double x, double y) {
      * @param t     Interpolation factor (0-1)
      * @return Interpolated point
      */
-    public Point2D lerp(Point2D other, double t) {
+    public Point2D linearInterpolate(Point2D other, double t) {
         return new Point2D(
                 x + t * (other.x - x),
                 y + t * (other.y - y)
@@ -150,7 +150,7 @@ public record Point2D(double x, double y) {
      * @return Midpoint
      */
     public Point2D midpoint(Point2D other) {
-        return lerp(other, 0.5);
+        return linearInterpolate(other, 0.5);
     }
     
     /**
@@ -171,6 +171,7 @@ public record Point2D(double x, double y) {
         return new Point2D(-x, y);
     }
     
+    @SuppressWarnings("NullableProblems")
     @Override
     public String toString() {
         return String.format("(%.6f, %.6f)", x, y);

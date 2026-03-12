@@ -1,9 +1,7 @@
 package com.nozzle.optimization;
 
-import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.core.PerformanceCalculator;
-import com.nozzle.moc.CharacteristicNet;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -11,7 +9,6 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.function.Function;
 
 /**
  * Optimizes nozzle design for altitude-adaptive performance.
@@ -23,7 +20,7 @@ public class AltitudeAdaptiveOptimizer {
     private final List<AltitudeCondition> altitudeProfile;
     private final OptimizationConfig config;
     
-    private List<OptimizationResult> results;
+    private final List<OptimizationResult> results;
     private OptimizationResult bestResult;
     
     /**
@@ -127,11 +124,11 @@ public class AltitudeAdaptiveOptimizer {
         double[] lengthFractions = config.lengthFractionRange();
         double[] wallAngles = config.wallAngleRange();
         
-        for (double arMult : areaRatioMultipliers) {
+        for (double arMultiplier : areaRatioMultipliers) {
             for (double lf : lengthFractions) {
                 for (double wa : wallAngles) {
                     // Calculate new exit Mach for modified area ratio
-                    double newAR = baseParameters.exitAreaRatio() * arMult;
+                    double newAR = baseParameters.exitAreaRatio() * arMultiplier;
                     double newExitMach = baseParameters.gasProperties().machFromAreaRatio(newAR);
                     
                     NozzleDesignParameters candidate = NozzleDesignParameters.builder()
@@ -281,6 +278,7 @@ public class AltitudeAdaptiveOptimizer {
             double objectiveValue,
             List<AltitudePerformance> performances
     ) {
+        @SuppressWarnings("NullableProblems")
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();

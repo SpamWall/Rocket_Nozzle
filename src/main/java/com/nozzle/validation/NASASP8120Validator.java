@@ -1,6 +1,5 @@
 package com.nozzle.validation;
 
-import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.moc.CharacteristicNet;
 
@@ -13,69 +12,7 @@ import java.util.*;
  */
 public class NASASP8120Validator {
     
-    private final Map<Double, Double[]> areaRatioTable;
-    private final Map<Double, Double[]> thrustCoefficientTable;
-    private final Map<Double, Double[]> specificImpulseEfficiencyTable;
-    private final double gamma;
-    
-    /**
-     * Creates a validator for specified gamma.
-     *
-     * @param gamma Ratio of specific heats
-     */
-    public NASASP8120Validator(double gamma) {
-        this.gamma = gamma;
-        this.areaRatioTable = new HashMap<>();
-        this.thrustCoefficientTable = new HashMap<>();
-        this.specificImpulseEfficiencyTable = new HashMap<>();
-        initializeTables();
-    }
-    
-    /**
-     * Creates a validator with default gamma = 1.2 (rocket exhaust).
-     */
     public NASASP8120Validator() {
-        this(1.2);
-    }
-    
-    /**
-     * Initializes NASA SP-8120 reference tables.
-     * These are standard values for ideal isentropic flow.
-     */
-    private void initializeTables() {
-        // Area ratio (A/A*) vs Mach number for various gamma values
-        // Format: Mach -> [gamma=1.1, 1.2, 1.3, 1.4]
-        
-        double[] machs = {1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0};
-        
-        // Area ratios from isentropic relations
-        for (double m : machs) {
-            double[] ratios = new double[4];
-            double[] gammas = {1.1, 1.2, 1.3, 1.4};
-            for (int i = 0; i < 4; i++) {
-                ratios[i] = calculateAreaRatio(m, gammas[i]);
-            }
-            areaRatioTable.put(m, Arrays.stream(ratios).boxed().toArray(Double[]::new));
-        }
-        
-        // Thrust coefficient (Cf) vs area ratio for vacuum conditions
-        // These are based on NASA SP-8120 Figure 2-1
-        double[] areaRatios = {1, 5, 10, 20, 50, 100, 200};
-        for (double ar : areaRatios) {
-            double m = calculateMachFromAreaRatio(ar, gamma);
-            double cf = calculateIdealThrustCoefficient(m, gamma, 0); // Vacuum Cf
-            thrustCoefficientTable.put(ar, new Double[]{cf});
-        }
-        
-        // Specific impulse efficiency factors
-        // Based on NASA SP-8120 empirical correlations
-        // Key: nozzle length fraction, Value: efficiency factor
-        double[] lengthFractions = {0.6, 0.7, 0.8, 0.9, 1.0};
-        double[] efficiencies = {0.92, 0.94, 0.96, 0.98, 0.99};
-        for (int i = 0; i < lengthFractions.length; i++) {
-            specificImpulseEfficiencyTable.put(lengthFractions[i], 
-                    new Double[]{efficiencies[i]});
-        }
     }
     
     /**
@@ -118,9 +55,9 @@ public class NASASP8120Validator {
         }
         
         // Validate specific impulse
-        double idealIsp = calculateIdealSpecificImpulse(designGamma, 
+        double idealIsp = calculateIdealSpecificImpulse(designGamma,
                 parameters.chamberTemperature(), parameters.gasProperties().molecularWeight(),
-                exitMach, parameters.ambientPressure() / parameters.chamberPressure());
+                exitMach);
         double designIsp = parameters.idealSpecificImpulse();
         double ispError = Math.abs(designIsp - idealIsp) / idealIsp * 100;
         metrics.put("isp_error_percent", ispError);
@@ -229,27 +166,6 @@ public class NASASP8120Validator {
     }
     
     /**
-     * Calculates Mach number from area ratio (supersonic branch).
-     */
-    private double calculateMachFromAreaRatio(double areaRatio, double gamma) {
-        if (areaRatio <= 1) return 1.0;
-        
-        double mach = 2.0; // Initial guess
-        for (int i = 0; i < 50; i++) {
-            double f = calculateAreaRatio(mach, gamma) - areaRatio;
-            double gp1 = gamma + 1;
-            double gm1 = gamma - 1;
-            double mach2 = mach * mach;
-            double term = 1 + gm1 / 2 * mach2;
-            double df = calculateAreaRatio(mach, gamma) * (mach2 - 1) / (mach * term);
-            double deltaMach = f / df;
-            mach -= deltaMach;
-            if (Math.abs(deltaMach) < 1e-10) break;
-        }
-        return mach;
-    }
-    
-    /**
      * Calculates ideal thrust coefficient.
      */
     private double calculateIdealThrustCoefficient(double mach, double gamma, double pressureRatio) {
@@ -274,8 +190,7 @@ public class NASASP8120Validator {
     /**
      * Calculates ideal specific impulse.
      */
-    private double calculateIdealSpecificImpulse(double gamma, double Tc, double MW,
-                                                   double mach, double pressureRatio) {
+    private double calculateIdealSpecificImpulse(double gamma, double Tc, double MW, double mach) {
         double R = 8314.46 / MW;
         double gm1 = gamma - 1;
         double g0 = 9.80665;
@@ -318,6 +233,7 @@ public class NASASP8120Validator {
             List<String> warnings,
             Map<String, Double> metrics
     ) {
+        @SuppressWarnings("NullableProblems")
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
