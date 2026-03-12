@@ -2,6 +2,7 @@ package com.nozzle.optimization;
 
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.core.PerformanceCalculator;
+import com.nozzle.core.ShockExpansionModel;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -175,20 +176,18 @@ public class AltitudeAdaptiveOptimizer {
                     .axisymmetric(candidate.axisymmetric())
                     .build();
             
-            // Calculate performance
-            PerformanceCalculator calc = PerformanceCalculator.simple(altParams).calculate();
-            
-            double cf = calc.getActualThrustCoefficient();
-            double isp = calc.getSpecificImpulse();
-            double thrust = calc.getThrust();
-            
-            // Check for separation (flow detachment when Pe << Pa)
-            double Pe = altParams.idealExitPressure();
-            double Pa = condition.pressure();
-            boolean separated = Pe < 0.4 * Pa;
-            
-            // Penalty for separation
-            double performanceMetric = separated ? isp * 0.7 : isp;
+            // Calculate off-design performance with shock-expansion correction.
+            ShockExpansionModel shockModel = new ShockExpansionModel(altParams);
+            ShockExpansionModel.OffDesignResult offDesign = shockModel.compute(condition.pressure());
+
+            double cf = offDesign.thrustCoefficient();
+            double isp = offDesign.specificImpulse();
+            boolean separated = !offDesign.isFullyFlowing();
+
+            // Thrust from corrected Cf (already accounts for separation truncation).
+            double thrust = cf * candidate.chamberPressure() * candidate.throatArea();
+
+            double performanceMetric = isp;
             
             performances.add(new AltitudePerformance(condition.altitude(), 
                     cf, isp, thrust, separated));

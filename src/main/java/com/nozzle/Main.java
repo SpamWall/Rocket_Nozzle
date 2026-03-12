@@ -1,9 +1,11 @@
 package com.nozzle;
 
 import com.nozzle.chemistry.ChemistryModel;
+import com.nozzle.core.FlowSeparationPredictor;
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.core.PerformanceCalculator;
+import com.nozzle.core.ShockExpansionModel;
 import com.nozzle.export.*;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.moc.CharacteristicNet;
@@ -31,6 +33,8 @@ import java.util.List;
  * - NASA SP-8120 validation
  * - Altitude-adaptive optimization
  * - Monte Carlo uncertainty analysis
+ * - Flow separation prediction
+ * - Shock-expansion off-design analysis
  */
 public class Main {
     
@@ -54,6 +58,7 @@ public class Main {
             demonstrateValidation();
             demonstrateOptimization();
             demonstrateUncertaintyAnalysis();
+            demonstrateFlowSeparationAndShockExpansion();
             demonstrateExports(outputDir);
 
             System.out.printf("\n%s%n", "=".repeat(70));
@@ -419,6 +424,111 @@ public class Main {
         });
     }
     
+    /**
+     * Demonstrates flow separation prediction and shock-expansion off-design analysis.
+     */
+    private static void demonstrateFlowSeparationAndShockExpansion() {
+        System.out.println("\n--- FLOW SEPARATION & SHOCK-EXPANSION OFF-DESIGN ---\n");
+
+        // Two nozzles: sea-level optimised (Me=3) and a vacuum bell (Me=6).
+        NozzleDesignParameters seaLevel = NozzleDesignParameters.builder()
+                .throatRadius(0.05)
+                .exitMach(3.0)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500)
+                .ambientPressure(101325)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(30)
+                .lengthFraction(0.8)
+                .build();
+
+        NozzleDesignParameters vacuumBell = NozzleDesignParameters.builder()
+                .throatRadius(0.05)
+                .exitMach(6.0)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500)
+                .ambientPressure(101325)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(30)
+                .lengthFraction(0.8)
+                .build();
+
+        // ---- 1. Separation prediction (three criteria) ----
+        System.out.println("Flow Separation Prediction — vacuum bell (Me=6) at sea level:");
+        System.out.printf("  Design exit pressure:  %.0f Pa  (ambient: %.0f Pa)%n",
+                vacuumBell.idealExitPressure(), vacuumBell.ambientPressure());
+        System.out.println();
+
+        for (FlowSeparationPredictor.Criterion c : FlowSeparationPredictor.Criterion.values()) {
+            FlowSeparationPredictor.SeparationResult sep =
+                    new FlowSeparationPredictor(vacuumBell).predict(c);
+            System.out.printf("  [%-11s]  p_sep = %6.0f Pa  |  separated: %s",
+                    c, sep.separationPressurePa(), sep.separated() ? "YES" : "NO ");
+            if (sep.separated()) {
+                System.out.printf("  |  M_sep=%.2f  AR_sep=%.2f  mode=%-3s  side-load=%.0f N",
+                        sep.separationMach(), sep.separationAreaRatio(),
+                        sep.mode(), sep.estimatedSideLoadN());
+            }
+            System.out.println();
+        }
+
+        // ---- 2. Shock-expansion regime sweep across altitude ----
+        System.out.println("\nShock-Expansion Altitude Sweep — sea-level nozzle (Me=3):");
+        System.out.printf("  %-8s  %-6s  %-25s  %-6s  %-6s  %-10s%n",
+                "Alt (km)", "pa (kPa)", "Regime", "Cf", "Isp (s)", "Wave (°)");
+        System.out.println("  " + "-".repeat(72));
+
+        double[] altitudes = {0, 5, 10, 20, 40, 80};
+        ShockExpansionModel seaLevelModel = new ShockExpansionModel(seaLevel);
+        for (double alt : altitudes) {
+            ShockExpansionModel.OffDesignResult r = seaLevelModel.computeAtAltitude(alt * 1000);
+            double waveAngle = Double.isNaN(r.waveAngleDeg()) ? 0.0 : r.waveAngleDeg();
+            System.out.printf("  %-8.0f  %-6.1f  %-25s  %-6.4f  %-6.1f  %-10.1f%n",
+                    alt,
+                    ShockExpansionModel.isaAtmosphere(alt * 1000) / 1000,
+                    r.regime(),
+                    r.thrustCoefficient(),
+                    r.specificImpulse(),
+                    waveAngle);
+        }
+
+        // ---- 3. Vacuum bell off-design at several altitudes ----
+        System.out.println("\nShock-Expansion Altitude Sweep — vacuum bell (Me=6):");
+        System.out.printf("  %-8s  %-6s  %-25s  %-6s  %-6s%n",
+                "Alt (km)", "pa (kPa)", "Regime", "Cf", "Isp (s)");
+        System.out.println("  " + "-".repeat(58));
+
+        ShockExpansionModel vacuumModel = new ShockExpansionModel(vacuumBell);
+        for (double alt : altitudes) {
+            ShockExpansionModel.OffDesignResult r = vacuumModel.computeAtAltitude(alt * 1000);
+            System.out.printf("  %-8.0f  %-6.1f  %-25s  %-6.4f  %-6.1f%n",
+                    alt,
+                    ShockExpansionModel.isaAtmosphere(alt * 1000) / 1000,
+                    r.regime(),
+                    r.thrustCoefficient(),
+                    r.specificImpulse());
+        }
+
+        // ---- 4. Side-by-side Cf comparison at sea level ----
+        System.out.println("\nCf comparison at sea level (pa = 101 325 Pa):");
+        ShockExpansionModel.OffDesignResult slResult = seaLevelModel.compute(101325);
+        ShockExpansionModel.OffDesignResult vacResult = vacuumModel.compute(101325);
+        System.out.printf("  Sea-level nozzle (Me=3):  Cf=%.4f  Isp=%.1f s  regime=%s%n",
+                slResult.thrustCoefficient(), slResult.specificImpulse(), slResult.regime());
+        System.out.printf("  Vacuum bell    (Me=6):    Cf=%.4f  Isp=%.1f s  regime=%s%n",
+                vacResult.thrustCoefficient(), vacResult.specificImpulse(), vacResult.regime());
+        if (vacResult.separationResult() != null) {
+            FlowSeparationPredictor.SeparationResult sr = vacResult.separationResult();
+            System.out.printf("    → Separation at M=%.2f (%.1f%% of nozzle length),"
+                            + " est. side-load %.0f N%n",
+                    sr.separationMach(),
+                    sr.separationAxialFraction() * 100,
+                    sr.estimatedSideLoadN());
+        }
+    }
+
     /**
      * Demonstrates CAD exports.
      */

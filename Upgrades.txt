@@ -1,0 +1,64 @@
+Here's an organized assessment of the most impactful additions, grouped by value:
+
+  ---
+  High Impact — Physics Completeness
+
+  Oblique Shock / Overexpansion Model
+  Currently only ideal flow is modeled. A proper shock-expansion model for overexpanded/underexpanded exit conditions would let the library compute off-design performance accurately — essential for altitude-adaptive work.
+
+  Truncated Ideal Contour (TIC) and Thrust-Optimized Parabola (TOP)
+  The library has Rao bell and MOC. TIC and TOP are the two other standard contour families used in industry (SpaceX Merlin, Raptor). Adding them rounds out the contour comparison capability.
+
+  Plug / Aerospike Nozzle
+  A fundamentally different architecture with natural altitude compensation. Would significantly extend the scope of what the library can design and compare.
+
+  ---
+  High Impact — Missing Analysis Capabilities
+
+  Thermal Stress Analysis
+  HeatTransferModel computes wall temperature and heat flux, but never converts that into structural stress. For a design tool, the thermal gradient → through-wall stress → fatigue life calculation is the next natural step. This is where real engine failures happen.
+
+  Ablative Nozzle Model
+  Solid rocket motors use ablative liners. The library currently has no char rate, recession prediction, or erosion model. A simple Arrhenius-based char rate model would cover a large class of real nozzles.
+
+  Radiation-Cooled Extension Model
+  Large nozzle extensions (like on the RL-10) are uncooled and reach equilibrium wall temperature via radiation. The current model assumes regenerative cooling everywhere. A separate equilibrium-radiation model for the extension section would be realistic.
+
+  Export to openFOAM
+
+  ---
+  Medium Impact — Code Quality & Professionalism
+
+  Spatial Indexing for Flow Point Lookup
+  findNearestFlowPoint() in HeatTransferModel does a full O(n) linear scan for every wall point. For large characteristic nets this is O(n×m). A simple k-d tree or sorted-by-x lookup would be a significant speedup.
+
+  Serialization / Design Database
+  There is no way to save a design to disk and reload it. Adding Jackson-based JSON serialization to NozzleDesignParameters, CharacteristicNet, and results would make the library usable as part of a persistent workflow.
+
+  Proper Logging
+  Main.java uses System.out throughout. ChemistryModel uses SLF4J but nothing else does. Consistent SLF4J usage across all classes would make the library production-grade.
+
+  gp1 Dead Code in machFromAreaRatio
+  The codebase review found a dead gp1 variable in GasProperties.machFromAreaRatio() with an explanatory comment that the derivative formula is incorrect. This should be resolved — either use the correct closed-form derivative or remove the dead variable.
+
+  ---
+  Medium Impact — Validation & Testing
+
+  Physics Validation Against Known Analytical Solutions
+  Tests currently check that numbers are "reasonable" (e.g., h > 0, T_w < T_chamber). A professional library would have tests validating against known analytical results — e.g., MOC wall points for a known Mach number should match tabulated isentropic values within 0.1%, Bartz h at the throat should
+  match published worked examples.
+
+  Integration Test: Full Design Flow
+  No test exercises the full pipeline: NozzleDesignParameters → CharacteristicNet → NozzleContour → HeatTransferModel → NASASP8120Validator. A single end-to-end integration test would catch cross-component regressions.
+
+  ---
+  Lower Impact — Nice to Have
+
+  - Unit conversion utilities — the library mixes SI throughout but users often work in imperial (lbf, inches, psia). A Units class would help at system boundaries.
+  - CGNS binary export — currently just delegates to Plot3D. True CGNS would be compatible with more CFD solvers.
+  - Dual-bell nozzle — altitude-compensating geometry that transitions between two contours; relevant for single-stage vehicles.
+  - Coolant channel sizing — HeatTransferModel takes coolantHeatTransferCoeff as a given but doesn't compute it. A simple channel sizing sub-model (pressure drop, flow velocity, nucleate boiling margin) would close the loop.
+
+  ---
+  The three I'd prioritize first: flow separation prediction (safety-critical for any real design), thermal stress (the natural next step after the Bartz work done today), and JSON serialization (makes everything else much more usable as a real tool).
+
