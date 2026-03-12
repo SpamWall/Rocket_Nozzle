@@ -3,9 +3,6 @@ Here's an organized assessment of the most impactful additions, grouped by value
   ---
   High Impact — Physics Completeness
 
-  Truncated Ideal Contour (TIC) and Thrust-Optimized Parabola (TOP)
-  The library has Rao bell and MOC. TIC and TOP are the two other standard contour families used in industry (SpaceX Merlin, Raptor). Adding them rounds out the contour comparison capability.
-
   Plug / Aerospike Nozzle
   A fundamentally different architecture with natural altitude compensation. Would significantly extend the scope of what the library can design and compare.
 
@@ -21,7 +18,6 @@ Here's an organized assessment of the most impactful additions, grouped by value
   Radiation-Cooled Extension Model
   Large nozzle extensions (like on the RL-10) are uncooled and reach equilibrium wall temperature via radiation. The current model assumes regenerative cooling everywhere. A separate equilibrium-radiation model for the extension section would be realistic.
 
-  Export to openFOAM
 
   ---
   Medium Impact — Code Quality & Professionalism
@@ -57,5 +53,5 @@ Here's an organized assessment of the most impactful additions, grouped by value
   - Coolant channel sizing — HeatTransferModel takes coolantHeatTransferCoeff as a given but doesn't compute it. A simple channel sizing sub-model (pressure drop, flow velocity, nucleate boiling margin) would close the loop.
 
   ---
-  The three I'd prioritize first: flow separation prediction (safety-critical for any real design), thermal stress (the natural next step after the Bartz work done today), and JSON serialization (makes everything else much more usable as a real tool).
+  The three I'd prioritize first: thermal stress (the natural next step after the Bartz work done today), and JSON serialization (makes everything else much more usable as a real tool).
 

@@ -35,6 +35,7 @@ import java.util.List;
  * - Monte Carlo uncertainty analysis
  * - Flow separation prediction
  * - Shock-expansion off-design analysis
+ * - OpenFOAM case export (rhoCentralFoam, axisymmetric wedge)
  */
 public class Main {
     
@@ -580,7 +581,24 @@ public class Main {
         cfdExporter.export(contour, outputDir.resolve("blockMeshDict"), CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
         cfdExporter.export(contour, outputDir.resolve("nozzle.geo"), CFDMeshExporter.Format.GMSH_GEO);
         System.out.println("Exported CFD mesh files (OpenFOAM, Gmsh)");
-        
+
+        // OpenFOAM complete case export (rhoCentralFoam)
+        Path foamCase = outputDir.resolve("openfoam_case");
+        new OpenFOAMExporter()
+                .setAxialCells(300)
+                .setRadialCells(100)
+                .setRadialGrading(5.0)
+                .setTurbulenceIntensity(0.05)
+                .exportCase(params, contour, foamCase);
+        System.out.printf("Exported OpenFOAM case → %s%n", foamCase.toAbsolutePath());
+        System.out.println("  Run with: blockMesh && rhoCentralFoam");
+        System.out.printf("  Files: %s%n",
+                String.join(", ",
+                        "system/blockMeshDict", "system/controlDict",
+                        "system/fvSchemes",     "system/fvSolution",
+                        "constant/thermophysicalProperties", "constant/turbulenceProperties",
+                        "0/p", "0/T", "0/U", "0/k", "0/omega"));
+
         System.out.println("\nAll export files saved to: " + outputDir.toAbsolutePath());
     }
 }
