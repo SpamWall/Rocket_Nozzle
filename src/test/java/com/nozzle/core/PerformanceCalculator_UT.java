@@ -1,9 +1,15 @@
 package com.nozzle.core;
 
+import com.nozzle.chemistry.ChemistryModel;
+import com.nozzle.geometry.NozzleContour;
+import com.nozzle.moc.CharacteristicNet;
+import com.nozzle.thermal.BoundaryLayerCorrection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -123,6 +129,125 @@ class PerformanceCalculator_UT {
         }
     }
     
+    @Nested
+    @DisplayName("Divergence Loss via CharacteristicNet")
+    class WithCharacteristicNetTests {
+
+        @Test
+        @DisplayName("Lambda from non-empty CharacteristicNet wall points reduces divergence loss")
+        void nonEmptyNetShouldUseFinalWallAngle() {
+            CharacteristicNet net = new CharacteristicNet(params).generate();
+            PerformanceCalculator calc = new PerformanceCalculator(params, net, null, null, null)
+                    .calculate();
+
+            // With a real MOC net the exit wall angle is near 0 → lambda ≈ 1 → small divergence loss
+            assertThat(calc.getDivergenceLoss()).isGreaterThanOrEqualTo(0.0);
+            assertThat(calc.getActualThrustCoefficient()).isGreaterThan(0.0);
+        }
+
+        @Test
+        @DisplayName("Empty CharacteristicNet wall list falls back to zero exit angle")
+        void emptyNetWallPointsShouldFallBackToZeroAngle() {
+            // CharacteristicNet constructed but NOT generated → getWallPoints() is empty
+            CharacteristicNet emptyNet = new CharacteristicNet(params);
+            PerformanceCalculator calc = new PerformanceCalculator(params, emptyNet, null, null, null)
+                    .calculate();
+
+            // exitAngle stays 0 → lambda = 1 → divergenceLoss = 0
+            assertThat(calc.getDivergenceLoss()).isCloseTo(0.0, within(1e-9));
+        }
+    }
+
+    @Nested
+    @DisplayName("Divergence Loss via NozzleContour")
+    class WithContourTests {
+
+        @Test
+        @DisplayName("Generated contour (size >= 2) computes exit angle from last two points")
+        void generatedContourShouldComputeExitAngle() {
+            NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+            contour.generate(50);
+
+            PerformanceCalculator calc = new PerformanceCalculator(params, null, contour, null, null)
+                    .calculate();
+
+            assertThat(calc.getDivergenceLoss()).isGreaterThanOrEqualTo(0.0);
+            assertThat(calc.getActualThrustCoefficient()).isGreaterThan(0.0);
+        }
+
+        @Test
+        @DisplayName("Ungenerated contour (size < 2) falls back to zero exit angle")
+        void ungeneratedContourShouldFallBackToZeroAngle() {
+            // Contour constructed but NOT generated → getContourPoints() is empty (< 2)
+            NozzleContour emptyContour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+            PerformanceCalculator calc = new PerformanceCalculator(params, null, emptyContour, null, null)
+                    .calculate();
+
+            // points.size() < 2 → exitAngle stays 0 → lambda = 1 → divergenceLoss = 0
+            assertThat(calc.getDivergenceLoss()).isCloseTo(0.0, within(1e-9));
+        }
+    }
+
+    @Nested
+    @DisplayName("Boundary Layer Loss")
+    class WithBoundaryLayerTests {
+
+        @Test
+        @DisplayName("Provided BoundaryLayerCorrection replaces the estimated BL loss")
+        void providedBoundaryLayerShouldBeUsedDirectly() {
+            NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+            contour.generate(50);
+            CharacteristicNet net = new CharacteristicNet(params).generate();
+
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
+                    .calculate(net.getAllPoints());
+
+            PerformanceCalculator withBL   = new PerformanceCalculator(params, null, null, bl, null).calculate();
+            PerformanceCalculator withoutBL = PerformanceCalculator.simple(params).calculate();
+
+            // Both should produce a positive BL loss; the values may differ
+            assertThat(withBL.getBoundaryLayerLoss()).isGreaterThanOrEqualTo(0.0);
+            // The BL loss reported by the calculator must match what the BL model reports
+            assertThat(withBL.getBoundaryLayerLoss())
+                    .isCloseTo(bl.getThrustCoefficientLoss(), within(1e-9));
+            // Having an explicit BL model produces a different (typically larger) estimate
+            // than the crude Re-based fallback at this nozzle scale
+            assertThat(withBL.getBoundaryLayerLoss())
+                    .isNotEqualTo(withoutBL.getBoundaryLayerLoss());
+        }
+    }
+
+    @Nested
+    @DisplayName("Chemical Loss")
+    class WithChemistryTests {
+
+        @Test
+        @DisplayName("Frozen chemistry uses the 1% flat estimate")
+        void frozenChemistryShouldUseFlatEstimate() {
+            ChemistryModel frozen = ChemistryModel.frozen(GasProperties.LOX_RP1_PRODUCTS);
+            PerformanceCalculator calc = new PerformanceCalculator(params, null, null, null, frozen)
+                    .calculate();
+
+            // frozen branch: chemicalLoss = idealCf * 0.01
+            assertThat(calc.getChemicalLoss())
+                    .isCloseTo(calc.getIdealThrustCoefficient() * 0.01, within(1e-9));
+        }
+
+        @Test
+        @DisplayName("Equilibrium chemistry computes loss from gamma variation")
+        void equilibriumChemistryShouldComputeGammaLoss() {
+            ChemistryModel eq = ChemistryModel.equilibrium(GasProperties.LOX_RP1_PRODUCTS);
+            PerformanceCalculator calc = new PerformanceCalculator(params, null, null, null, eq)
+                    .calculate();
+
+            // Non-frozen branch executes; chemical loss must still be non-negative
+            assertThat(calc.getChemicalLoss()).isGreaterThanOrEqualTo(0.0);
+            // And should differ from the flat 1% frozen estimate
+            assertThat(calc.getChemicalLoss())
+                    .isNotCloseTo(calc.getIdealThrustCoefficient() * 0.01, within(1e-9));
+        }
+    }
+
     @Nested
     @DisplayName("Summary Tests")
     class SummaryTests {
