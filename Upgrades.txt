@@ -9,9 +9,6 @@ Here's an organized assessment of the most impactful additions, grouped by value
   ---
   High Impact — Missing Analysis Capabilities
 
-  Thermal Stress Analysis
-  HeatTransferModel computes wall temperature and heat flux, but never converts that into structural stress. For a design tool, the thermal gradient → through-wall stress → fatigue life calculation is the next natural step. This is where real engine failures happen.
-
   Ablative Nozzle Model
   Solid rocket motors use ablative liners. The library currently has no char rate, recession prediction, or erosion model. A simple Arrhenius-based char rate model would cover a large class of real nozzles.
 
@@ -31,9 +28,6 @@ Here's an organized assessment of the most impactful additions, grouped by value
   Proper Logging
   Main.java uses System.out throughout. ChemistryModel uses SLF4J but nothing else does. Consistent SLF4J usage across all classes would make the library production-grade.
 
-  gp1 Dead Code in machFromAreaRatio
-  The codebase review found a dead gp1 variable in GasProperties.machFromAreaRatio() with an explanatory comment that the derivative formula is incorrect. This should be resolved — either use the correct closed-form derivative or remove the dead variable.
-
   ---
   Medium Impact — Validation & Testing
 
@@ -49,5 +43,4 @@ Here's an organized assessment of the most impactful additions, grouped by value
   - Coolant channel sizing — HeatTransferModel takes coolantHeatTransferCoeff as a given but doesn't compute it. A simple channel sizing sub-model (pressure drop, flow velocity, nucleate boiling margin) would close the loop.
 
   ---
-  The three I'd prioritize first: thermal stress (the natural next step after the Bartz work done today), and JSON serialization (makes everything else much more usable as a real tool).
 
