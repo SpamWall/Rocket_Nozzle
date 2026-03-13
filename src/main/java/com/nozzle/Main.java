@@ -15,6 +15,7 @@ import com.nozzle.optimization.MonteCarloUncertainty;
 import com.nozzle.thermal.BoundaryLayerCorrection;
 import com.nozzle.thermal.CoolantChannel;
 import com.nozzle.thermal.HeatTransferModel;
+import com.nozzle.thermal.ThermalStressAnalysis;
 import com.nozzle.validation.NASASP8120Validator;
 
 import java.nio.file.Files;
@@ -36,6 +37,7 @@ import java.util.List;
  * - Flow separation prediction
  * - Shock-expansion off-design analysis
  * - OpenFOAM case export (rhoCentralFoam, axisymmetric wedge)
+ * - Thermal stress and fatigue life analysis (Timoshenko, Basquin, Coffin-Manson)
  */
 public class Main {
     
@@ -60,6 +62,7 @@ public class Main {
             demonstrateOptimization();
             demonstrateUncertaintyAnalysis();
             demonstrateFlowSeparationAndShockExpansion();
+            demonstrateThermalStressAnalysis(outputDir);
             demonstrateExports(outputDir);
 
             System.out.printf("\n%s%n", "=".repeat(70));
@@ -527,6 +530,110 @@ public class Main {
                     sr.separationMach(),
                     sr.separationAxialFraction() * 100,
                     sr.estimatedSideLoadN());
+        }
+    }
+
+    /**
+     * Demonstrates thermal stress and fatigue life analysis.
+     * Uses the HeatTransferModel output (wall temperature + heat flux) as input
+     * to ThermalStressAnalysis, which applies Timoshenko thin-shell thermal stress,
+     * thin-wall Lamé pressure stress, von Mises combination, and Basquin/Coffin-Manson
+     * fatigue life estimation.
+     */
+    private static void demonstrateThermalStressAnalysis(Path outputDir) throws Exception {
+        System.out.println("\n--- THERMAL STRESS & FATIGUE LIFE ANALYSIS ---\n");
+
+        // Same LOX/RP-1 engine as the thermal section
+        NozzleDesignParameters params = NozzleDesignParameters.builder()
+                .throatRadius(0.05)
+                .exitMach(3.0)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500)
+                .ambientPressure(101325)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(30)
+                .lengthFraction(0.8)
+                .axisymmetric(true)
+                .build();
+
+        NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+        contour.generate(60);
+
+        // Wall properties: Cu-Cr-Zr inner liner (high-conductivity regenerative cooling)
+        double wallThickness    = 0.003;   // 3 mm
+        double wallConductivity = 320.0;   // W/(m·K) — Cu-Cr-Zr (C18150)
+
+        HeatTransferModel heatModel = new HeatTransferModel(params, contour)
+                .setWallProperties(wallConductivity, wallThickness)
+                .setCoolantProperties(300.0, 25_000.0)   // 25 kW/(m²·K) — aggressively cooled
+                .calculate(List.of());
+
+        List<HeatTransferModel.WallThermalPoint> thermalProfile = heatModel.getWallThermalProfile();
+
+        System.out.printf("Thermal baseline (Cu-Cr-Zr liner, k=%.0f W/(m·K), t=%.0f mm):%n",
+                wallConductivity, wallThickness * 1000);
+        System.out.printf("  Max wall temperature: %.0f K%n",  heatModel.getMaxWallTemperature());
+        System.out.printf("  Max heat flux:        %.2e W/m²%n", heatModel.getMaxHeatFlux());
+        System.out.printf("  Wall points analysed: %d%n", thermalProfile.size());
+
+        // ---- Per-material stress + fatigue sweep ----
+        System.out.println("\nMaterial comparison (same wall geometry and thermal load):");
+        System.out.printf("  %-20s  %8s  %6s  %8s  %8s  %10s%n",
+                "Material", "σ_VM_max", "SF_min", "ΔT_max", "N_f_min", "Regime");
+        System.out.printf("  %-20s  %8s  %6s  %8s  %8s  %10s%n",
+                "", "(MPa)", "(–)", "(K)", "(cycles)", "");
+        System.out.println("  " + "-".repeat(68));
+
+        ThermalStressAnalysis.Material[] materials = {
+                ThermalStressAnalysis.Material.COPPER_ALLOY_CuCrZr,
+                ThermalStressAnalysis.Material.INCONEL_718,
+                ThermalStressAnalysis.Material.STAINLESS_304,
+        };
+
+        ThermalStressAnalysis bestAnalysis = null;
+
+        for (ThermalStressAnalysis.Material mat : materials) {
+            ThermalStressAnalysis analysis =
+                    new ThermalStressAnalysis(params, thermalProfile, mat, wallThickness, wallConductivity)
+                            .calculate();
+
+            double sigVMmax = analysis.getMaxVonMisesStress();
+            double sfMin    = analysis.getMinSafetyFactor();
+            double dtMax    = analysis.getMaxDeltaT();
+            double nfMin    = analysis.getMinFatigueCycles();
+            String regime   = sigVMmax > mat.yieldStrength() ? "PLASTIC" : "elastic";
+            String nfStr    = Double.isInfinite(nfMin) ? "∞" : String.format("%.1f", nfMin);
+
+            System.out.printf("  %-20s  %8.1f  %6.2f  %8.1f  %8s  %10s%n",
+                    mat.name(), sigVMmax / 1e6, sfMin, dtMax, nfStr, regime);
+
+            if (mat == ThermalStressAnalysis.Material.COPPER_ALLOY_CuCrZr) {
+                bestAnalysis = analysis;
+            }
+        }
+
+        // ---- Critical-point drill-down for Cu-Cr-Zr ----
+        if (bestAnalysis != null) {
+            ThermalStressAnalysis.WallStressPoint cp = bestAnalysis.getCriticalPoint();
+            System.out.printf("%n  Cu-Cr-Zr critical point (highest σ_VM):%n");
+            System.out.printf("    Axial position:    x = %.4f m%n",   cp.x());
+            System.out.printf("    Wall temperature:  T = %.0f K%n",   cp.wallTemperature());
+            System.out.printf("    Through-wall ΔT:   %.1f K%n",        cp.deltaT());
+            System.out.printf("    σ_thermal (hoop):  %.1f MPa%n",      cp.thermalHoopStress()  / 1e6);
+            System.out.printf("    σ_hoop  (pressure): %.1f MPa%n",     cp.pressureHoopStress() / 1e6);
+            System.out.printf("    σ_axial (pressure): %.1f MPa%n",     cp.pressureAxialStress()/ 1e6);
+            System.out.printf("    σ_VM (combined):   %.1f MPa%n",      cp.vonMisesStress()     / 1e6);
+            System.out.printf("    Safety factor:     %.2f%n",           cp.safetyFactor());
+            double nf = cp.estimatedCycles();
+            System.out.printf("    Fatigue life:      %s start-shutdown cycles%n",
+                    Double.isInfinite(nf) ? "∞ (below endurance limit)"
+                                          : String.format("%.1f", nf));
+
+            // Export stress profile CSV
+            CSVExporter csv = new CSVExporter();
+            csv.exportStressProfile(bestAnalysis, outputDir.resolve("stress_profile.csv"));
+            System.out.println("\nExported stress profile to: stress_profile.csv");
         }
     }
 

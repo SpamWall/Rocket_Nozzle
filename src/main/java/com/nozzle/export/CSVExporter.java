@@ -7,6 +7,7 @@ import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.CharacteristicPoint;
 import com.nozzle.thermal.BoundaryLayerCorrection;
 import com.nozzle.thermal.HeatTransferModel;
+import com.nozzle.thermal.ThermalStressAnalysis;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -222,6 +223,39 @@ public class CSVExporter {
         }
     }
     
+    /**
+     * Exports a thermal stress profile to CSV.
+     *
+     * @param analysis Completed ThermalStressAnalysis
+     * @param filePath Output file path
+     * @throws IOException If write fails
+     */
+    public void exportStressProfile(ThermalStressAnalysis analysis, Path filePath) throws IOException {
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writer.write("x_m,y_m,wall_temp_K,delta_T_K,"
+                    + "sigma_thermal_MPa,sigma_hoop_pressure_MPa,sigma_axial_pressure_MPa,"
+                    + "sigma_vm_MPa,safety_factor,fatigue_cycles");
+            writer.write(NEWLINE);
+
+            for (ThermalStressAnalysis.WallStressPoint p : analysis.getStressProfile()) {
+                String nf = Double.isInfinite(p.estimatedCycles()) ? "Inf"
+                        : String.format("%.2f", p.estimatedCycles());
+                writer.write(String.format("%.8f%s%.8f%s%.2f%s%.2f%s%.4f%s%.4f%s%.4f%s%.4f%s%.4f%s%s",
+                        p.x(), DELIMITER,
+                        p.y(), DELIMITER,
+                        p.wallTemperature(), DELIMITER,
+                        p.deltaT(), DELIMITER,
+                        p.thermalHoopStress()   / 1e6, DELIMITER,
+                        p.pressureHoopStress()  / 1e6, DELIMITER,
+                        p.pressureAxialStress() / 1e6, DELIMITER,
+                        p.vonMisesStress()      / 1e6, DELIMITER,
+                        p.safetyFactor(), DELIMITER,
+                        nf));
+                writer.write(NEWLINE);
+            }
+        }
+    }
+
     private String formatNetPoint(int row, int idx, CharacteristicPoint point) {
         return String.format("%d%s%d%s%.8f%s%.8f%s%.6f%s%.4f%s%.4f%s%.4f%s%.2f%s%.2f%s%.4f%s%.2f%s%s",
                 row, DELIMITER,
