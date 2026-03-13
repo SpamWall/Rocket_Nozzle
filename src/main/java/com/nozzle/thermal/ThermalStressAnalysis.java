@@ -134,7 +134,12 @@ public class ThermalStressAnalysis {
                 0.50, -0.50
         );
 
-        /** Endurance limit estimate: 50 % of UTS (conservative for Ni/steel alloys). */
+        /**
+         * Returns an endurance limit estimate equal to 50 % of the ultimate tensile
+         * strength — a conservative lower bound for Ni-based and stainless steel alloys.
+         *
+         * @return Endurance limit in Pa (= 0.5 × σ_u)
+         */
         public double enduranceLimit() {
             return 0.5 * ultimateStrength;
         }
@@ -155,7 +160,7 @@ public class ThermalStressAnalysis {
      * @param pressureHoopStress Pressure-induced hoop stress (Pa, tensile +)
      * @param pressureAxialStress Pressure-induced axial stress (Pa, tensile +)
      * @param vonMisesStress     Combined von Mises stress at cold face (Pa)
-     * @param safetyFactor       σ_yield / σ_VM (values < 1 indicate yielding)
+     * @param safetyFactor       σ_yield / σ_VM (values &lt; 1 indicate yielding)
      * @param estimatedCycles    Fatigue life in start-shutdown cycles to crack initiation
      */
     public record WallStressPoint(
@@ -195,7 +200,7 @@ public class ThermalStressAnalysis {
     // -----------------------------------------------------------------------
 
     /**
-     * Creates a thermal stress analyser.
+     * Creates a thermal stress analyzer.
      *
      * @param parameters       Nozzle design parameters (used for chamber pressure)
      * @param thermalProfile   Output from {@link HeatTransferModel#getWallThermalProfile()}
@@ -232,6 +237,14 @@ public class ThermalStressAnalysis {
         return this;
     }
 
+    /**
+     * Performs the full stress and fatigue analysis at a single wall point.
+     * Executes steps 1–7: ΔT from heat flux, thermal stress, Lamé pressure
+     * stresses, combined stresses, von Mises, safety factor, and fatigue life.
+     *
+     * @param tp Thermal data point from {@link HeatTransferModel}
+     * @return {@link WallStressPoint} containing all computed structural results
+     */
     private WallStressPoint analysePoint(HeatTransferModel.WallThermalPoint tp) {
         // --- 1. Through-wall temperature gradient ----------------------------
         // ΔT = q_flux · R_wall = q_flux · t / k
@@ -314,24 +327,47 @@ public class ThermalStressAnalysis {
     // Result accessors
     // -----------------------------------------------------------------------
 
-    /** Returns the per-point stress and fatigue profile (unmodifiable). */
+    /**
+     * Returns the per-point stress and fatigue profile computed by the last call
+     * to {@link #calculate()}.
+     *
+     * @return Unmodifiable list of {@link WallStressPoint}s in wall-contour order;
+     *         empty if {@link #calculate()} has not yet been called
+     */
     public List<WallStressPoint> getStressProfile() {
         return Collections.unmodifiableList(stressProfile);
     }
 
-    /** Returns the point with the highest von Mises stress (critical location). */
+    /**
+     * Returns the wall point with the highest von Mises stress (the critical
+     * structural location for fatigue crack initiation).
+     *
+     * @return The {@link WallStressPoint} with the maximum {@code σ_VM}
+     * @throws IllegalStateException if {@link #calculate()} has not been called yet
+     */
     public WallStressPoint getCriticalPoint() {
         return stressProfile.stream()
                 .max(Comparator.comparingDouble(WallStressPoint::vonMisesStress))
                 .orElseThrow(() -> new IllegalStateException("No stress points; call calculate() first"));
     }
 
-    /** Returns the maximum von Mises stress along the nozzle (Pa). */
+    /**
+     * Returns the maximum von Mises stress along the nozzle wall.
+     *
+     * @return Peak σ_VM in Pa
+     * @throws IllegalStateException if {@link #calculate()} has not been called yet
+     */
     public double getMaxVonMisesStress() {
         return getCriticalPoint().vonMisesStress();
     }
 
-    /** Returns the minimum safety factor along the nozzle (σ_yield / σ_VM). */
+    /**
+     * Returns the minimum safety factor along the nozzle wall
+     * ({@code σ_yield / σ_VM}); values below 1.0 indicate local yielding.
+     *
+     * @return Minimum safety factor (dimensionless)
+     * @throws IllegalStateException if {@link #calculate()} has not been called yet
+     */
     public double getMinSafetyFactor() {
         return stressProfile.stream()
                 .mapToDouble(WallStressPoint::safetyFactor)
@@ -340,8 +376,13 @@ public class ThermalStressAnalysis {
     }
 
     /**
-     * Returns the minimum estimated fatigue life in start-shutdown cycles.
-     * Points with infinite life (below endurance limit) are excluded.
+     * Returns the minimum estimated fatigue life across all wall points.
+     * Points below the endurance limit (infinite life) are excluded from the
+     * minimum search; if every point has infinite life, {@link Double#POSITIVE_INFINITY}
+     * is returned.
+     *
+     * @return Minimum finite fatigue life in start-shutdown cycles, or
+     *         {@link Double#POSITIVE_INFINITY} if no point exceeds the endurance limit
      */
     public double getMinFatigueCycles() {
         return stressProfile.stream()
@@ -351,7 +392,12 @@ public class ThermalStressAnalysis {
                 .orElse(Double.POSITIVE_INFINITY);
     }
 
-    /** Returns the maximum through-wall temperature drop along the nozzle (K). */
+    /**
+     * Returns the maximum through-wall temperature drop (ΔT = q · t / k) along
+     * the nozzle wall.
+     *
+     * @return Maximum ΔT in K; returns {@code 0.0} if the profile is empty
+     */
     public double getMaxDeltaT() {
         return stressProfile.stream()
                 .mapToDouble(WallStressPoint::deltaT)
@@ -359,7 +405,12 @@ public class ThermalStressAnalysis {
                 .orElse(0.0);
     }
 
-    /** Returns the material used for this analysis. */
+    /**
+     * Returns the structural material used for all stress and fatigue calculations
+     * in this analysis.
+     *
+     * @return The {@link Material} supplied at construction time
+     */
     public Material getMaterial() {
         return material;
     }

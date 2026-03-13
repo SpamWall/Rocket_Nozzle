@@ -30,6 +30,7 @@ public class HeatTransferModel {
 
     // Radiation properties
     private double wallEmissivity = 0.8;
+    /** Stefan–Boltzmann constant (5.67 × 10⁻⁸ W·m⁻²·K⁻⁴). */
     private static final double STEFAN_BOLTZMANN = 5.67e-8; // W/(m²·K⁴)
     
     /**
@@ -152,9 +153,16 @@ public class HeatTransferModel {
     }
     
     /**
-     * Finds the nearest flow point to a wall location.
+     * Finds the characteristic flow point nearest to a given wall location using
+     * the minimum Euclidean distance in the (x, y) plane.
+     *
+     * @param wallPoint  Wall contour point whose local flow conditions are sought
+     * @param flowPoints Candidate flow-field points from the MOC solution; may be
+     *                   {@code null} or empty
+     * @return The nearest {@link CharacteristicPoint}, or {@code null} if
+     *         {@code flowPoints} is {@code null} or empty
      */
-    private CharacteristicPoint findNearestFlowPoint(Point2D wallPoint, 
+    private CharacteristicPoint findNearestFlowPoint(Point2D wallPoint,
                                                       List<CharacteristicPoint> flowPoints) {
         if (flowPoints == null || flowPoints.isEmpty()) {
             return null;
@@ -232,9 +240,15 @@ public class HeatTransferModel {
     }
 
     /**
-     * Estimates the local wall radius of curvature at axial position x using
-     * second-order finite differences on the nozzle contour points.
-     * Falls back to the throat radius if curvature cannot be computed.
+     * Estimates the local wall radius of curvature at axial position {@code x} using
+     * non-uniform second-order finite differences on the discrete contour points.
+     * Falls back to the throat radius if the contour contains fewer than three
+     * points or if the neighbouring knots are too closely spaced ({@code h < 1 pm}).
+     * The result is capped at {@code 10 × r_throat} to prevent the Bartz curvature
+     * correction from vanishing on near-straight wall sections.
+     *
+     * @param x Axial position in metres
+     * @return Local radius of curvature in metres
      */
     private double localRadiusOfCurvature(double x) {
         List<Point2D> pts = contour.getContourPoints();
@@ -280,7 +294,18 @@ public class HeatTransferModel {
     }
     
     /**
-     * Calculates steady-state wall temperature.
+     * Calculates the steady-state gas-side wall temperature using a three-element
+     * thermal-resistance network: gas film → wall conduction → coolant film.
+     *
+     * <p>The heat flux is {@code q = (T_aw − T_coolant) / R_total} and the
+     * gas-side wall temperature is {@code T_w = T_aw − q / h_gas}.
+     * The result is clamped between {@code T_coolant + 50 K} and
+     * {@code T_aw − 100 K} to remain physically plausible.
+     *
+     * @param recoveryTemp Adiabatic wall (recovery) temperature in K
+     * @param hGas         Gas-side heat-transfer coefficient in W/(m²·K)
+     * @param hCoolant     Coolant-side heat-transfer coefficient in W/(m²·K)
+     * @return Gas-side wall temperature in K
      */
     private double calculateWallTemperature(double recoveryTemp, double hGas, double hCoolant) {
         // Thermal resistance network
@@ -361,7 +386,24 @@ public class HeatTransferModel {
     }
     
     /**
-     * Record containing wall thermal data at a point.
+     * Immutable snapshot of all thermal quantities at a single point on the nozzle wall.
+     *
+     * @param x                   Axial position in metres (measured from the throat)
+     * @param y                   Radial position (wall radius) in metres
+     * @param wallTemperature     Gas-side wall temperature in K, computed by the
+     *                            three-resistance network (gas film + wall + coolant)
+     * @param totalHeatFlux       Net heat flux into the wall in W/m²:
+     *                            {@code q_conv − q_rad}; positive values represent
+     *                            net heating of the wall
+     * @param convectiveHeatFlux  Gas-side convective heat flux in W/m²:
+     *                            {@code h_gas × (T_aw − T_wall)}
+     * @param radiativeHeatFlux   Radiative heat loss from the outer wall surface in
+     *                            W/m²: {@code ε · σ · T_wall⁴}
+     * @param heatTransferCoeff   Gas-side heat-transfer coefficient h in W/(m²·K)
+     *                            as computed by the Bartz correlation
+     * @param recoveryTemperature Adiabatic wall (recovery) temperature in K:
+     *                            {@code T_gas × (1 + r·(γ−1)/2 · M²)}, where
+     *                            {@code r = Pr^(1/3)} for turbulent flow
      */
     public record WallThermalPoint(
             double x,

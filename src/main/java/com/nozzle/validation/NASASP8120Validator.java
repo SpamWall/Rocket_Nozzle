@@ -12,6 +12,9 @@ import java.util.*;
  */
 public class NASASP8120Validator {
     
+    /**
+     * Creates a validator with the built-in NASA SP-8120 reference correlations.
+     */
     public NASASP8120Validator() {
     }
     
@@ -156,7 +159,12 @@ public class NASASP8120Validator {
     }
     
     /**
-     * Calculates area ratio using isentropic relations.
+     * Calculates the isentropic exit area ratio {@code A/A*} for a given Mach
+     * number and specific-heat ratio.
+     *
+     * @param mach  Supersonic exit Mach number (≥ 1)
+     * @param gamma Ratio of specific heats γ
+     * @return Isentropic area ratio {@code A/A*}
      */
     private double calculateAreaRatio(double mach, double gamma) {
         double gp1 = gamma + 1;
@@ -166,7 +174,13 @@ public class NASASP8120Validator {
     }
     
     /**
-     * Calculates ideal thrust coefficient.
+     * Calculates the ideal vacuum-plus-pressure thrust coefficient for a perfectly
+     * expanded isentropic nozzle.
+     *
+     * @param mach          Supersonic exit Mach number
+     * @param gamma         Ratio of specific heats γ
+     * @param pressureRatio Ambient-to-chamber pressure ratio {@code pa / pc}
+     * @return Ideal thrust coefficient Cf (dimensionless)
      */
     private double calculateIdealThrustCoefficient(double mach, double gamma, double pressureRatio) {
         double gp1 = gamma + 1;
@@ -188,7 +202,14 @@ public class NASASP8120Validator {
     }
     
     /**
-     * Calculates ideal specific impulse.
+     * Calculates the ideal delivered specific impulse from exit velocity alone
+     * (momentum-only, no pressure term), using isentropic gas dynamics.
+     *
+     * @param gamma Ratio of specific heats γ
+     * @param Tc    Chamber stagnation temperature in K
+     * @param MW    Mixture molecular weight in kg/kmol
+     * @param mach  Supersonic exit Mach number
+     * @return Ideal specific impulse in seconds ({@code Ve / g₀})
      */
     private double calculateIdealSpecificImpulse(double gamma, double Tc, double MW, double mach) {
         double R = 8314.46 / MW;
@@ -205,7 +226,13 @@ public class NASASP8120Validator {
     }
     
     /**
-     * Interpolates efficiency from table.
+     * Interpolates the estimated divergence efficiency from the built-in
+     * NASA SP-8120 look-up table (length fractions 0.6–1.0, efficiencies
+     * 0.92–0.99).  Values outside the table range are clamped to the nearest
+     * endpoint.
+     *
+     * @param lengthFraction Bell-nozzle length fraction (0–1)
+     * @return Estimated divergence efficiency (dimensionless, 0–1)
      */
     private double interpolateEfficiency(double lengthFraction) {
         double[] fracs = {0.6, 0.7, 0.8, 0.9, 1.0};
@@ -225,7 +252,18 @@ public class NASASP8120Validator {
     }
     
     /**
-     * Validation result record.
+     * Immutable result of a NASA SP-8120 validation check.
+     *
+     * @param isValid  {@code true} if no hard errors were raised; warnings alone
+     *                 do not cause a failure
+     * @param errors   Unmodifiable list of error messages for conditions that
+     *                 exceed the NASA SP-8120 hard tolerances (e.g. area-ratio error
+     *                 &gt; 5%, wall angle &gt; 45°)
+     * @param warnings Unmodifiable list of advisory messages for conditions that
+     *                 exceed soft thresholds (e.g. exit Mach outside 1.5–6.0)
+     * @param metrics  Map of computed scalar metrics keyed by name (e.g.
+     *                 {@code "area_ratio_error_percent"}, {@code "ideal_thrust_coefficient"});
+     *                 all values are in SI or dimensionless units as described per key
      */
     public record ValidationResult(
             boolean isValid,

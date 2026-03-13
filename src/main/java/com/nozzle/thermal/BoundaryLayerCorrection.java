@@ -151,7 +151,13 @@ public class BoundaryLayerCorrection {
     }
     
     /**
-     * Estimates Mach number at axial position.
+     * Provides a crude linear estimate of the local Mach number at axial
+     * position {@code x} when no MOC flow-field point is available nearby.
+     * Interpolates linearly from Mach 1 at the throat (x = 0) to the design
+     * exit Mach at the nozzle exit plane.
+     *
+     * @param x Axial position in metres
+     * @return Estimated local Mach number (clamped to [1, exitMach])
      */
     private double estimateMach(double x) {
         double rt = parameters.throatRadius();
@@ -167,7 +173,14 @@ public class BoundaryLayerCorrection {
     }
     
     /**
-     * Finds nearest flow point.
+     * Finds the characteristic flow point nearest to a given wall location using
+     * the minimum Euclidean distance in the (x, y) plane.
+     *
+     * @param wallPoint  Wall contour point whose local flow conditions are sought
+     * @param flowPoints Candidate flow-field points from the MOC solution; may be
+     *                   {@code null} or empty
+     * @return The nearest {@link CharacteristicPoint}, or {@code null} if
+     *         {@code flowPoints} is {@code null} or empty
      */
     private CharacteristicPoint findNearestFlowPoint(Point2D wallPoint,
                                                       List<CharacteristicPoint> flowPoints) {
@@ -269,7 +282,26 @@ public class BoundaryLayerCorrection {
     }
     
     /**
-     * Record containing boundary layer data at a point.
+     * Immutable snapshot of boundary-layer quantities at a single wall point.
+     *
+     * @param x                     Axial position in metres (from contour origin)
+     * @param y                     Radial position (wall radius) in metres
+     * @param runningLength         Integrated wall arc length from the first contour
+     *                              point to this point, used as the reference length
+     *                              for boundary-layer scaling (metres)
+     * @param reynoldsNumber        Local running-length Reynolds number
+     *                              {@code Re = ρ · V · s / μ} (dimensionless)
+     * @param thickness             Full boundary-layer thickness δ in metres, including
+     *                              the Van Driest compressibility correction
+     * @param displacementThickness Displacement thickness δ* in metres
+     *                              (δ/8 turbulent, 1.72·s/√Re laminar)
+     * @param momentumThickness     Momentum thickness θ in metres
+     *                              (7/72·δ turbulent, 0.664·s/√Re laminar)
+     * @param skinFrictionCoeff     Local skin-friction coefficient cf (dimensionless),
+     *                              corrected for the wall-to-adiabatic-wall temperature ratio
+     * @param isTurbulent           {@code true} if the boundary layer is turbulent at this point
+     *                              (either forced turbulent or Re exceeds transition threshold)
+     * @param mach                  Local Mach number used for the compressibility correction
      */
     public record BoundaryLayerPoint(
             double x,
@@ -284,7 +316,10 @@ public class BoundaryLayerCorrection {
             double mach
     ) {
         /**
-         * Shape factor H = delta* /theta
+         * Returns the incompressible shape factor {@code H = δ* / θ}.
+         * Typical values: ~1.3 turbulent, ~2.6 laminar.
+         *
+         * @return Shape factor; returns {@code 1.4} if momentum thickness is zero
          */
         public double shapeFactor() {
             return momentumThickness > 0 ? displacementThickness / momentumThickness : 1.4;

@@ -15,7 +15,7 @@ package com.nozzle.core;
  *   <li>a first-order estimate of the resulting side load.</li>
  * </ul>
  *
- * <h3>Separation criteria</h3>
+ * Separation criteria
  * <dl>
  *   <dt>Summerfield (1954)</dt>
  *   <dd>Constant fraction of ambient pressure:
@@ -35,7 +35,7 @@ package com.nozzle.core;
  *       Approaches 0.374 at typical NPR values.</dd>
  * </dl>
  *
- * <h3>Separation mode classification</h3>
+ * Separation mode classification
  * <ul>
  *   <li><b>Free Shock Separation (FSS)</b> — separation well inside the nozzle;
  *       a free jet issues from the separation plane.  Separation Mach &lt; 70 % of
@@ -46,7 +46,7 @@ package com.nozzle.core;
  *       Separation Mach ≥ 70 % of design exit Mach.</li>
  * </ul>
  *
- * <h3>Side-load estimate</h3>
+ * Side-load estimate
  * Based on the simplified Capiaux–Washington pressure-imbalance model:
  * F<sub>side</sub> ≈ 0.3 × (p<sub>a</sub> − p<sub>sep</sub>) × A<sub>sep</sub>.
  * The factor 0.3 represents the typical circumferential asymmetry observed in

@@ -9,8 +9,28 @@ import com.nozzle.thermal.BoundaryLayerCorrection;
 import java.util.List;
 
 /**
- * Calculates nozzle performance metrics including thrust coefficient,
- * specific impulse, and efficiency with various loss mechanisms.
+ * Calculates nozzle performance metrics including the ideal and actual thrust
+ * coefficient, specific impulse, efficiency, thrust, and mass flow rate.
+ *
+ * <p>Four independent loss mechanisms are modeled:
+ * <ol>
+ *   <li><b>Divergence loss</b> — momentum thrust reduction from non-axial exit flow,
+ *       expressed via the divergence factor λ = (1 + cos α) / 2.</li>
+ *   <li><b>Boundary-layer loss</b> — integrated skin-friction drag computed either
+ *       from a {@link com.nozzle.thermal.BoundaryLayerCorrection} model or from a
+ *       Reynolds-number scaling estimate.</li>
+ *   <li><b>Chemical loss</b> — frozen-flow or finite-rate chemistry penalty derived
+ *       from the γ variation between chamber and exit conditions.</li>
+ * </ol>
+ *
+ * <p>Usage:
+ * <pre>{@code
+ * PerformanceCalculator pc = new PerformanceCalculator(params, net, contour, bl, chem);
+ * pc.calculate();
+ * System.out.println(pc.getSummary());
+ * }</pre>
+ *
+ * @see PerformanceSummary
  */
 public class PerformanceCalculator {
     
@@ -32,13 +52,21 @@ public class PerformanceCalculator {
     private double massFlowRate;
     
     /**
-     * Creates a performance calculator.
+     * Creates a fully configured performance calculator.
+     * Any optional argument may be {@code null}; when {@code null}, the
+     * corresponding loss is estimated from design-parameter correlations instead.
      *
-     * @param parameters      Design parameters
-     * @param characteristicNet Characteristic net (Could be null)
-     * @param contour         Nozzle contour (Could be null)
-     * @param boundaryLayer   Boundary layer model (Could be null)
-     * @param chemistry       Chemistry model (Could be null)
+     * @param parameters        Nozzle design parameters (throat geometry, chamber
+     *                          conditions, gas properties); must not be {@code null}
+     * @param characteristicNet MOC characteristic net used to read the exit flow
+     *                          angle for the divergence factor; may be {@code null}
+     * @param contour           Nozzle wall contour used as a fallback source for the
+     *                          exit flow angle; may be {@code null}
+     * @param boundaryLayer     Pre-computed boundary-layer model whose integrated
+     *                          skin-friction drag is used directly; may be {@code null}
+     * @param chemistry         Chemistry model providing γ at chamber and exit
+     *                          temperatures for the chemical loss calculation;
+     *                          may be {@code null}
      */
     public PerformanceCalculator(NozzleDesignParameters parameters,
                                   CharacteristicNet characteristicNet,
@@ -53,19 +81,25 @@ public class PerformanceCalculator {
     }
     
     /**
-     * Creates a simple performance calculator with only design parameters.
+     * Creates a minimal performance calculator backed only by design parameters.
+     * All optional models ({@link CharacteristicNet}, {@link NozzleContour},
+     * {@link BoundaryLayerCorrection}, {@link ChemistryModel}) are {@code null};
+     * losses are estimated from built-in correlations.
      *
-     * @param parameters Design parameters
-     * @return Performance calculator
+     * @param parameters Nozzle design parameters; must not be {@code null}
+     * @return A new {@code PerformanceCalculator} with all optional models absent
      */
     public static PerformanceCalculator simple(NozzleDesignParameters parameters) {
         return new PerformanceCalculator(parameters, null, null, null, null);
     }
     
     /**
-     * Calculates all performance metrics.
+     * Executes the full performance calculation pipeline in order: ideal
+     * performance, divergence loss, boundary-layer loss, chemical loss, and
+     * actual delivered performance.
+     * Must be called before any getter is used.
      *
-     * @return This instance
+     * @return This instance for method chaining
      */
     public PerformanceCalculator calculate() {
         calculateIdealPerformance();
@@ -77,7 +111,10 @@ public class PerformanceCalculator {
     }
     
     /**
-     * Calculates ideal (isentropic) performance.
+     * Calculates ideal (isentropic) thrust coefficient and mass flow rate.
+     * The thrust coefficient is the sum of the momentum term and the pressure
+     * thrust term: {@code Cf_ideal = Cf_mom + (pe − pa) / pc · (Ae/At)}.
+     * Results are stored in {@link #idealThrustCoeff} and {@link #massFlowRate}.
      */
     private void calculateIdealPerformance() {
         GasProperties gas = parameters.gasProperties();
@@ -110,7 +147,10 @@ public class PerformanceCalculator {
     }
     
     /**
-     * Calculates thrust loss due to flow divergence at exit.
+     * Calculates the thrust-coefficient reduction caused by non-axial exit flow.
+     * Uses the divergence factor λ = (1 + cos α) / 2, where α is the exit flow
+     * angle obtained from {@link #getLambda()}.  The result is stored in
+     * {@link #divergenceLoss}.
      */
     private void calculateDivergenceLoss() {
         double lambda = getLambda();
@@ -129,6 +169,18 @@ public class PerformanceCalculator {
         divergenceLoss = (1 - lambda) * cfMomentum;
     }
 
+    /**
+     * Determines the exit flow angle and computes the divergence factor
+     * {@code λ = (1 + cos α_exit) / 2}.
+     * The angle source is selected in priority order:
+     * <ol>
+     *   <li>Last wall-point flow angle from the {@link com.nozzle.moc.CharacteristicNet}.</li>
+     *   <li>Finite-difference slope of the last two points from the {@link com.nozzle.geometry.NozzleContour}.</li>
+     *   <li>Fallback: 30% of the initial wall angle from the design parameters.</li>
+     * </ol>
+     *
+     * @return Divergence factor λ in the range (0, 1]; 1 = fully axial flow
+     */
     private double getLambda() {
         double exitAngle = 0;
 
@@ -154,7 +206,12 @@ public class PerformanceCalculator {
     }
 
     /**
-     * Calculates thrust loss due to boundary layer.
+     * Calculates the thrust-coefficient reduction caused by the viscous boundary
+     * layer.  If a {@link com.nozzle.thermal.BoundaryLayerCorrection} model was
+     * supplied, its integrated skin-friction drag is used directly; otherwise the
+     * loss is estimated from the throat Reynolds number as
+     * {@code 1% × Cf_ideal / Re_throat^0.2}, clamped to 3% of the ideal coefficient.
+     * The result is stored in {@link #boundaryLayerLoss}.
      */
     private void calculateBoundaryLayerLoss() {
         if (boundaryLayer != null) {
@@ -170,7 +227,13 @@ public class PerformanceCalculator {
     }
     
     /**
-     * Estimates throat Reynolds number.
+     * Estimates the throat Reynolds number based on throat conditions derived
+     * from isentropic relations and Sutherland viscosity.
+     * Used as a scaling input for the boundary-layer loss estimate when no
+     * explicit {@link com.nozzle.thermal.BoundaryLayerCorrection} model is
+     * provided.
+     *
+     * @return Throat Reynolds number {@code Re_t = ρ_t · a_t · D_t / μ_t}
      */
     private double estimateThroatReynolds() {
         GasProperties gas = parameters.gasProperties();
@@ -189,7 +252,13 @@ public class PerformanceCalculator {
     }
     
     /**
-     * Calculates thrust loss due to chemical kinetics.
+     * Calculates the thrust-coefficient reduction caused by finite-rate or
+     * frozen-flow chemistry effects.  If an equilibrium
+     * {@link com.nozzle.chemistry.ChemistryModel} was supplied, the loss is
+     * proportional to the γ variation between chamber and exit
+     * ({@code (γ_c − γ_e) / γ_c × 0.5 × Cf_ideal}).
+     * Otherwise, a flat 1% frozen-flow estimate is applied.
+     * The result is stored in {@link #chemicalLoss}.
      */
     private void calculateChemicalLoss() {
         if (chemistry != null && chemistry.getModelType() != ChemistryModel.ModelType.FROZEN) {
@@ -210,7 +279,10 @@ public class PerformanceCalculator {
     }
     
     /**
-     * Calculates actual performance with all losses.
+     * Combines all loss terms to compute the delivered performance metrics.
+     * {@code Cf_actual = max(Cf_ideal − ΔCf_div − ΔCf_BL − ΔCf_chem, 0.85 × Cf_ideal)}.
+     * Populates {@link #actualThrustCoeff}, {@link #efficiency},
+     * {@link #specificImpulse}, and {@link #thrust}.
      */
     private void calculateActualPerformance() {
         actualThrustCoeff = idealThrustCoeff - divergenceLoss - boundaryLayerLoss - chemicalLoss;
@@ -226,26 +298,91 @@ public class PerformanceCalculator {
         thrust = actualThrustCoeff * parameters.chamberPressure() * parameters.throatArea();
     }
     
-    // Getters
+    // -------------------------------------------------------------------------
+    // Result accessors
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns the ideal (isentropic) thrust coefficient with no losses applied.
+     *
+     * @return Ideal Cf (dimensionless)
+     */
     public double getIdealThrustCoefficient() { return idealThrustCoeff; }
+
+    /**
+     * Returns the actual delivered thrust coefficient after all losses.
+     *
+     * @return Actual Cf (dimensionless)
+     */
     public double getActualThrustCoefficient() { return actualThrustCoeff; }
+
+    /**
+     * Returns the thrust-coefficient reduction due to non-axial exit flow
+     * (divergence loss).
+     *
+     * @return Divergence loss ΔCf (dimensionless, positive)
+     */
     public double getDivergenceLoss() { return divergenceLoss; }
+
+    /**
+     * Returns the thrust-coefficient reduction due to the viscous boundary layer.
+     *
+     * @return Boundary-layer loss ΔCf (dimensionless, positive)
+     */
     public double getBoundaryLayerLoss() { return boundaryLayerLoss; }
+
+    /**
+     * Returns the thrust-coefficient reduction due to frozen-flow or finite-rate
+     * chemistry effects.
+     *
+     * @return Chemical loss ΔCf (dimensionless, positive)
+     */
     public double getChemicalLoss() { return chemicalLoss; }
+
+    /**
+     * Returns the nozzle efficiency: the ratio of actual to ideal thrust
+     * coefficient ({@code Cf_actual / Cf_ideal}).
+     *
+     * @return Efficiency (dimensionless, 0–1)
+     */
     public double getEfficiency() { return efficiency; }
+
+    /**
+     * Returns the delivered specific impulse.
+     *
+     * @return Isp = {@code c* · Cf_actual / g₀} in seconds
+     */
     public double getSpecificImpulse() { return specificImpulse; }
+
+    /**
+     * Returns the delivered thrust.
+     *
+     * @return Thrust = {@code Cf_actual · Pc · At} in N
+     */
     public double getThrust() { return thrust; }
+
+    /**
+     * Returns the propellant mass flow rate through the throat.
+     *
+     * @return Mass flow rate = {@code Pc · At / c*} in kg/s
+     */
     public double getMassFlowRate() { return massFlowRate; }
     
     /**
-     * Gets total thrust coefficient loss.
+     * Returns the sum of all three thrust-coefficient loss terms.
+     *
+     * @return Sum of divergence, boundary-layer, and chemical loss ΔCf
+     *         (dimensionless, positive)
      */
     public double getTotalLoss() {
         return divergenceLoss + boundaryLayerLoss + chemicalLoss;
     }
     
     /**
-     * Creates a performance summary.
+     * Creates an immutable snapshot of all computed performance metrics.
+     *
+     * @return A new {@link PerformanceSummary} containing all metrics produced
+     *         by the most recent {@link #calculate()} call
      */
     public PerformanceSummary getSummary() {
         return new PerformanceSummary(
@@ -256,7 +393,26 @@ public class PerformanceCalculator {
     }
     
     /**
-     * Record containing performance summary.
+     * Immutable snapshot of all computed performance metrics for a nozzle design.
+     *
+     * @param idealCf               Ideal (isentropic) thrust coefficient Cf — momentum
+     *                              plus pressure term, no losses applied
+     * @param actualCf              Actual thrust coefficient after subtracting divergence,
+     *                              boundary-layer, and chemical losses from {@code idealCf}
+     * @param divergenceLoss        Thrust-coefficient reduction due to non-axial exit flow;
+     *                              computed from the divergence factor λ = (1 + cos α) / 2
+     * @param boundaryLayerLoss     Thrust-coefficient reduction due to the viscous boundary
+     *                              layer displacing the effective throat area
+     * @param chemicalLoss          Thrust-coefficient reduction due to frozen-flow or
+     *                              finite-rate chemistry effects (γ variation along the nozzle)
+     * @param efficiency            Ratio of actual to ideal thrust coefficient:
+     *                              {@code actualCf / idealCf} (dimensionless, 0–1)
+     * @param specificImpulseSeconds Delivered specific impulse Isp in seconds:
+     *                              {@code c* · actualCf / g₀}
+     * @param thrustNewtons         Delivered thrust in N:
+     *                              {@code actualCf · Pc · At}
+     * @param massFlowRateKgPerSec  Propellant mass flow rate in kg/s:
+     *                              {@code Pc · At / c*}
      */
     public record PerformanceSummary(
             double idealCf,

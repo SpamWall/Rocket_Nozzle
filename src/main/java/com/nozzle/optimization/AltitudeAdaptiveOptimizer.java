@@ -115,7 +115,14 @@ public class AltitudeAdaptiveOptimizer {
     }
     
     /**
-     * Generates candidate parameter sets for optimization.
+     * Generates the full Cartesian product of candidate nozzle designs by
+     * varying the exit area ratio, Rao bell length fraction, and initial wall
+     * angle over the ranges defined in {@link OptimizationConfig}.
+     * For each area-ratio multiplier, the corresponding exit Mach number is
+     * recomputed from the isentropic area-ratio relation.
+     *
+     * @return List of fully specified {@link NozzleDesignParameters} covering
+     *         every combination of the search-space ranges
      */
     private List<NozzleDesignParameters> generateCandidates() {
         List<NozzleDesignParameters> candidates = new ArrayList<>();
@@ -153,7 +160,16 @@ public class AltitudeAdaptiveOptimizer {
     }
     
     /**
-     * Evaluates a candidate design across all altitude conditions.
+     * Evaluates a single candidate nozzle design across all altitude conditions
+     * registered in {@link #altitudeProfile}.
+     * For each altitude, a {@link com.nozzle.core.ShockExpansionModel} is used to
+     * compute the off-design thrust coefficient and specific impulse, accounting
+     * for flow separation or overexpansion shock losses.
+     * The mission-averaged objective is the dwell-time-and-weight-weighted mean Isp.
+     *
+     * @param candidate The nozzle design parameters to evaluate
+     * @return An {@link OptimizationResult} containing per-altitude performance data
+     *         and the scalar objective value
      */
     private OptimizationResult evaluateCandidate(NozzleDesignParameters candidate) {
         double totalObjective = 0;
@@ -199,7 +215,19 @@ public class AltitudeAdaptiveOptimizer {
     }
     
     /**
-     * Calculates atmospheric pressure at altitude (standard atmosphere).
+     * Calculates ambient static pressure at the given geometric altitude using a
+     * simplified International Standard Atmosphere (ISA) model.
+     * Four altitude layers are modelled:
+     * <ul>
+     *   <li>Troposphere (0–11 000 m): temperature lapse rate 6.5 K/km.</li>
+     *   <li>Lower stratosphere (11 000–25 000 m): isothermal, exponential decay.</li>
+     *   <li>Upper atmosphere (25 000–100 000 m): scale-height approximation
+     *       (H = 7 000 m).</li>
+     *   <li>Near vacuum (above 100 000 m): constant 1 Pa.</li>
+     * </ul>
+     *
+     * @param altitude Geometric altitude in metres; negative values are clamped to 0
+     * @return Ambient pressure in Pa
      */
     private double calculateAtmosphericPressure(double altitude) {
         if (altitude < 0) altitude = 0;
@@ -222,21 +250,30 @@ public class AltitudeAdaptiveOptimizer {
     }
     
     /**
-     * Gets all optimization results.
+     * Returns all candidate results produced by the most recent {@link #optimize()} call,
+     * ordered by evaluation sequence.
+     *
+     * @return Unmodifiable copy of all {@link OptimizationResult}s
      */
     public List<OptimizationResult> getResults() {
         return new ArrayList<>(results);
     }
     
     /**
-     * Gets the best result.
+     * Returns the single {@link OptimizationResult} with the highest mission-averaged
+     * specific impulse from the most recent {@link #optimize()} call.
+     *
+     * @return Best {@link OptimizationResult}, or {@code null} if no optimization has run
      */
     public OptimizationResult getBestResult() {
         return bestResult;
     }
     
     /**
-     * Gets top N results.
+     * Returns the top {@code n} results sorted by descending mission-averaged specific impulse.
+     *
+     * @param n Maximum number of results to return
+     * @return List of up to {@code n} {@link OptimizationResult}s, best first
      */
     public List<OptimizationResult> getTopResults(int n) {
         return results.stream()
@@ -246,7 +283,15 @@ public class AltitudeAdaptiveOptimizer {
     }
     
     /**
-     * Altitude condition record.
+     * A single altitude point that contributes to the mission-averaged objective.
+     *
+     * @param altitude  Altitude above sea level in metres
+     * @param pressure  Ambient static pressure at this altitude in Pa
+     * @param weight    Relative weighting of this altitude in the mission-average
+     *                  (dimensionless; weights across all conditions need not sum to 1
+     *                  as they are normalised internally)
+     * @param dwellTime Fraction of total burn time spent at this altitude (0–1);
+     *                  used together with {@code weight} to form the objective contribution
      */
     public record AltitudeCondition(
             double altitude,
@@ -256,7 +301,15 @@ public class AltitudeAdaptiveOptimizer {
     ) {}
     
     /**
-     * Performance at specific altitude.
+     * Computed performance of a candidate nozzle design at one altitude.
+     *
+     * @param altitude          Altitude above sea level in metres
+     * @param thrustCoefficient Actual thrust coefficient Cf at this altitude
+     *                          (includes divergence, boundary-layer, and separation losses)
+     * @param specificImpulse   Delivered specific impulse Isp in seconds
+     * @param thrust            Delivered thrust in Newtons: {@code Cf · Pc · At}
+     * @param separated         {@code true} if the flow separation predictor determined
+     *                          that the nozzle flow is separated at this altitude
      */
     public record AltitudePerformance(
             double altitude,
@@ -267,7 +320,13 @@ public class AltitudeAdaptiveOptimizer {
     ) {}
     
     /**
-     * Optimization result record.
+     * The outcome of evaluating one candidate nozzle design across all altitude conditions.
+     *
+     * @param parameters    Full nozzle design parameters for this candidate
+     * @param objectiveValue Mission-averaged specific impulse in seconds — the scalar
+     *                       value maximised by the optimizer (higher is better)
+     * @param performances  Per-altitude breakdown of thrust coefficient, Isp, thrust,
+     *                       and separation state, one entry per {@link AltitudeCondition}
      */
     public record OptimizationResult(
             NozzleDesignParameters parameters,
@@ -294,13 +353,26 @@ public class AltitudeAdaptiveOptimizer {
     }
     
     /**
-     * Optimization configuration.
+     * Search-space bounds used by the optimizer's parameter sweep.
+     *
+     * @param areaRatioRange      Candidate exit-area-ratio multipliers relative to the
+     *                            base design (dimensionless; e.g. {@code {0.8, 1.0, 1.2}})
+     * @param lengthFractionRange Candidate Rao bell-length fractions to evaluate
+     *                            (dimensionless, 0–1; e.g. {@code {0.7, 0.8, 0.9}})
+     * @param wallAngleRange      Candidate initial wall angles at the throat in degrees
+     *                            (e.g. {@code {25, 30, 35}})
      */
     public record OptimizationConfig(
             double[] areaRatioRange,
             double[] lengthFractionRange,
             double[] wallAngleRange
     ) {
+        /**
+         * Returns a coarse default search grid: 5 area-ratio steps, 3 length fractions,
+         * and 3 wall angles — 45 candidate designs in total.
+         *
+         * @return Default {@link OptimizationConfig}
+         */
         public static OptimizationConfig defaults() {
             return new OptimizationConfig(
                     new double[]{0.8, 0.9, 1.0, 1.1, 1.2},
@@ -309,6 +381,12 @@ public class AltitudeAdaptiveOptimizer {
             );
         }
         
+        /**
+         * Returns a finer search grid: 7 area-ratio steps, 5 length fractions,
+         * and 5 wall angles — 175 candidate designs in total.
+         *
+         * @return Fine-resolution {@link OptimizationConfig}
+         */
         public static OptimizationConfig fine() {
             return new OptimizationConfig(
                     new double[]{0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3},

@@ -17,21 +17,46 @@ import java.util.List;
  * Generates a 3D revolved solid from the 2D contour.
  */
 public class STEPExporter {
-    
-    private double scaleFactor = 1000.0; // STEP AUTOMOTIVE_DESIGN schema uses millimeters
+
+    /** Creates a {@code STEPExporter} with default settings (metres-to-mm scale, generic author). */
+    public STEPExporter() {}
+
+    /** Scale factor applied to all coordinates (default: 1000 → metres to mm, as required by AUTOMOTIVE_DESIGN). */
+    private double scaleFactor = 1000.0;
+    /** Author name written into the FILE_NAME STEP header entity. */
     private String authorName = "Supersonic Nozzle MOC";
+    /** Organisation name written into the FILE_NAME STEP header entity. */
     private String organizationName = "Nozzle Design Tool";
-    
+
+    /**
+     * Sets the coordinate scale factor.  The STEP AUTOMOTIVE_DESIGN schema
+     * expects millimetres, so the default of 1000 converts metres to mm.
+     *
+     * @param scale Multiplicative scale factor
+     * @return This instance for method chaining
+     */
     public STEPExporter setScaleFactor(double scale) {
         this.scaleFactor = scale;
         return this;
     }
-    
+
+    /**
+     * Sets the author name recorded in the STEP file header.
+     *
+     * @param author Author name string
+     * @return This instance for method chaining
+     */
     public STEPExporter setAuthor(String author) {
         this.authorName = author;
         return this;
     }
-    
+
+    /**
+     * Sets the organisation name recorded in the STEP file header.
+     *
+     * @param org Organisation name string
+     * @return This instance for method chaining
+     */
     public STEPExporter setOrganization(String org) {
         this.organizationName = org;
         return this;
@@ -57,6 +82,14 @@ public class STEPExporter {
         }
     }
     
+    /**
+     * Writes the ISO-10303-21 HEADER section including FILE_DESCRIPTION,
+     * FILE_NAME (with current ISO timestamp, author, and organisation), and
+     * FILE_SCHEMA.
+     *
+     * @param writer Output writer (must be open)
+     * @throws IOException If the writer throws
+     */
     private void writeHeader(BufferedWriter writer) throws IOException {
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
         
@@ -69,6 +102,16 @@ public class STEPExporter {
         writer.write("ENDSEC;\n\n");
     }
     
+    /**
+     * Writes the ISO-10303-21 DATA section containing CARTESIAN_POINT, DIRECTION,
+     * AXIS2_PLACEMENT_3D, POLYLINE, EDGE_CURVE, SURFACE_OF_REVOLUTION, and the
+     * product-definition chain required to make the file importable as a named
+     * part in a compliant CAD application.
+     *
+     * @param writer Output writer (must be open)
+     * @param points Ordered contour points (at least one entry expected)
+     * @throws IOException If the writer throws
+     */
     private void writeData(BufferedWriter writer, List<Point2D> points) throws IOException {
         writer.write("DATA;\n");
         
@@ -178,6 +221,12 @@ public class STEPExporter {
         writer.write("ENDSEC;\n");
     }
     
+    /**
+     * Writes the ISO-10303-21 end marker ({@code END-ISO-10303-21;}).
+     *
+     * @param writer Output writer (must be open)
+     * @throws IOException If the writer throws
+     */
     private void writeFooter(BufferedWriter writer) throws IOException {
         writer.write("END-ISO-10303-21;\n");
     }

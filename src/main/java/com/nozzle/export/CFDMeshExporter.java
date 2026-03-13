@@ -2,8 +2,6 @@ package com.nozzle.export;
 
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
-import com.nozzle.moc.CharacteristicNet;
-import com.nozzle.moc.CharacteristicPoint;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -17,38 +15,80 @@ import java.util.List;
  * Supports OpenFOAM blockMesh, CGNS, and Gmsh formats.
  */
 public class CFDMeshExporter {
-    
+
+    /** Creates a {@code CFDMeshExporter} with default settings. */
+    public CFDMeshExporter() {}
+
     /**
-     * Mesh export format.
+     * Supported CFD mesh output formats.
      */
     public enum Format {
+        /** OpenFOAM {@code blockMeshDict} with a 5° axisymmetric wedge topology. */
         OPENFOAM_BLOCKMESH,
+        /** Gmsh {@code .geo} script with transfinite surface mesh instructions. */
         GMSH_GEO,
+        /**
+         * CFD General Notation System (CGNS) format.
+         * Currently delegated to the {@link #PLOT3D} exporter as a text-based
+         * structured-grid approximation.
+         */
         CGNS,
+        /** Plot3D structured multiblock grid (ASCII, single block, 2-D + z = 0 plane). */
         PLOT3D
     }
-    
+
+    /** Number of cells in the axial direction (default: 100). */
     private int axialCells = 100;
+    /** Number of cells in the radial direction (default: 50). */
     private int radialCells = 50;
+    /** Number of circumferential cells for 3-D meshes (default: 36). */
     private int circumferentialCells = 36;
+    /** First near-wall cell height in metres for the boundary-layer grading (default: 1 µm). */
     private double firstLayerThickness = 1e-6;
+    /** Cell-size expansion ratio from wall to interior (default: 1.2). */
     private double expansionRatio = 1.2;
-    
+
+    /**
+     * Sets the number of cells in the axial (flow) direction.
+     *
+     * @param cells Axial cell count (&gt; 0)
+     * @return This instance for method chaining
+     */
     public CFDMeshExporter setAxialCells(int cells) {
         this.axialCells = cells;
         return this;
     }
-    
+
+    /**
+     * Sets the number of cells in the radial direction.
+     *
+     * @param cells Radial cell count (&gt; 0)
+     * @return This instance for method chaining
+     */
     public CFDMeshExporter setRadialCells(int cells) {
         this.radialCells = cells;
         return this;
     }
-    
+
+    /**
+     * Sets the number of cells in the circumferential direction for 3-D meshes.
+     *
+     * @param cells Circumferential cell count (&gt; 0)
+     * @return This instance for method chaining
+     */
     public CFDMeshExporter setCircumferentialCells(int cells) {
         this.circumferentialCells = cells;
         return this;
     }
-    
+
+    /**
+     * Configures the near-wall boundary-layer grading parameters used in the
+     * OpenFOAM and Plot3D exporters.
+     *
+     * @param firstLayer Height of the first cell adjacent to the wall in metres
+     * @param expansion  Cell-size expansion ratio from wall to interior (e.g. 1.2)
+     * @return This instance for method chaining
+     */
     public CFDMeshExporter setBoundaryLayerParams(double firstLayer, double expansion) {
         this.firstLayerThickness = firstLayer;
         this.expansionRatio = expansion;
@@ -56,7 +96,12 @@ public class CFDMeshExporter {
     }
     
     /**
-     * Exports mesh definition in specified format.
+     * Dispatches the mesh export to the appropriate format-specific method.
+     *
+     * @param contour  Nozzle contour whose points define the flow domain wall
+     * @param filePath Destination file path
+     * @param format   Target mesh format
+     * @throws IOException If the file cannot be written
      */
     public void export(NozzleContour contour, Path filePath, Format format) throws IOException {
         switch (format) {
@@ -68,7 +113,15 @@ public class CFDMeshExporter {
     }
     
     /**
-     * Exports OpenFOAM blockMeshDict format.
+     * Exports an OpenFOAM {@code blockMeshDict} for an axisymmetric 5° wedge mesh.
+     * The mesh uses a single hex block with a spline edge along the wall profile
+     * and six boundary patches: {@code inlet}, {@code outlet}, {@code wall},
+     * {@code axis}, {@code wedge0}, and {@code wedge1}.
+     *
+     * @param contour  Nozzle contour providing at least 2 wall points
+     * @param filePath Destination file path
+     * @throws IOException              If the file cannot be written
+     * @throws IllegalArgumentException If the contour has fewer than 2 points
      */
     public void exportOpenFOAM(NozzleContour contour, Path filePath) throws IOException {
         List<Point2D> points = contour.getContourPoints();
@@ -176,7 +229,16 @@ public class CFDMeshExporter {
     }
     
     /**
-     * Exports Gmsh .geo format.
+     * Exports a Gmsh {@code .geo} script for a structured 2-D axisymmetric mesh.
+     * The script defines wall points as a Spline, closes the domain with Inlet,
+     * Outlet, and Axis lines, and applies {@code Transfinite} / {@code Recombine}
+     * directives to produce a mapped quadrilateral surface mesh.
+     * Physical groups {@code inlet}, {@code outlet}, {@code wall}, {@code axis},
+     * and {@code fluid} are exported for boundary-condition assignment.
+     *
+     * @param contour  Nozzle contour providing the wall geometry
+     * @param filePath Destination {@code .geo} file path
+     * @throws IOException If the file cannot be written
      */
     public void exportGmsh(NozzleContour contour, Path filePath) throws IOException {
         List<Point2D> points = contour.getContourPoints();
@@ -269,7 +331,15 @@ public class CFDMeshExporter {
     }
     
     /**
-     * Exports Plot3D format for structured grids.
+     * Exports a 2-D structured grid in ASCII Plot3D format (single block, z = 0).
+     * The grid is generated by linearly mapping each axial station from the axis
+     * to the wall with a power-law radial stretching controlled by
+     * {@link #expansionRatio}.  Coordinates are written in Fortran row-major order
+     * (j-loop outer, i-loop inner, 5 values per line).
+     *
+     * @param contour  Nozzle contour used to evaluate the wall radius at each axial station
+     * @param filePath Destination file path
+     * @throws IOException If the file cannot be written
      */
     public void exportPlot3D(NozzleContour contour, Path filePath) throws IOException {
         List<Point2D> points = contour.getContourPoints();
@@ -332,7 +402,16 @@ public class CFDMeshExporter {
     }
     
     /**
-     * Exports CGNS format (simplified text-based representation).
+     * Exports a CGNS-compatible structured grid.
+     *
+     * <p><b>Note:</b> True CGNS requires a binary HDF5 or ADF file.  This
+     * implementation delegates to {@link #exportPlot3D} and writes an ASCII
+     * structured-grid approximation instead, which can be converted to full CGNS
+     * with external tools such as {@code cgns_convert}.
+     *
+     * @param contour  Nozzle contour providing wall geometry
+     * @param filePath Destination file path
+     * @throws IOException If the file cannot be written
      */
     public void exportCGNS(NozzleContour contour, Path filePath) throws IOException {
         // CGNS is binary; export a simplified text version with grid coordinates

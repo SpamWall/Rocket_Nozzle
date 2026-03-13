@@ -11,8 +11,31 @@ import java.util.concurrent.Future;
 import java.util.function.Function;
 
 /**
- * Performs Monte Carlo uncertainty propagation analysis for nozzle design.
- * Quantifies how uncertainties in input parameters affect performance.
+ * Performs Monte Carlo uncertainty propagation for nozzle performance analysis.
+ *
+ * <p>Each uncertain input parameter is assigned a probability distribution
+ * ({@link DistributionType#NORMAL}, {@link DistributionType#UNIFORM},
+ * {@link DistributionType#TRIANGULAR}, or {@link DistributionType#LOGNORMAL}).
+ * The analysis draws {@code numSamples} independent realizations from those
+ * distributions, evaluates {@link com.nozzle.core.PerformanceCalculator} for
+ * each realization using Java virtual threads, and accumulates the resulting
+ * thrust-coefficient, specific-impulse, thrust, and efficiency distributions
+ * into a {@link StatisticalSummary}.
+ *
+ * <p>After {@link #run()} completes, {@link #getSensitivities()} returns
+ * Pearson correlation coefficients between every input parameter and each
+ * output metric, providing a first-order sensitivity (tornado) ranking.
+ *
+ * <p>Typical usage:
+ * <pre>{@code
+ * MonteCarloUncertainty mc = new MonteCarloUncertainty(params, 1000, 42)
+ *         .addTypicalUncertainties()
+ *         .run();
+ * StatisticalSummary s = mc.getSummary();
+ * }</pre>
+ *
+ * @see PerformanceCalculator
+ * @see StatisticalSummary
  */
 public class MonteCarloUncertainty {
     
@@ -42,19 +65,22 @@ public class MonteCarloUncertainty {
     }
     
     /**
-     * Creates analysis with default 10000 samples.
+     * Creates an analysis with 10 000 samples and a time-based random seed.
+     *
+     * @param nominalParameters nominal nozzle design parameters around which
+     *                          uncertainty is propagated
      */
     public MonteCarloUncertainty(NozzleDesignParameters nominalParameters) {
         this(nominalParameters, 10000, System.currentTimeMillis());
     }
     
     /**
-     * Adds an uncertain parameter with normal distribution.
+     * Registers an uncertain parameter with a Gaussian (normal) distribution.
      *
-     * @param name   Parameter name
-     * @param mean   Mean value
-     * @param stdDev Standard deviation
-     * @return This instance
+     * @param name   unique parameter name used in sensitivity output and sample maps
+     * @param mean   distribution mean (nominal value of the parameter)
+     * @param stdDev distribution standard deviation (one-sigma spread)
+     * @return this instance, for method chaining
      */
     public MonteCarloUncertainty addNormalParameter(String name, double mean, double stdDev) {
         uncertainParameters.put(name, new UncertainParameter(name, DistributionType.NORMAL,
@@ -63,12 +89,12 @@ public class MonteCarloUncertainty {
     }
     
     /**
-     * Adds an uncertain parameter with uniform distribution.
+     * Registers an uncertain parameter with a uniform (rectangular) distribution.
      *
-     * @param name Parameter name
-     * @param min  Minimum value
-     * @param max  Maximum value
-     * @return This instance
+     * @param name unique parameter name used in sensitivity output and sample maps
+     * @param min  lower bound of the uniform distribution (inclusive)
+     * @param max  upper bound of the uniform distribution (exclusive)
+     * @return this instance, for method chaining
      */
     public MonteCarloUncertainty addUniformParameter(String name, double min, double max) {
         uncertainParameters.put(name, new UncertainParameter(name, DistributionType.UNIFORM,
@@ -77,9 +103,18 @@ public class MonteCarloUncertainty {
     }
     
     /**
-     * Adds typical manufacturing uncertainties.
+     * Registers a representative set of manufacturing and propellant uncertainties
+     * derived from typical rocket-engine production tolerances:
+     * <ul>
+     *   <li>Throat radius: ±0.5 % (1σ) — machining tolerance</li>
+     *   <li>Chamber pressure: ±2 % (1σ) — regulator and injector variation</li>
+     *   <li>Chamber temperature: ±3 % (1σ) — combustion efficiency scatter</li>
+     *   <li>Specific heat ratio γ: ±2 % (1σ) — propellant composition variation</li>
+     *   <li>Initial wall angle: ±0.5° (1σ) — contour machining tolerance</li>
+     * </ul>
+     * All distributions are Gaussian (normal).
      *
-     * @return This instance
+     * @return this instance, for method chaining
      */
     public MonteCarloUncertainty addTypicalUncertainties() {
         double rt = nominalParameters.throatRadius();
@@ -99,9 +134,14 @@ public class MonteCarloUncertainty {
     }
     
     /**
-     * Runs the Monte Carlo analysis using virtual threads.
+     * Executes the Monte Carlo analysis.
      *
-     * @return This instance
+     * <p>Samples are drawn from each registered {@link UncertainParameter} distribution,
+     * then evaluated concurrently via a virtual-thread executor.  Failed evaluations
+     * (e.g., physically invalid parameter combinations) are silently discarded.
+     * Statistics are computed from the surviving valid samples.
+     *
+     * @return this instance, for method chaining
      */
     public MonteCarloUncertainty run() {
         random = new Random(randomSeed);
@@ -139,7 +179,10 @@ public class MonteCarloUncertainty {
     }
     
     /**
-     * Generates random samples from input distributions.
+     * Draws {@code numSamples} independent realizations from all registered
+     * parameter distributions.
+     *
+     * @return list of sample maps, each mapping parameter name to its drawn value
      */
     private List<Map<String, Double>> generateSamples() {
         List<Map<String, Double>> samples = new ArrayList<>();
@@ -165,7 +208,12 @@ public class MonteCarloUncertainty {
     }
     
     /**
-     * Samples from triangular distribution.
+     * Draws one variate from a triangular distribution using inverse-CDF sampling.
+     *
+     * @param min  lower bound of the distribution
+     * @param mode peak (most likely) value; must satisfy {@code min ≤ mode ≤ max}
+     * @param max  upper bound of the distribution
+     * @return a single random variate in {@code [min, max]}
      */
     private double sampleTriangular(double min, double mode, double max) {
         double u = random.nextDouble();
@@ -179,7 +227,17 @@ public class MonteCarloUncertainty {
     }
     
     /**
-     * Evaluates a single Monte Carlo sample.
+     * Builds a perturbed {@link NozzleDesignParameters} from one sample map,
+     * runs {@link PerformanceCalculator}, and returns the result.
+     *
+     * <p>Parameter values are clamped to physically valid bounds before use
+     * (e.g., γ ∈ [1.05, 1.67], wall angle ∈ [5°, 45°]).  Returns {@code null}
+     * if any exception occurs during construction or evaluation so that the
+     * caller can discard the failed sample without aborting the analysis.
+     *
+     * @param index  zero-based sample index, stored in the returned record for traceability
+     * @param sample map of parameter name to sampled value for this realization
+     * @return performance result for the sample, or {@code null} on failure
      */
     private SampleResult evaluateSample(int index, Map<String, Double> sample) {
         try {
@@ -231,7 +289,9 @@ public class MonteCarloUncertainty {
     }
     
     /**
-     * Calculates statistical summary of results.
+     * Computes the {@link StatisticalSummary} from all valid sample results.
+     *
+     * @return populated summary, or {@code null} if no valid samples exist
      */
     private StatisticalSummary calculateStatistics() {
         if (sampleResults.isEmpty()) {
@@ -257,7 +317,14 @@ public class MonteCarloUncertainty {
     }
     
     /**
-     * Calculates statistics for an array of values.
+     * Computes descriptive statistics for a one-dimensional array of sample values.
+     *
+     * <p>The array is sorted in place as a side effect; the caller must not rely
+     * on order being preserved after this call.
+     *
+     * @param values sample values to summarize (must not be empty)
+     * @return {@link VariableStats} containing mean, standard deviation, min, max,
+     *         median, and the 5th and 95th percentiles
      */
     private VariableStats calculateStats(double[] values) {
         Arrays.sort(values);
@@ -278,21 +345,35 @@ public class MonteCarloUncertainty {
     }
     
     /**
-     * Gets the statistical summary.
+     * Returns the statistical summary computed by the most recent {@link #run()} call.
+     *
+     * @return the summary, or {@code null} if {@link #run()} has not been called or
+     *         all samples failed evaluation
      */
     public StatisticalSummary getSummary() {
         return summary;
     }
     
     /**
-     * Gets all sample results.
+     * Returns a copy of all valid sample results from the most recent {@link #run()} call.
+     *
+     * @return mutable list of {@link SampleResult} records; empty if {@link #run()}
+     *         has not been called
      */
     public List<SampleResult> getSampleResults() {
         return new ArrayList<>(sampleResults);
     }
     
     /**
-     * Gets correlation between input parameter and output.
+     * Computes the Pearson correlation coefficient between the sampled values of one
+     * input parameter and an arbitrary output metric extracted from each
+     * {@link SampleResult}.
+     *
+     * @param paramName       name of the input parameter as registered via
+     *                        {@link #addNormalParameter} or {@link #addUniformParameter}
+     * @param outputExtractor function that extracts the scalar output of interest
+     *                        from a {@link SampleResult} (e.g. {@code SampleResult::specificImpulse})
+     * @return Pearson r ∈ [−1, 1], or {@code 0} if no sample results are available
      */
     public double getCorrelation(String paramName, Function<SampleResult, Double> outputExtractor) {
         if (sampleResults.isEmpty()) return 0;
@@ -308,7 +389,13 @@ public class MonteCarloUncertainty {
     }
     
     /**
-     * Calculates Pearson correlation coefficient.
+     * Computes the Pearson product-moment correlation coefficient between two
+     * equal-length arrays using the standard sum-of-products formula.
+     *
+     * @param x first variable sample array
+     * @param y second variable sample array; must have the same length as {@code x}
+     * @return Pearson r ∈ [−1, 1], or {@code 0} if the denominator is zero
+     *         (e.g., one variable is constant across all samples)
      */
     private double pearsonCorrelation(double[] x, double[] y) {
         int n = x.length;
@@ -329,7 +416,15 @@ public class MonteCarloUncertainty {
     }
     
     /**
-     * Gets sensitivity analysis results.
+     * Returns Pearson correlation coefficients between each input parameter and the
+     * thrust-coefficient and specific-impulse outputs.
+     *
+     * <p>Map keys follow the pattern {@code "<paramName>_Cf_correlation"} and
+     * {@code "<paramName>_Isp_correlation"}.  Values close to ±1 indicate strong
+     * linear sensitivity; values near 0 indicate negligible influence.
+     *
+     * @return ordered map of sensitivity labels to correlation coefficients;
+     *         empty if {@link #run()} has not been called
      */
     public Map<String, Double> getSensitivities() {
         Map<String, Double> sensitivities = new LinkedHashMap<>();
@@ -344,12 +439,41 @@ public class MonteCarloUncertainty {
         return sensitivities;
     }
     
-    // Records
-    
+    // -----------------------------------------------------------------------
+    // Supporting types
+    // -----------------------------------------------------------------------
+
+    /**
+     * Probability distribution family used to model parameter uncertainty.
+     */
     public enum DistributionType {
-        NORMAL, UNIFORM, TRIANGULAR, LOGNORMAL
+        /** Gaussian distribution, parameterized by mean and standard deviation. */
+        NORMAL,
+        /** Uniform (rectangular) distribution, parameterised by min and max. */
+        UNIFORM,
+        /** Triangular distribution, parameterised by min, mode (peak), and max. */
+        TRIANGULAR,
+        /** Log-normal distribution; {@code mean} and {@code stdDev} refer to the
+         *  underlying normal variate (i.e., of ln(X)). */
+        LOGNORMAL
     }
     
+    /**
+     * Specification of one uncertain input parameter and its probability distribution.
+     *
+     * @param name         unique identifier for the parameter; used as the key in sample
+     *                     maps and in sensitivity output labels
+     * @param distribution probability distribution family for this parameter
+     * @param mean         distribution mean; for {@link DistributionType#TRIANGULAR} this
+     *                     is the mode (peak), for {@link DistributionType#LOGNORMAL} this
+     *                     is the mean of the underlying normal variate ln(X)
+     * @param stdDev       standard deviation; used by {@link DistributionType#NORMAL} and
+     *                     {@link DistributionType#LOGNORMAL}; ignored by other distributions
+     * @param min          lower bound; used by {@link DistributionType#UNIFORM} and
+     *                     {@link DistributionType#TRIANGULAR}; ignored by other distributions
+     * @param max          upper bound; used by {@link DistributionType#UNIFORM} and
+     *                     {@link DistributionType#TRIANGULAR}; ignored by other distributions
+     */
     public record UncertainParameter(
             String name,
             DistributionType distribution,
@@ -359,6 +483,19 @@ public class MonteCarloUncertainty {
             double max
     ) {}
     
+    /**
+     * Performance outcome for one Monte Carlo realization.
+     *
+     * @param index            zero-based sample index within the run, for traceability
+     * @param inputs           map of parameter name to the value drawn for this realization
+     * @param thrustCoefficient actual thrust coefficient Cf computed by
+     *                         {@link PerformanceCalculator} for this sample
+     * @param specificImpulse  delivered specific impulse Isp in seconds
+     * @param thrust           delivered thrust in Newtons
+     * @param efficiency       ratio of actual to ideal thrust coefficient
+     *                         ({@code actualCf / idealCf}), dimensionless
+     * @param areaRatio        nozzle exit area ratio A/A* for this sample's geometry
+     */
     public record SampleResult(
             int index,
             Map<String, Double> inputs,
@@ -369,6 +506,17 @@ public class MonteCarloUncertainty {
             double areaRatio
     ) {}
     
+    /**
+     * Descriptive statistics for one scalar output variable across all valid Monte Carlo samples.
+     *
+     * @param mean          arithmetic mean of the sample distribution
+     * @param stdDev        population standard deviation of the sample distribution
+     * @param min           minimum observed value across all samples
+     * @param max           maximum observed value across all samples
+     * @param median        50th-percentile value (middle of the sorted sample array)
+     * @param percentile05  5th-percentile value — 5 % of samples fall below this threshold
+     * @param percentile95  95th-percentile value — 95 % of samples fall below this threshold
+     */
     public record VariableStats(
             double mean,
             double stdDev,
@@ -378,6 +526,15 @@ public class MonteCarloUncertainty {
             double percentile05,
             double percentile95
     ) {
+        /**
+         * Returns the coefficient of variation (relative standard deviation) as a percentage.
+         *
+         * <p>Defined as {@code (stdDev / mean) × 100}.  A higher value indicates greater
+         * relative dispersion.  Returns {@code 0} when the mean is zero to avoid
+         * division by zero.
+         *
+         * @return coefficient of variation in percent, or {@code 0} if {@code mean} is zero
+         */
         public double coefficientOfVariation() {
             return mean > 0 ? stdDev / mean * 100 : 0;
         }
@@ -390,6 +547,19 @@ public class MonteCarloUncertainty {
         }
     }
     
+    /**
+     * Aggregated statistical summary across all valid Monte Carlo samples,
+     * covering the four key nozzle performance outputs.
+     *
+     * @param thrustCoefficient statistics for the actual thrust coefficient Cf distribution
+     * @param specificImpulse   statistics for the delivered specific impulse Isp (seconds)
+     * @param thrust            statistics for the delivered thrust (Newtons)
+     * @param efficiency        statistics for the nozzle efficiency ({@code actualCf / idealCf},
+     *                          dimensionless)
+     * @param validSamples      number of samples that completed successfully and are
+     *                          included in the statistics (it may be less than {@code numSamples}
+     *                          if some evaluations failed)
+     */
     public record StatisticalSummary(
             VariableStats thrustCoefficient,
             VariableStats specificImpulse,

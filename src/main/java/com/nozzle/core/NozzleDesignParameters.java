@@ -32,12 +32,20 @@ public record NozzleDesignParameters(
 ) {
     
     /**
-     * Default number of characteristic lines.
+     * Default number of characteristic lines used when no explicit value is
+     * supplied to the builder (50 lines gives a good balance of accuracy and
+     * computation time for typical nozzle designs).
      */
     public static final int DEFAULT_CHAR_LINES = 50;
     
     /**
-     * Compact constructor with validation.
+     * Compact canonical constructor that validates all design parameters.
+     *
+     * @throws IllegalArgumentException if {@code exitMach} &lt; 1, {@code throatRadius} ≤ 0,
+     *         {@code chamberPressure} ≤ {@code ambientPressure},
+     *         {@code numberOfCharLines} &lt; 5,
+     *         {@code wallAngleInitial} outside (0, π/4], or
+     *         {@code lengthFraction} outside (0, 1]
      */
     public NozzleDesignParameters {
         if (exitMach < 1.0) {
@@ -149,9 +157,10 @@ public record NozzleDesignParameters(
     }
     
     /**
-     * Calculates characteristic exhaust velocity.
+     * Calculates the characteristic exhaust velocity c* using the isentropic
+     * throat relation: {@code c* = √(γRT_c) / (γ · (2/(γ+1))^((γ+1)/(2(γ−1))))}.
      *
-     * @return C* in m/s
+     * @return Characteristic velocity c* in m/s
      */
     @SuppressWarnings("UnnecessaryLocalVariable")
     public double characteristicVelocity() {
@@ -165,9 +174,12 @@ public record NozzleDesignParameters(
     }
     
     /**
-     * Calculates ideal thrust coefficient.
+     * Calculates the ideal (isentropic) thrust coefficient including both the
+     * momentum term and the pressure thrust term:
+     * {@code Cf = √(2γ²/(γ−1) · (2/(γ+1))^((γ+1)/(γ−1)) · (1−(pe/pc)^((γ−1)/γ)))
+     *           + (pe−pa)/pc · Ae/At}.
      *
-     * @return Ideal thrust coefficient
+     * @return Ideal thrust coefficient Cf (dimensionless)
      */
     public double idealThrustCoefficient() {
         double gamma = gasProperties.gamma();
@@ -202,9 +214,18 @@ public record NozzleDesignParameters(
     }
     
     /**
-     * Builder class for NozzleDesignParameters.
+     * Fluent builder for {@link NozzleDesignParameters}.
+     * All fields are pre-initialised to reasonable defaults (throat radius 50 mm,
+     * exit Mach 3, chamber pressure 7 MPa, chamber temperature 3500 K,
+     * sea-level ambient pressure, {@link GasProperties#AIR}, 30° initial wall
+     * angle, length fraction 0.8, axisymmetric geometry).
+     * Overriding any subset before calling {@link #build()} is sufficient.
      */
     public static class Builder {
+
+        /** Creates a {@code Builder} pre-loaded with all default parameter values. */
+        public Builder() {}
+
         private double throatRadius = 0.05;
         private double exitMach = 3.0;
         private double chamberPressure = 7e6;
@@ -215,67 +236,152 @@ public record NozzleDesignParameters(
         private double wallAngleInitial = Math.toRadians(30.0);
         private double lengthFraction = 0.8;
         private boolean axisymmetric = true;
-        
+
+        /**
+         * Sets the throat radius.
+         *
+         * @param throatRadius Throat radius in metres (must be positive)
+         * @return This builder
+         */
         public Builder throatRadius(double throatRadius) {
             this.throatRadius = throatRadius;
             return this;
         }
-        
+
+        /**
+         * Sets the design exit Mach number.
+         *
+         * @param exitMach Supersonic exit Mach number (must be ≥ 1)
+         * @return This builder
+         */
         public Builder exitMach(double exitMach) {
             this.exitMach = exitMach;
             return this;
         }
-        
+
+        /**
+         * Sets the chamber (stagnation) pressure.
+         *
+         * @param chamberPressure Chamber pressure in Pa (must exceed ambient pressure)
+         * @return This builder
+         */
         public Builder chamberPressure(double chamberPressure) {
             this.chamberPressure = chamberPressure;
             return this;
         }
-        
+
+        /**
+         * Sets the chamber (stagnation) temperature.
+         *
+         * @param chamberTemperature Chamber temperature in K (must be positive)
+         * @return This builder
+         */
         public Builder chamberTemperature(double chamberTemperature) {
             this.chamberTemperature = chamberTemperature;
             return this;
         }
-        
+
+        /**
+         * Sets the ambient back-pressure at the nozzle exit plane.
+         *
+         * @param ambientPressure Ambient pressure in Pa (must be positive)
+         * @return This builder
+         */
         public Builder ambientPressure(double ambientPressure) {
             this.ambientPressure = ambientPressure;
             return this;
         }
-        
+
+        /**
+         * Sets the gas thermodynamic properties.
+         *
+         * @param gasProperties {@link GasProperties} instance for the propellant gas
+         * @return This builder
+         */
         public Builder gasProperties(GasProperties gasProperties) {
             this.gasProperties = gasProperties;
             return this;
         }
-        
+
+        /**
+         * Sets the number of characteristic lines used in the MOC solution.
+         *
+         * @param numberOfCharLines Number of characteristic lines (must be ≥ 5)
+         * @return This builder
+         */
         public Builder numberOfCharLines(int numberOfCharLines) {
             this.numberOfCharLines = numberOfCharLines;
             return this;
         }
-        
+
+        /**
+         * Sets the initial wall angle at the throat in radians.
+         *
+         * @param wallAngleInitial Initial wall half-angle in radians (must be in (0, π/4])
+         * @return This builder
+         */
         public Builder wallAngleInitial(double wallAngleInitial) {
             this.wallAngleInitial = wallAngleInitial;
             return this;
         }
-        
+
+        /**
+         * Sets the initial wall angle at the throat in degrees (converted to radians
+         * internally).
+         *
+         * @param degrees Initial wall half-angle in degrees (must be in (0°, 45°])
+         * @return This builder
+         */
         public Builder wallAngleInitialDegrees(double degrees) {
             this.wallAngleInitial = Math.toRadians(degrees);
             return this;
         }
-        
+
+        /**
+         * Sets the nozzle length fraction relative to a 15° reference cone
+         * (Rao optimisation parameter).
+         *
+         * @param lengthFraction Fractional length in (0, 1]; 0.8 is typical for
+         *                       a Rao bell nozzle
+         * @return This builder
+         */
         public Builder lengthFraction(double lengthFraction) {
             this.lengthFraction = lengthFraction;
             return this;
         }
-        
+
+        /**
+         * Selects between axisymmetric and 2-D planar nozzle geometry.
+         *
+         * @param axisymmetric {@code true} for a body-of-revolution nozzle;
+         *                     {@code false} for a 2-D planar nozzle (throat treated
+         *                     as half-width per unit depth)
+         * @return This builder
+         */
         public Builder axisymmetric(boolean axisymmetric) {
             this.axisymmetric = axisymmetric;
             return this;
         }
-        
+
+        /**
+         * Configures the builder for a 2-D planar nozzle geometry.
+         * Equivalent to {@code axisymmetric(false)}.
+         *
+         * @return This builder
+         */
         public Builder planar() {
             this.axisymmetric = false;
             return this;
         }
-        
+
+        /**
+         * Builds and returns a validated {@link NozzleDesignParameters} instance
+         * from the current builder state.
+         *
+         * @return A new, immutable {@link NozzleDesignParameters}
+         * @throws IllegalArgumentException if any parameter fails the compact
+         *         constructor's validation checks
+         */
         public NozzleDesignParameters build() {
             return new NozzleDesignParameters(
                     throatRadius, exitMach, chamberPressure, chamberTemperature,

@@ -16,11 +16,29 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Exports nozzle design data to CSV format.
+ * Exports nozzle design data to comma-separated values (CSV) files suitable
+ * for post-processing in spreadsheets or Python/MATLAB scripts.
+ *
+ * <p>Available export methods:
+ * <ul>
+ *   <li>{@link #exportCharacteristicNet} — full MOC net with flow-field data</li>
+ *   <li>{@link #exportWallContour} — MOC wall points</li>
+ *   <li>{@link #exportContour} — design contour with local wall angle</li>
+ *   <li>{@link #exportThermalProfile} — wall temperatures and heat fluxes</li>
+ *   <li>{@link #exportBoundaryLayerProfile} — boundary-layer thicknesses and skin friction</li>
+ *   <li>{@link #exportDesignParameters} — scalar design parameters</li>
+ *   <li>{@link #exportStressProfile} — thermal stress and fatigue data</li>
+ *   <li>{@link #exportCompleteReport} — convenience wrapper for all of the above</li>
+ * </ul>
  */
 public class CSVExporter {
-    
+
+    /** Creates a {@code CSVExporter} with default settings. */
+    public CSVExporter() {}
+
+    /** Column delimiter used in all exported files. */
     private static final String DELIMITER = ",";
+    /** Line terminator used in all exported files. */
     private static final String NEWLINE = "\n";
     
     /**
@@ -256,6 +274,14 @@ public class CSVExporter {
         }
     }
 
+    /**
+     * Formats a single characteristic-net point as a CSV row string (no trailing newline).
+     *
+     * @param row   Row index in the characteristic net (0 = initial data line)
+     * @param idx   Column index within the row
+     * @param point The characteristic point to format
+     * @return CSV-formatted string with 13 comma-separated fields
+     */
     private String formatNetPoint(int row, int idx, CharacteristicPoint point) {
         return String.format("%d%s%d%s%.8f%s%.8f%s%.6f%s%.4f%s%.4f%s%.4f%s%.2f%s%.2f%s%.4f%s%.2f%s%s",
                 row, DELIMITER,
@@ -273,7 +299,17 @@ public class CSVExporter {
                 point.pointType().name());
     }
     
-    private void writeParameter(BufferedWriter writer, String name, double value, String unit) 
+    /**
+     * Writes a single parameter row ({@code name,value,unit}) to the supplied writer,
+     * followed by a newline.
+     *
+     * @param writer Output writer (must be open)
+     * @param name   Parameter name (CSV key)
+     * @param value  Numeric value formatted with 8 significant figures
+     * @param unit   Physical unit string (e.g. {@code "m"}, {@code "Pa"}, {@code "-"})
+     * @throws IOException If the underlying writer throws
+     */
+    private void writeParameter(BufferedWriter writer, String name, double value, String unit)
             throws IOException {
         writer.write(String.format("%s%s%.8g%s%s", name, DELIMITER, value, DELIMITER, unit));
         writer.write(NEWLINE);

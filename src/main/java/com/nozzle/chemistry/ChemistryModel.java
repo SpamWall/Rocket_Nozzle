@@ -262,13 +262,15 @@ public class ChemistryModel {
     }
     
     /**
-     * Normalizes composition to sum to 1.0.
+     * Normalizes the species mass-fraction map so that all values sum to 1.0.
+     * Each fraction is divided by the total sum.  Has no effect if the map is
+     * empty or the total sum is zero.
      */
     private void normalizeComposition() {
         double sum = speciesMassFractions.values().stream()
                 .mapToDouble(Double::doubleValue).sum();
         if (sum > 0) {
-            speciesMassFractions.replaceAll((_, v) -> v / sum);
+            speciesMassFractions.replaceAll((k, v) -> v / sum);
         }
     }
     
@@ -594,9 +596,20 @@ public class ChemistryModel {
 
     /**
      * Enforces element conservation constraints exactly by projecting mole
-     * numbers onto the constraint surface. Uses multiplicative corrections
-     * n_j *= exp(sum_k a_kj * beta_k) where beta solves C*beta = r,
-     * with C_ik = sum_j a_ij * a_kj * n_j and r_i = b_i - sum_j a_ij * n_j.
+     * numbers onto the constraint surface.  Uses multiplicative corrections
+     * {@code n_j *= exp(∑_k a_kj · β_k)} where β solves the linear system
+     * {@code C · β = r}, with
+     * {@code C_ik = ∑_j a_ij · a_kj · n_j} and
+     * {@code r_i = b_i − ∑_j a_ij · n_j}.
+     * Up to five projection passes are performed until the max relative residual
+     * is below 10⁻¹².
+     *
+     * @param n              Mole-number array for all species (modified in place)
+     * @param b              Target elemental totals (moles of each element)
+     * @param speciesActive  Boolean mask; {@code true} for species that participate
+     *                       in the equilibrium iteration
+     * @param activeElements Indices of the elements that are present in the mixture
+     * @param numActive      Length of the {@code activeElements} prefix to use
      */
     private void enforceElementConstraints(double[] n, double[] b,
             boolean[] speciesActive, int[] activeElements, int numActive) {
@@ -717,13 +730,23 @@ public class ChemistryModel {
     }
     
     /**
-     * Species thermodynamic data using NASA polynomial coefficients.
+     * Species thermodynamic data using NASA-7 polynomial coefficients.
+     * Coefficients sourced from NASA TP-2002-211556 (McBride, Zehe, Gordon).
+     *
+     * @param name            Chemical formula or name of the species (e.g. "H2O", "CO2")
+     * @param molecularWeight Molar mass in kg/kmol
+     * @param lowTempCoeffs   NASA-7 coefficients for the low-temperature range (200–1000 K);
+     *                        elements a0–a4 are Cp/R polynomial terms, a5 is the enthalpy
+     *                        integration constant (H/RT), a6 is the entropy integration
+     *                        constant (S/R)
+     * @param highTempCoeffs  NASA-7 coefficients for the high-temperature range (1000–6000 K);
+     *                        same layout as {@code lowTempCoeffs}
      */
     public record SpeciesData(
             String name,
             double molecularWeight,
-            double[] lowTempCoeffs,  // 200-1000 K
-            double[] highTempCoeffs  // 1000-6000 K
+            double[] lowTempCoeffs,
+            double[] highTempCoeffs
     ) {
         private static final double R_UNIVERSAL = 8314.46; // J/(kmol·K)
         

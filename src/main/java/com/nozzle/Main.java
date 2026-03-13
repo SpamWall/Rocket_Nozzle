@@ -40,6 +40,9 @@ import java.util.List;
  * - Thermal stress and fatigue life analysis (Timoshenko, Basquin, Coffin-Manson)
  */
 public class Main {
+
+    /** Private utility-class constructor — not instantiable. */
+    private Main() {}
     
     static void main() {
         System.out.println("=".repeat(70));
@@ -598,15 +601,15 @@ public class Main {
                     new ThermalStressAnalysis(params, thermalProfile, mat, wallThickness, wallConductivity)
                             .calculate();
 
-            double sigVMmax = analysis.getMaxVonMisesStress();
-            double sfMin    = analysis.getMinSafetyFactor();
-            double dtMax    = analysis.getMaxDeltaT();
-            double nfMin    = analysis.getMinFatigueCycles();
-            String regime   = sigVMmax > mat.yieldStrength() ? "PLASTIC" : "elastic";
-            String nfStr    = Double.isInfinite(nfMin) ? "∞" : String.format("%.1f", nfMin);
+            double sigVM_max = analysis.getMaxVonMisesStress();
+            double sfMin     = analysis.getMinSafetyFactor();
+            double dtMax     = analysis.getMaxDeltaT();
+            double nfMin     = analysis.getMinFatigueCycles();
+            String regime    = sigVM_max > mat.yieldStrength() ? "PLASTIC" : "elastic";
+            String nfStr     = Double.isInfinite(nfMin) ? "∞" : String.format("%.1f", nfMin);
 
             System.out.printf("  %-20s  %8.1f  %6.2f  %8.1f  %8s  %10s%n",
-                    mat.name(), sigVMmax / 1e6, sfMin, dtMax, nfStr, regime);
+                    mat.name(), sigVM_max / 1e6, sfMin, dtMax, nfStr, regime);
 
             if (mat == ThermalStressAnalysis.Material.COPPER_ALLOY_CuCrZr) {
                 bestAnalysis = analysis;

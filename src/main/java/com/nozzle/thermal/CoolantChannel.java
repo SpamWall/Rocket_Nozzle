@@ -91,7 +91,11 @@ public class CoolantChannel {
             this.molecularWeight = molecularWeight;
         }
 
-        /** Prandtl number: μ·Cp / k */
+        /**
+         * Computes the Prandtl number: {@code Pr = μ · Cp / k}.
+         *
+         * @return Prandtl number (dimensionless)
+         */
         public double prandtlNumber() {
             return viscosity * specificHeat / conductivity;
         }
@@ -144,7 +148,12 @@ public class CoolantChannel {
             double saturationTemperature,
             double boilingMargin
     ) {
-        /** Returns {@code true} if nucleate boiling is predicted at this station. */
+        /**
+         * Returns {@code true} if nucleate boiling is predicted at this station
+         * (i.e., the local wall temperature exceeds the coolant saturation temperature).
+         *
+         * @return {@code true} when {@code boilingMargin} &lt; 0 (wall hotter than T_sat)
+         */
         public boolean isNucleateBoiling() { return boilingMargin < 0.0; }
     }
 

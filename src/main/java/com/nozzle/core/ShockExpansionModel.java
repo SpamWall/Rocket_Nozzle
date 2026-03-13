@@ -23,21 +23,18 @@ package com.nozzle.core;
  *       disk (normal shock) stands in the near-field plume.</li>
  * </ol>
  *
+ * <h2>Thrust coefficient correction for separated flow</h2>
  * <p>When the ambient pressure is high enough to trigger boundary-layer separation
  * inside the nozzle (detected via {@link FlowSeparationPredictor}), the effective
  * nozzle is truncated at the separation plane and the thrust coefficient is
  * recalculated accordingly, replacing the crude fixed-penalty approach.
- *
- * <h3>Thrust coefficient correction for separated flow</h3>
  * When separation occurs at Mach M<sub>sep</sub> and area ratio AR<sub>sep</sub>,
  * the corrected C<sub>f</sub> is computed as if the nozzle ended at that cross-section:
- * <pre>
- *   C<sub>f,sep</sub> = C<sub>f,momentum</sub>(M<sub>sep</sub>) + (p<sub>sep</sub> − p<sub>a</sub>) / p<sub>0</sub> × AR<sub>sep</sub>
- * </pre>
+ * {@code Cf_sep = Cf_momentum(Msep) + (p_sep - p_a) / p0 * AR_sep}.
  * This is physically more accurate than the standard full-nozzle formula, which
  * yields an unrealistically large negative pressure term when p<sub>e</sub> ≪ p<sub>a</sub>.
  *
- * <h3>Standard-formula validity for non-separated cases</h3>
+ * <h2>Standard-formula validity for non-separated cases</h2>
  * For the underexpanded and overexpanded-shock regimes, the thrust is set at the
  * nozzle exit plane by the momentum flux and exit pressure:
  * F = ṁ V<sub>e</sub> + (p<sub>e</sub> − p<sub>a</sub>) A<sub>e</sub>.
@@ -46,7 +43,9 @@ package com.nozzle.core;
  */
 public class ShockExpansionModel {
 
-    private static final double IDEAL_EXPANSION_TOLERANCE = 0.01; // 1 % pressure match
+    /** Fractional pressure-match tolerance used to classify a flow as ideally expanded (1 %). */
+    private static final double IDEAL_EXPANSION_TOLERANCE = 0.01;
+    /** Standard gravity (m/s²) used to convert c*·Cf to specific impulse in seconds. */
     private static final double G0 = 9.80665;
 
     /** Flow regime at the nozzle exit for a given ambient pressure. */
@@ -63,6 +62,7 @@ public class ShockExpansionModel {
         SEPARATED
     }
 
+    /** Nozzle design parameters that define the fixed geometry and chamber conditions. */
     private final NozzleDesignParameters parameters;
 
     /**
@@ -85,7 +85,8 @@ public class ShockExpansionModel {
      * Computes off-design performance at the ambient pressure stored in the design
      * parameters (i.e., the design operating point).
      *
-     * @return Off-design result
+     * @return {@link OffDesignResult} describing the flow regime, corrected Cf,
+     *         corrected Isp, and plume wave geometry at the design ambient pressure
      */
     public OffDesignResult compute() {
         return compute(parameters.ambientPressure());
@@ -93,9 +94,15 @@ public class ShockExpansionModel {
 
     /**
      * Computes off-design performance at the specified ambient pressure.
+     * Checks for flow separation first; if separated, returns a corrected Cf
+     * based on the truncated nozzle at the separation plane.  Otherwise,
+     * classifies the exit flow as ideally expanded, underexpanded, overexpanded
+     * oblique shock, or Mach-disk, and returns the corresponding wave geometry.
      *
      * @param ambientPressure Ambient static pressure in Pa (must be &gt; 0)
-     * @return Off-design result
+     * @return {@link OffDesignResult} describing the flow regime, corrected Cf,
+     *         corrected Isp, and plume wave geometry
+     * @throws IllegalArgumentException if {@code ambientPressure} ≤ 0
      */
     public OffDesignResult compute(double ambientPressure) {
         if (ambientPressure <= 0) {
@@ -174,10 +181,12 @@ public class ShockExpansionModel {
     }
 
     /**
-     * Computes off-design performance at a given altitude using the ISA model.
+     * Computes off-design performance at a given altitude using the ISA atmosphere
+     * model to derive the ambient pressure, then delegates to {@link #compute(double)}.
      *
-     * @param altitudeMeters Geometric altitude in metres (&ge; 0)
-     * @return Off-design result
+     * @param altitudeMeters Geometric altitude in metres (values ≤ 0 are treated as sea level)
+     * @return {@link OffDesignResult} describing the flow regime, corrected Cf,
+     *         corrected Isp, and plume wave geometry at the given altitude
      */
     public OffDesignResult computeAtAltitude(double altitudeMeters) {
         return compute(isaAtmosphere(altitudeMeters));
@@ -188,10 +197,16 @@ public class ShockExpansionModel {
     // -------------------------------------------------------------------------
 
     /**
-     * Standard isentropic thrust coefficient including the pressure thrust term.
+     * Computes the standard isentropic thrust coefficient including the pressure thrust term.
      *
      * <p>F = ṁ V<sub>e</sub> + (p<sub>e</sub> − p<sub>a</sub>) A<sub>e</sub>
      * → C<sub>f</sub> = C<sub>f,momentum</sub> + (p<sub>e</sub> − p<sub>a</sub>) / p<sub>0</sub> × A<sub>e</sub>/A<sub>t</sub>
+     *
+     * @param pe    Isentropic exit pressure in Pa
+     * @param pa    Ambient pressure in Pa
+     * @param p0    Chamber (stagnation) pressure in Pa
+     * @param gamma Ratio of specific heats
+     * @return Standard thrust coefficient Cf (dimensionless)
      */
     private double computeStandardCf(double pe, double pa, double p0, double gamma) {
         double gp1 = gamma + 1.0;
@@ -204,9 +219,17 @@ public class ShockExpansionModel {
     }
 
     /**
-     * Corrected thrust coefficient when the boundary layer has separated at
-     * M<sub>sep</sub>, A<sub>sep</sub>.  The nozzle is treated as if it terminated at
-     * the separation plane.
+     * Computes the corrected thrust coefficient when the boundary layer has separated
+     * at M<sub>sep</sub>, AR<sub>sep</sub>.  The nozzle is treated as if it terminated
+     * at the separation plane, so the momentum and pressure thrust terms are evaluated
+     * at the separation cross-section rather than the geometric exit.
+     *
+     * @param sep   Separation analysis result providing M<sub>sep</sub>, p<sub>sep</sub>,
+     *              and AR<sub>sep</sub>
+     * @param p0    Chamber (stagnation) pressure in Pa
+     * @param pa    Ambient pressure in Pa
+     * @param gamma Ratio of specific heats
+     * @return Corrected thrust coefficient Cf at the separation plane (dimensionless)
      */
     private double correctedCfSeparated(
             FlowSeparationPredictor.SeparationResult sep,
@@ -238,15 +261,24 @@ public class ShockExpansionModel {
     }
 
     /**
-     * Normal-shock pressure ratio: p<sub>2</sub>/p<sub>1</sub> = (2γM² − (γ−1)) / (γ+1).
+     * Computes the normal-shock static pressure ratio across a standing normal shock:
+     * p<sub>2</sub>/p<sub>1</sub> = (2γM² − (γ−1)) / (γ+1).
+     *
+     * @param mach  Upstream Mach number (must be ≥ 1)
+     * @param gamma Ratio of specific heats
+     * @return Pressure ratio p<sub>2</sub>/p<sub>1</sub> (dimensionless, ≥ 1)
      */
     private static double normalShockPressureRatio(double mach, double gamma) {
         return (2.0 * gamma * mach * mach - (gamma - 1.0)) / (gamma + 1.0);
     }
 
     /**
-     * Mach number downstream of a normal shock:
+     * Computes the Mach number immediately downstream of a normal shock:
      * M<sub>2</sub>² = ((γ−1)M<sub>1</sub>² + 2) / (2γM<sub>1</sub>² − (γ−1)).
+     *
+     * @param M1    Upstream Mach number (must be ≥ 1)
+     * @param gamma Ratio of specific heats
+     * @return Subsonic downstream Mach number M<sub>2</sub> (dimensionless, &lt; 1)
      */
     private static double machBehindNormalShock(double M1, double gamma) {
         double gm1 = gamma - 1.0;
@@ -320,7 +352,11 @@ public class ShockExpansionModel {
     }
 
     /**
-     * Returns a copy of the design parameters with the ambient pressure replaced.
+     * Returns a copy of the design parameters with the ambient pressure replaced
+     * by the supplied value.  All other fields are preserved unchanged.
+     *
+     * @param pa Replacement ambient pressure in Pa
+     * @return A new {@link NozzleDesignParameters} instance with {@code pa} as ambient pressure
      */
     private NozzleDesignParameters withAmbient(double pa) {
         return NozzleDesignParameters.builder()
@@ -368,7 +404,10 @@ public class ShockExpansionModel {
             FlowSeparationPredictor.SeparationResult separationResult
     ) {
         /**
-         * Returns true if the nozzle is flowing full (not separated).
+         * Returns {@code true} if the nozzle is flowing full (no internal separation),
+         * i.e., the flow regime is any value other than {@link FlowRegime#SEPARATED}.
+         *
+         * @return {@code true} when the regime is not {@link FlowRegime#SEPARATED}
          */
         public boolean isFullyFlowing() {
             return regime != FlowRegime.SEPARATED;

@@ -19,21 +19,49 @@ import java.util.List;
  * Generates a revolved 3D mesh from the 2D contour.
  */
 public class STLExporter {
-    
-    private int circumferentialSegments = 72; // 5-degree increments
-    private double scaleFactor = 1000.0; // Convert m to mm
+
+    /** Creates an {@code STLExporter} with default settings (72 segments, binary format, metre-to-mm scale). */
+    public STLExporter() {}
+
+    /** Number of circumferential segments used when revolving the 2D profile (default: 72 = 5° steps). */
+    private int circumferentialSegments = 72;
+    /** Scale factor applied to all coordinates before writing (default: 1000 → metres to mm). */
+    private double scaleFactor = 1000.0;
+    /** When {@code true} (default), write binary STL; when {@code false}, write ASCII STL. */
     private boolean binaryFormat = true;
-    
+
+    /**
+     * Sets the number of circumferential segments used when revolving the 2D
+     * profile to produce the 3D mesh.  Higher values give a smoother surface
+     * at the cost of larger file size.
+     *
+     * @param segments Number of angular divisions (e.g. 72 for 5° steps)
+     * @return This instance for method chaining
+     */
     public STLExporter setCircumferentialSegments(int segments) {
         this.circumferentialSegments = segments;
         return this;
     }
-    
+
+    /**
+     * Sets the coordinate scale factor applied to all exported vertices.
+     * The default (1000) converts metres to millimetres.
+     *
+     * @param scale Multiplicative scale factor
+     * @return This instance for method chaining
+     */
     public STLExporter setScaleFactor(double scale) {
         this.scaleFactor = scale;
         return this;
     }
-    
+
+    /**
+     * Selects between binary (default) and ASCII STL output.
+     * Binary files are typically five to ten times smaller.
+     *
+     * @param binary {@code true} for binary STL; {@code false} for ASCII STL
+     * @return This instance for method chaining
+     */
     public STLExporter setBinaryFormat(boolean binary) {
         this.binaryFormat = binary;
         return this;
@@ -62,14 +90,28 @@ public class STLExporter {
     }
     
     /**
-     * Exports inner surface mesh for CFD boundary.
+     * Convenience method that exports the inner (flow-wetted) surface mesh,
+     * equivalent to {@link #exportMesh(NozzleContour, Path)}.
+     * The inward-facing normals produced by {@link #generateTriangles} make the
+     * mesh directly usable as a CFD wall boundary patch.
+     *
+     * @param contour  Nozzle contour to revolve
+     * @param filePath Destination STL file path
+     * @throws IOException If the file cannot be written
      */
     public void exportInnerSurfaceMesh(NozzleContour contour, Path filePath) throws IOException {
         exportMesh(contour, filePath);
     }
     
     /**
-     * Generates triangles by revolving the 2D profile.
+     * Generates the full triangle list by revolving the 2D profile around the
+     * x-axis.  Each axial segment of the profile contributes
+     * {@code 2 × circumferentialSegments} triangles.  Annular end caps are added
+     * at the inlet and outlet if the profile does not close on the axis
+     * (radius &gt; 1 µm).
+     *
+     * @param profile Ordered list of 2D profile points (at least 2 required)
+     * @return List of {@link Triangle}s with inward-facing unit normals
      */
     private List<Triangle> generateTriangles(List<Point2D> profile) {
         List<Triangle> triangles = new ArrayList<>();
@@ -116,7 +158,14 @@ public class STLExporter {
     }
     
     /**
-     * Adds an end cap at the specified profile point.
+     * Adds an annular fan of triangles that caps the open end of the revolved
+     * mesh at the given profile point.  The normal points in the −x direction
+     * for the inlet cap and in the +x direction for the outlet cap.
+     *
+     * @param triangles Accumulator list to which the cap triangles are appended
+     * @param point     Profile point at the cap location (only x and y are used)
+     * @param isStart   {@code true} to generate an inlet (−x normal) cap;
+     *                  {@code false} for an outlet (+x normal) cap
      */
     private void addEndCap(List<Triangle> triangles, Point2D point, boolean isStart) {
         double angleStep = 2 * Math.PI / circumferentialSegments;
@@ -139,7 +188,12 @@ public class STLExporter {
     }
     
     /**
-     * Revolves a 2D point around the x-axis.
+     * Maps a 2D profile point to a 3D point by revolving around the x-axis.
+     * Coordinates are scaled by {@link #scaleFactor} before revolution.
+     *
+     * @param point 2D point with axial (x) and radial (y) coordinates in metres
+     * @param theta Circumferential angle in radians
+     * @return Scaled 3D Cartesian point after revolution
      */
     private Point3D revolvePoint(Point2D point, double theta) {
         double x = point.x() * scaleFactor;
@@ -150,7 +204,15 @@ public class STLExporter {
     }
     
     /**
-     * Calculates the normal vector for a triangle.
+     * Calculates the unit outward-normal vector for the triangle formed by
+     * {@code v1}, {@code v2}, {@code v3} using the cross product
+     * {@code (v2 − v1) × (v3 − v1)}.
+     * Returns a zero vector if the triangle is degenerate (edge length &lt; 10⁻¹⁰).
+     *
+     * @param v1 First vertex
+     * @param v2 Second vertex
+     * @param v3 Third vertex
+     * @return Unit normal vector (or zero vector for degenerate triangles)
      */
     private Point3D calculateNormal(Point3D v1, Point3D v2, Point3D v3) {
         // Edge vectors
@@ -179,7 +241,14 @@ public class STLExporter {
     }
     
     /**
-     * Exports triangles to binary STL format.
+     * Writes the triangle list to a binary STL file (little-endian IEEE 754
+     * single-precision floats).  The 80-byte header contains a plain-text
+     * description and the 4-byte triangle count precedes the triangle records.
+     * Each record is 50 bytes: normal (12 B) + 3 vertices (36 B) + attribute (2 B).
+     *
+     * @param triangles Ordered list of triangles to write
+     * @param filePath  Destination file path
+     * @throws IOException If the file cannot be written
      */
     private void exportBinarySTL(List<Triangle> triangles, Path filePath) throws IOException {
         try (OutputStream os = Files.newOutputStream(filePath);
@@ -221,6 +290,13 @@ public class STLExporter {
         }
     }
     
+    /**
+     * Writes a single {@code float} value to {@code dos} in little-endian byte order.
+     *
+     * @param dos   Output stream to write to
+     * @param value Float value to write
+     * @throws IOException If the stream throws
+     */
     private void writeFloatLE(DataOutputStream dos, float value) throws IOException {
         ByteBuffer bb = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
         bb.putFloat(value);
@@ -228,7 +304,13 @@ public class STLExporter {
     }
     
     /**
-     * Exports triangles to ASCII STL format.
+     * Writes the triangle list to an ASCII STL file using the standard
+     * {@code solid / facet normal / outer loop / vertex / endloop / endfacet / endsolid}
+     * syntax.  ASCII STL is human-readable but roughly 5–10× larger than binary.
+     *
+     * @param triangles Ordered list of triangles to write
+     * @param filePath  Destination file path
+     * @throws IOException If the file cannot be written
      */
     private void exportAsciiSTL(List<Triangle> triangles, Path filePath) throws IOException {
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
@@ -253,13 +335,34 @@ public class STLExporter {
     }
     
     /**
-     * Gets the estimated number of triangles for a contour.
+     * Returns the estimated total triangle count for a revolution mesh with the
+     * given number of profile points.  Includes the lateral wall triangles and
+     * both end-cap fans:
+     * {@code 2 × (profilePoints − 1) × segments + 2 × segments}.
+     *
+     * @param profilePoints Number of 2D profile points
+     * @return Estimated triangle count
      */
     public int estimateTriangleCount(int profilePoints) {
         return 2 * (profilePoints - 1) * circumferentialSegments + 2 * circumferentialSegments;
     }
     
+    /**
+     * Immutable 3D Cartesian point used as STL vertex and normal data.
+     *
+     * @param x X-coordinate (axial), scaled to the export unit
+     * @param y Y-coordinate, scaled to the export unit
+     * @param z Z-coordinate, scaled to the export unit
+     */
     private record Point3D(double x, double y, double z) {}
-    
+
+    /**
+     * Immutable STL facet comprising a unit outward normal and three vertices.
+     *
+     * @param normal Unit outward normal vector of the facet
+     * @param v1     First vertex
+     * @param v2     Second vertex (winding order: right-hand rule for outward normal)
+     * @param v3     Third vertex
+     */
     private record Triangle(Point3D normal, Point3D v1, Point3D v2, Point3D v3) {}
 }

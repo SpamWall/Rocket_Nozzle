@@ -31,10 +31,26 @@ public class CharacteristicNet {
     private static final double DEFAULT_TOLERANCE = 1e-8;
     private static final int DEFAULT_MAX_ITERATIONS = 100;
     
+    /**
+     * Creates a characteristic net with default convergence tolerance
+     * ({@value #DEFAULT_TOLERANCE}) and iteration limit ({@value #DEFAULT_MAX_ITERATIONS}).
+     *
+     * @param parameters Nozzle design parameters that define the throat geometry,
+     *                   initial wall angle, exit Mach number, and gas properties
+     */
     public CharacteristicNet(NozzleDesignParameters parameters) {
         this(parameters, DEFAULT_TOLERANCE, DEFAULT_MAX_ITERATIONS);
     }
-    
+
+    /**
+     * Creates a characteristic net with custom convergence settings.
+     *
+     * @param parameters Nozzle design parameters
+     * @param tolerance  Convergence tolerance for the axisymmetric correction
+     *                   iteration (change in {@code theta} and {@code nu} per step)
+     * @param maxIter    Maximum number of axisymmetric correction iterations per
+     *                   interior point
+     */
     public CharacteristicNet(NozzleDesignParameters parameters, double tolerance, int maxIter) {
         this.parameters = parameters;
         this.netPoints = new ArrayList<>();
@@ -45,7 +61,24 @@ public class CharacteristicNet {
     }
     
     /**
-     * Generates the complete characteristic net.
+     * Generates the complete characteristic net for the nozzle design.
+     *
+     * <p>The algorithm proceeds in three stages:
+     * <ol>
+     *   <li><b>Initial data line</b> — a vertical line at the throat
+     *       ({@code x ≈ 0}) seeded with {@link NozzleDesignParameters#numberOfCharLines()}
+     *       characteristic points whose flow angles ramp from {@code 0} at the
+     *       centerline to {@link NozzleDesignParameters#wallAngleInitial()} at the wall.</li>
+     *   <li><b>Net propagation</b> — each row of interior points is computed by
+     *       intersecting adjacent C+ and C− characteristics via
+     *       {@link #computeInteriorPoint}.  Rows are generated until flow is
+     *       nearly axial (max {@code |θ| < 0.5°}) or the row budget is exhausted.</li>
+     *   <li><b>Wall points</b> — after each interior row, the outermost C+
+     *       characteristic is extended to the evolving wall contour via
+     *       {@link #computeWallPoint}.</li>
+     * </ol>
+     *
+     * @return This instance for method chaining
      */
     public CharacteristicNet generate() {
         GasProperties gas = parameters.gasProperties();
@@ -148,7 +181,23 @@ public class CharacteristicNet {
     }
     
     /**
-     * Computes a wall point by extending the C+ characteristic from the interior point.
+     * Extends the outermost C+ characteristic from an interior point to the
+     * evolving nozzle wall and returns the resulting wall-point.
+     *
+     * <p>The wall angle is assumed to decay linearly from
+     * {@link NozzleDesignParameters#wallAngleInitial()} at the throat to zero at
+     * the estimated exit ({@link #estimateExitX()}).  The C+ Riemann invariant
+     * {@code Q+ = θ − ν} is preserved along the characteristic.  An iterative
+     * predictor–corrector scheme (20 sweeps) resolves the intersection of the
+     * characteristic line with the linearly-interpolated wall segment.
+     *
+     * @param interior  Last interior characteristic point on the current row
+     *                  (the C+ characteristic originates here)
+     * @param prevWall  The preceding wall point; defines the starting segment
+     *                  of the wall for the intersection search
+     * @return The new {@link CharacteristicPoint} on the wall, or {@code null}
+     *         if the computed position is physically unreasonable (NaN, infinite,
+     *         outside the valid radial bounds, or upstream of {@code prevWall})
      */
     private CharacteristicPoint computeWallPoint(CharacteristicPoint interior, CharacteristicPoint prevWall) {
         GasProperties gas = parameters.gasProperties();
@@ -245,6 +294,13 @@ public class CharacteristicNet {
                 CharacteristicPoint.PointType.WALL);
     }
     
+    /**
+     * Estimates the axial position of the nozzle exit plane for use in the
+     * wall-angle linear-decay model inside {@link #computeWallPoint}.
+     * The estimate uses the 15° reference cone length scaled by the length fraction.
+     *
+     * @return Estimated exit axial position in metres
+     */
     private double estimateExitX() {
         double rt = parameters.throatRadius();
         double re = parameters.exitRadius();
@@ -252,8 +308,30 @@ public class CharacteristicNet {
     }
     
     /**
-     * Computes an interior point from two adjacent points.
-     * Left point is closer to centerline (lower y), right point is closer to wall (higher y).
+     * Computes the interior intersection point of a C+ characteristic from
+     * {@code left} and a C− characteristic from {@code right} using the
+     * Method of Characteristics.
+     *
+     * <p>The planar step solves the linear Riemann-invariant system:
+     * <pre>
+     *   Q+ = θ_L − ν_L  (constant along C+)
+     *   Q− = θ_R + ν_R  (constant along C−)
+     *   θ = (Q− + Q+) / 2
+     *   ν = (Q− − Q+) / 2
+     * </pre>
+     * For an axisymmetric nozzle ({@link NozzleDesignParameters#axisymmetric()} is
+     * {@code true}), an iterative correction loop adjusts Q± for the source term
+     * {@code sin(θ) / (y · cot(µ))} and re-solves the intersection until
+     * convergence or {@link #maxIterations} is reached.
+     *
+     * @param left  Characteristic point on the left (nearer the centerline,
+     *              lower radial coordinate); the C+ characteristic originates here
+     * @param right Characteristic point on the right (nearer the wall, higher
+     *              radial coordinate); the C− characteristic originates here
+     * @return The interior {@link CharacteristicPoint} at the characteristic
+     *         intersection, or {@code null} if the Prandtl-Meyer function yields
+     *         a non-physical result (ν ≤ 0, Mach &lt; 1, NaN/infinite position, or
+     *         radial coordinate out of the allowable range)
      */
     public CharacteristicPoint computeInteriorPoint(CharacteristicPoint left, CharacteristicPoint right) {
         GasProperties gas = parameters.gasProperties();
@@ -361,13 +439,58 @@ public class CharacteristicNet {
         ).withIndices(left.leftIndex(), right.rightIndex());
     }
     
+    // -------------------------------------------------------------------------
     // Accessors
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns the nozzle design parameters used to construct this net.
+     *
+     * @return The {@link NozzleDesignParameters} for this computation
+     */
     public NozzleDesignParameters getParameters() { return parameters; }
+
+    /**
+     * Returns an unmodifiable view of the full characteristic net as a list of
+     * rows, where each row is the list of {@link CharacteristicPoint}s computed
+     * during one propagation step.
+     *
+     * @return Nested list of characteristic points; the outermost index is the
+     *         row index (0 = initial data line), the inner index is the point
+     *         position within the row
+     */
     public List<List<CharacteristicPoint>> getNetPoints() { return Collections.unmodifiableList(netPoints); }
+
+    /**
+     * Returns an unmodifiable view of the ordered sequence of wall points that
+     * define the computed nozzle contour.
+     *
+     * @return Unmodifiable list of wall characteristic points in axial order
+     */
     public List<CharacteristicPoint> getWallPoints() { return Collections.unmodifiableList(wallPoints); }
+
+    /**
+     * Returns the total number of characteristic points across all rows of the net.
+     *
+     * @return Sum of all row sizes
+     */
     public int getTotalPointCount() { return netPoints.stream().mapToInt(List::size).sum(); }
+
+    /**
+     * Returns a flat list of every characteristic point in the net (all rows
+     * concatenated in row order).
+     *
+     * @return Flat list of all {@link CharacteristicPoint}s
+     */
     public List<CharacteristicPoint> getAllPoints() { return netPoints.stream().flatMap(List::stream).toList(); }
-    
+
+    /**
+     * Calculates the exit area ratio {@code A_exit / A_throat} from the radial
+     * coordinate of the last wall point.
+     *
+     * @return Exit area ratio; returns the design value from the parameters if
+     *         no wall points have been generated
+     */
     public double calculateExitAreaRatio() {
         if (wallPoints.isEmpty()) return parameters.exitAreaRatio();
         double rt = parameters.throatRadius();
@@ -375,6 +498,18 @@ public class CharacteristicNet {
         return (re * re) / (rt * rt);
     }
     
+    /**
+     * Validates the generated characteristic net for physical consistency.
+     *
+     * <p>The following checks are performed:
+     * <ul>
+     *   <li>The net and wall-point lists are non-empty.</li>
+     *   <li>Wall points are strictly monotonically increasing in the axial direction.</li>
+     *   <li>Every point in the net has a Mach number of at least 1.0 (fully supersonic).</li>
+     * </ul>
+     *
+     * @return {@code true} if all checks pass; {@code false} otherwise
+     */
     public boolean validate() {
         if (netPoints.isEmpty() || wallPoints.isEmpty()) return false;
         for (int i = 1; i < wallPoints.size(); i++) {

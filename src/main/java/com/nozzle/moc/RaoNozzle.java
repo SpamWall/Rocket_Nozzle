@@ -357,10 +357,15 @@ public class RaoNozzle {
     }
     
     /**
-     * Calculates thrust coefficient for MOC nozzle.
+     * Calculates the thrust coefficient for a MOC-generated nozzle design by
+     * applying the divergence-factor correction to the ideal thrust coefficient.
+     * The exit flow angle is read from the last wall point of {@code mocNet}.
      *
-     * @param mocNet MOC characteristic net
-     * @return Thrust coefficient
+     * @param mocNet MOC characteristic net whose wall-point sequence defines the
+     *               exit flow angle used for the divergence factor
+     *               {@code λ = (1 + cos θ_exit) / 2}
+     * @return Corrected thrust coefficient; returns the ideal value if
+     *         {@code mocNet} has no wall points
      */
     private double calculateMOCThrustCoefficient(CharacteristicNet mocNet) {
         List<CharacteristicPoint> wallPoints = mocNet.getWallPoints();
@@ -379,7 +384,23 @@ public class RaoNozzle {
     }
     
     /**
-     * Record containing nozzle comparison results.
+     * Immutable result of a point-wise comparison between a Rao bell nozzle contour
+     * and a MOC-generated nozzle contour at the same design point.
+     *
+     * @param maxRadiusDifference   Maximum absolute radial difference between the
+     *                              two contours, sampled at each MOC wall point, in metres
+     * @param avgRadiusDifference   Mean absolute radial difference across all sampled
+     *                              MOC wall points, in metres
+     * @param maxAngleDifference    Maximum absolute flow-angle difference between the
+     *                              MOC wall tangent and the Rao contour tangent at the
+     *                              same axial position, in radians
+     * @param raoThrustCoefficient  Thrust coefficient of the Rao bell nozzle, including
+     *                              the divergence-factor correction for {@link #exitAngle}
+     * @param mocThrustCoefficient  Thrust coefficient of the MOC nozzle, including the
+     *                              divergence-factor correction for the MOC exit flow angle
+     * @param raoLength             Axial length of the Rao bell nozzle in metres
+     * @param mocLength             Axial length of the MOC nozzle (x-coordinate of the
+     *                              last wall point) in metres
      */
     public record NozzleComparison(
             double maxRadiusDifference,
@@ -391,7 +412,10 @@ public class RaoNozzle {
             double mocLength
     ) {
         /**
-         * Returns the thrust coefficient difference.
+         * Returns the absolute difference in thrust coefficients between the
+         * Rao and MOC nozzle designs.
+         *
+         * @return {@code |Cf_Rao − Cf_MOC|}
          */
         public double thrustCoefficientDifference() {
             return Math.abs(raoThrustCoefficient - mocThrustCoefficient);

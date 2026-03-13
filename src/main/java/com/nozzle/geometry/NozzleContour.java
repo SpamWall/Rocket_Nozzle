@@ -8,18 +8,50 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Represents and enforces exact nozzle wall contour.
- * Supports various contour types: conical, bell, and custom.
+ * Represents the divergent wall contour of a rocket nozzle and provides
+ * geometry services (radius, slope, surface area) used by heat-transfer
+ * and performance analyses.
+ *
+ * <p>Four contour families are supported:
+ * <ul>
+ *   <li>{@link ContourType#CONICAL} — straight conical wall, the simplest baseline.</li>
+ *   <li>{@link ContourType#RAO_BELL} — cubic Bézier bell contour that approximates the
+ *       Rao thrust-optimized shape without a full MOC solve.</li>
+ *   <li>{@link ContourType#CUSTOM_SPLINE} — user-supplied control points fitted with a
+ *       natural cubic spline.</li>
+ *   <li>{@link ContourType#MOC_GENERATED} — wall points produced by {@link
+ *       com.nozzle.moc.CharacteristicNet} and smoothed via
+ *       {@link #fromMOCWallPoints(NozzleDesignParameters, java.util.List)}.</li>
+ * </ul>
+ *
+ * <p>Usage example:
+ * <pre>{@code
+ * NozzleContour contour = new NozzleContour(ContourType.RAO_BELL, params);
+ * contour.generate(200);
+ * double r = contour.getRadiusAt(0.05); // radius at x = 50 mm
+ * }</pre>
  */
 public class NozzleContour {
-    
+
     /**
-     * Contour type enumeration.
+     * Classification of the mathematical method used to define the divergent
+     * wall profile.
      */
     public enum ContourType {
+        /** Straight-walled conical nozzle with a circular-arc throat transition. */
         CONICAL,
+        /** Rao-style bell nozzle approximated with a cubic Bézier curve. */
         RAO_BELL,
+        /**
+         * Nozzle wall defined by user-supplied control points and interpolated
+         * with a natural cubic spline.
+         */
         CUSTOM_SPLINE,
+        /**
+         * Wall points generated directly by the Method-of-Characteristics solver
+         * ({@link com.nozzle.moc.CharacteristicNet}) and smoothed with a cubic
+         * spline.  Use {@link NozzleContour#fromMOCWallPoints} to construct.
+         */
         MOC_GENERATED
     }
     
@@ -34,6 +66,15 @@ public class NozzleContour {
     private double[] splineCoeffD;
     private double[] splineX;
     
+    /**
+     * Creates an empty contour of the given type.
+     * Call {@link #generate(int)} (or {@link #fromMOCWallPoints} for
+     * {@link ContourType#MOC_GENERATED}) to populate the contour points.
+     *
+     * @param type       Contour family to generate
+     * @param parameters Nozzle design parameters that define throat radius,
+     *                   exit radius, wall angle, and length fraction
+     */
     public NozzleContour(ContourType type, NozzleDesignParameters parameters) {
         this.type = type;
         this.parameters = parameters;
@@ -41,6 +82,21 @@ public class NozzleContour {
         this.contourPoints = new ArrayList<>();
     }
     
+    /**
+     * Factory method that builds a {@link ContourType#MOC_GENERATED} contour from
+     * the wall-point sequence produced by a {@link com.nozzle.moc.CharacteristicNet}.
+     *
+     * <p>Consecutive points closer than {@code 0.05 × r_throat} are skipped to keep
+     * the underlying cubic-spline system well-conditioned (closely spaced knots cause
+     * the tridiagonal h-coefficients to approach zero).
+     *
+     * @param parameters  Nozzle design parameters (used to determine the minimum
+     *                    knot spacing and as the reference for downstream queries)
+     * @param wallPoints  Ordered list of wall characteristic points from the MOC
+     *                    solver; must contain at least two points after filtering
+     * @return A fully initialised {@code NozzleContour} with its cubic spline fitted
+     *         to the filtered MOC wall points
+     */
     public static NozzleContour fromMOCWallPoints(NozzleDesignParameters parameters,
                                                    List<CharacteristicPoint> wallPoints) {
         NozzleContour contour = new NozzleContour(ContourType.MOC_GENERATED, parameters);
@@ -58,6 +114,16 @@ public class NozzleContour {
         return contour;
     }
     
+    /**
+     * Generates (or regenerates) the discrete wall-contour point list.
+     * The generation algorithm is selected by the {@link ContourType} supplied
+     * at construction time.
+     *
+     * @param numPoints Total number of contour points to generate, including
+     *                  both the throat arc region and the divergent bell or
+     *                  cone section
+     * @return This instance for method chaining
+     */
     public NozzleContour generate(int numPoints) {
         contourPoints.clear();
         
@@ -70,6 +136,13 @@ public class NozzleContour {
         return this;
     }
     
+    /**
+     * Populates {@code contourPoints} with a conical divergent section preceded
+     * by a 0.382 × r_throat circular-arc throat transition.
+     * The cone half-angle is taken from {@link NozzleDesignParameters#wallAngleInitial()}.
+     *
+     * @param numPoints Total points to distribute between the throat arc and cone
+     */
     private void generateConicalContour(int numPoints) {
         double rt = parameters.throatRadius();
         double re = parameters.exitRadius();
@@ -97,6 +170,15 @@ public class NozzleContour {
         }
     }
     
+    /**
+     * Populates {@code contourPoints} with an approximate Rao bell contour.
+     * A circular-arc throat section is followed by a cubic Bézier curve that
+     * blends from the throat inflection angle ({@link NozzleDesignParameters#wallAngleInitial()})
+     * to a small exit angle derived from the area ratio.
+     *
+     * @param numPoints Total points to distribute between the throat arc and the
+     *                  Bézier bell
+     */
     private void generateBellContour(int numPoints) {
         double rt = parameters.throatRadius();
         double re = parameters.exitRadius();
@@ -136,6 +218,14 @@ public class NozzleContour {
         }
     }
     
+    /**
+     * Fits a natural cubic spline through {@code controlPoints} and stores the
+     * piecewise polynomial coefficients in {@code splineCoeffA/B/C/D}.
+     * The algorithm follows the standard tridiagonal-system formulation
+     * (Burden &amp; Faires, §3.5) with not-a-knot boundary conditions
+     * ({@code c[0] = c[n] = 0}).
+     * Has no effect if fewer than two control points are present.
+     */
     private void generateSpline() {
         if (controlPoints.size() < 2) return;
         
@@ -187,6 +277,16 @@ public class NozzleContour {
         }
     }
     
+    /**
+     * Populates {@code contourPoints} by sampling the fitted cubic spline at
+     * {@code numPoints} uniformly spaced axial positions spanning the range of
+     * the control points.
+     * If the spline coefficients have not yet been computed, calls
+     * {@link #generateSpline()} first.
+     * Has no effect if fewer than two control points are present.
+     *
+     * @param numPoints Number of sample points to generate
+     */
     private void generateSplineContour(int numPoints) {
         if (controlPoints.size() < 2) return;
         if (splineCoeffA == null) generateSpline();
@@ -201,6 +301,16 @@ public class NozzleContour {
         }
     }
     
+    /**
+     * Evaluates the fitted cubic spline at axial position {@code x}.
+     * Performs a linear search for the enclosing interval and applies the
+     * Horner-form polynomial {@code a + b·dx + c·dx² + d·dx³}.
+     * Returns {@code 0} if the spline has not been initialized.
+     *
+     * @param x Axial position in metres (clamped to the spline domain by the
+     *          interval search — out-of-range values use the last valid interval)
+     * @return Interpolated wall radius in metres
+     */
     private double evaluateSpline(double x) {
         if (splineX == null || splineX.length < 2) return 0;
         
@@ -216,6 +326,16 @@ public class NozzleContour {
         return splineCoeffA[i] + splineCoeffB[i]*dx + splineCoeffC[i]*dx*dx + splineCoeffD[i]*dx*dx*dx;
     }
     
+    /**
+     * Returns the wall radius at the given axial position by linear interpolation
+     * of the discrete contour points (or spline evaluation for spline-based types).
+     * If no contour points have been generated yet, {@link #generate(int)} is
+     * called with 100 points automatically.
+     *
+     * @param x Axial position in metres
+     * @return Wall radius in metres; returns the exit radius if {@code x} is beyond
+     *         the last contour point
+     */
     public double getRadiusAt(double x) {
         if (contourPoints.isEmpty()) {
             generate(100);
@@ -236,29 +356,70 @@ public class NozzleContour {
         return parameters.exitRadius();
     }
     
+    /**
+     * Returns the wall slope (dr/dx) at axial position {@code x} using
+     * a central-difference approximation with step {@code h = 1 µm}.
+     *
+     * @param x Axial position in metres
+     * @return Wall slope (dimensionless, dr/dx)
+     */
     public double getSlopeAt(double x) {
         double h = 1e-6;
         return (getRadiusAt(x + h) - getRadiusAt(x - h)) / (2 * h);
     }
     
+    /**
+     * Returns the local wall half-angle (in radians) at axial position {@code x}.
+     * Computed as {@code atan(dr/dx)} via {@link #getSlopeAt(double)}.
+     *
+     * @param x Axial position in metres
+     * @return Wall half-angle in radians
+     */
     public double getAngleAt(double x) {
         return Math.atan(getSlopeAt(x));
     }
     
+    /**
+     * Returns an unmodifiable view of the discrete contour point list.
+     * Each {@link Point2D} holds the axial ({@code x}) and radial ({@code y})
+     * coordinates in metres.
+     *
+     * @return Unmodifiable list of contour points; empty if {@link #generate(int)}
+     *         has not been called
+     */
     public List<Point2D> getContourPoints() {
         return Collections.unmodifiableList(contourPoints);
     }
-    
 
+    /**
+     * Returns the contour type used to construct this instance.
+     *
+     * @return The {@link ContourType} of this contour
+     */
     public ContourType getType() {
         return type;
     }
     
+    /**
+     * Returns the axial length of the contour from its first to its last
+     * discrete point.
+     *
+     * @return Contour axial length in metres, or {@code 0} if no points have
+     *         been generated
+     */
     public double getLength() {
         if (contourPoints.isEmpty()) return 0;
         return contourPoints.getLast().x() - contourPoints.getFirst().x();
     }
     
+    /**
+     * Calculates the inner wetted surface area of the axisymmetric nozzle wall
+     * using the trapezoidal rule over the discrete contour segments:
+     * {@code dA = 2π · r_avg · ds}.
+     *
+     * @return Wetted surface area in m²; returns {@code 0} if fewer than two
+     *         contour points are available
+     */
     public double calculateSurfaceArea() {
         if (contourPoints.size() < 2) return 0;
         

@@ -15,7 +15,10 @@ import java.util.List;
  * Exports nozzle geometry to DXF format for CAD import.
  */
 public class DXFExporter {
-    
+
+    /** Creates a {@code DXFExporter} with default settings. */
+    public DXFExporter() {}
+
     private static final String DXF_HEADER = """
             0
             SECTION
@@ -44,13 +47,31 @@ public class DXFExporter {
             EOF
             """;
     
+    /** Scale factor applied to all coordinates before writing (default: 1000 → metres to mm). */
     private double scaleFactor = 1000.0;
-    
+
+    /**
+     * Sets the coordinate scale factor applied to all exported geometry.
+     * The default value (1000) converts metres to millimetres, matching the
+     * typical expectation of DXF-importing CAD tools.
+     *
+     * @param scale Multiplicative scale factor (e.g. {@code 1000} for m → mm)
+     * @return This instance for method chaining
+     */
     public DXFExporter setScaleFactor(double scale) {
         this.scaleFactor = scale;
         return this;
     }
-    
+
+    /**
+     * Exports the nozzle wall contour as a DXF POLYLINE entity together with a
+     * straight LINE along the symmetry axis (y = 0).
+     *
+     * @param contour  Nozzle contour whose points define the wall profile
+     * @param filePath Destination DXF file path
+     * @throws IOException              If the file cannot be written
+     * @throws IllegalArgumentException If the contour has no points
+     */
     public void exportContour(NozzleContour contour, Path filePath) throws IOException {
         List<Point2D> points = contour.getContourPoints();
         if (points.isEmpty()) {
@@ -66,6 +87,14 @@ public class DXFExporter {
         }
     }
     
+    /**
+     * Exports the MOC wall-point sequence as a DXF POLYLINE together with an axis
+     * LINE at y = 0.
+     *
+     * @param net      Characteristic net whose wall points define the contour
+     * @param filePath Destination DXF file path
+     * @throws IOException If the file cannot be written
+     */
     public void exportCharacteristicNet(CharacteristicNet net, Path filePath) throws IOException {
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(DXF_HEADER);
@@ -82,6 +111,17 @@ public class DXFExporter {
         }
     }
     
+    /**
+     * Exports a closed 2D revolution-profile cross-section as four DXF entities:
+     * the wall POLYLINE plus three LINE segments that close the profile along the
+     * exit face, axis, and throat face.
+     * Suitable for use as the sketch profile for a revolve operation in CAD tools.
+     *
+     * @param contour  Nozzle contour whose points define the outer wall
+     * @param filePath Destination DXF file path
+     * @throws IOException              If the file cannot be written
+     * @throws IllegalArgumentException If the contour has no points
+     */
     public void exportRevolutionProfile(NozzleContour contour, Path filePath) throws IOException {
         List<Point2D> points = contour.getContourPoints();
         if (points.isEmpty()) {
@@ -105,7 +145,15 @@ public class DXFExporter {
         }
     }
     
-    private void writePolyline(BufferedWriter writer, List<Point2D> points, String layer) 
+    /**
+     * Writes an open DXF POLYLINE entity to {@code writer}.
+     *
+     * @param writer Writer receiving the DXF entities section content
+     * @param points Ordered list of 2D points defining the polyline vertices
+     * @param layer  DXF layer name string
+     * @throws IOException If the writer throws
+     */
+    private void writePolyline(BufferedWriter writer, List<Point2D> points, String layer)
             throws IOException {
         writer.write("0\nPOLYLINE\n8\n" + layer + "\n66\n1\n70\n0\n");
         for (Point2D point : points) {
@@ -114,8 +162,17 @@ public class DXFExporter {
         writer.write("0\nSEQEND\n");
     }
     
-    private void writeCharacteristicPolyline(BufferedWriter writer, 
-                                              List<CharacteristicPoint> points, String layer) 
+    /**
+     * Writes an open DXF POLYLINE entity from a list of {@link CharacteristicPoint}s,
+     * using only their (x, y) coordinates.
+     *
+     * @param writer Writer receiving the DXF entities section content
+     * @param points Ordered list of characteristic points
+     * @param layer  DXF layer name string
+     * @throws IOException If the writer throws
+     */
+    private void writeCharacteristicPolyline(BufferedWriter writer,
+                                              List<CharacteristicPoint> points, String layer)
             throws IOException {
         writer.write("0\nPOLYLINE\n8\n" + layer + "\n66\n1\n70\n0\n");
         for (CharacteristicPoint point : points) {
@@ -124,14 +181,34 @@ public class DXFExporter {
         writer.write("0\nSEQEND\n");
     }
     
-    private void writeVertex(BufferedWriter writer, Point2D point, String layer) 
+    /**
+     * Writes a single DXF VERTEX entity (group codes 0, 8, 10, 20, 30).
+     * The z-coordinate is always written as {@code 0.0}.
+     * Coordinates are scaled by {@link #scaleFactor} before writing.
+     *
+     * @param writer Writer receiving the DXF entities section content
+     * @param point  2D point whose x/y coordinates are the vertex position
+     * @param layer  DXF layer name string
+     * @throws IOException If the writer throws
+     */
+    private void writeVertex(BufferedWriter writer, Point2D point, String layer)
             throws IOException {
         writer.write("0\nVERTEX\n8\n" + layer + "\n");
         writer.write(String.format("10\n%.6f\n20\n%.6f\n30\n0.0\n", 
                 point.x() * scaleFactor, point.y() * scaleFactor));
     }
     
-    private void writeLine(BufferedWriter writer, Point2D start, Point2D end, String layer) 
+    /**
+     * Writes a DXF LINE entity between two 2D points (z = 0).
+     * Coordinates are scaled by {@link #scaleFactor} before writing.
+     *
+     * @param writer Writer receiving the DXF entities section content
+     * @param start  Start point of the line
+     * @param end    End point of the line
+     * @param layer  DXF layer name string
+     * @throws IOException If the writer throws
+     */
+    private void writeLine(BufferedWriter writer, Point2D start, Point2D end, String layer)
             throws IOException {
         writer.write("0\nLINE\n8\n" + layer + "\n");
         writer.write(String.format("10\n%.6f\n20\n%.6f\n30\n0.0\n", 
