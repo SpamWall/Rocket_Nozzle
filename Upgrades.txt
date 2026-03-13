@@ -37,10 +37,6 @@ Here's an organized assessment of the most impactful additions, grouped by value
   ---
   Medium Impact — Validation & Testing
 
-  Physics Validation Against Known Analytical Solutions
-  Tests currently check that numbers are "reasonable" (e.g., h > 0, T_w < T_chamber). A professional library would have tests validating against known analytical results — e.g., MOC wall points for a known Mach number should match tabulated isentropic values within 0.1%, Bartz h at the throat should
-  match published worked examples.
-
   Integration Test: Full Design Flow
   No test exercises the full pipeline: NozzleDesignParameters → CharacteristicNet → NozzleContour → HeatTransferModel → NASASP8120Validator. A single end-to-end integration test would catch cross-component regressions.
 
