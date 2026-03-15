@@ -215,7 +215,7 @@ public record NozzleDesignParameters(
     
     /**
      * Fluent builder for {@link NozzleDesignParameters}.
-     * All fields are pre-initialised to reasonable defaults (throat radius 50 mm,
+     * All fields are pre-initialized to reasonable defaults (throat radius 50 mm,
      * exit Mach 3, chamber pressure 7 MPa, chamber temperature 3500 K,
      * sea-level ambient pressure, {@link GasProperties#AIR}, 30° initial wall
      * angle, length fraction 0.8, axisymmetric geometry).
@@ -223,7 +223,7 @@ public record NozzleDesignParameters(
      */
     public static class Builder {
 
-        /** Creates a {@code Builder} pre-loaded with all default parameter values. */
+        /** Creates a {@code Builder} preloaded with all default parameter values. */
         public Builder() {}
 
         private double throatRadius = 0.05;
@@ -339,7 +339,7 @@ public record NozzleDesignParameters(
 
         /**
          * Sets the nozzle length fraction relative to a 15° reference cone
-         * (Rao optimisation parameter).
+         * (Rao optimization parameter).
          *
          * @param lengthFraction Fractional length in (0, 1]; 0.8 is typical for
          *                       a Rao bell nozzle
