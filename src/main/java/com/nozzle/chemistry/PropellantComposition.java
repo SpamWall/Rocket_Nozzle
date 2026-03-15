@@ -8,7 +8,7 @@ import java.util.Map;
  * Combustion-product composition expressed as species mass fractions.
  * Provides preset compositions for LOX/RP-1, LOX/CH4, and LOX/LH2 propellant
  * combinations, as well as direct assignment from a caller-supplied map.
- * All setter methods normalise the resulting fractions so they sum to 1.0.
+ * All setter methods normalize the resulting fractions so they sum to 1.0.
  */
 public final class PropellantComposition {
 
@@ -16,9 +16,9 @@ public final class PropellantComposition {
 
     /**
      * Replaces the current composition with the supplied mass-fraction map.
-     * The fractions are normalised so they sum to 1.0.
+     * The fractions are normalized so they sum to 1.0.
      *
-     * @param fractions Map of species name to mass fraction (need not be pre-normalised)
+     * @param fractions Map of species name to mass fraction (need not be pre-normalized)
      */
     public void set(Map<String, Double> fractions) {
         massFractions.clear();
@@ -139,7 +139,7 @@ public final class PropellantComposition {
     }
 
     /**
-     * Normalises the mass-fraction map so that all values sum to 1.0.
+     * Normalizes the mass-fraction map so that all values sum to 1.0.
      * Has no effect if the map is empty or the total is zero.
      */
     private void normalize() {

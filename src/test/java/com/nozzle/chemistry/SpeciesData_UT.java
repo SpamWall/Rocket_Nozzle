@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.assertj.core.api.Assertions.within;
 
 @DisplayName("SpeciesData Tests")
 class SpeciesData_UT {
