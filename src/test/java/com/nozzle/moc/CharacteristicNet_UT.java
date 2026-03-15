@@ -382,41 +382,60 @@ class CharacteristicNet_UT {
     }
 
     // -----------------------------------------------------------------------
-    // Early-termination test — covers L176 (maxTheta < 0.5° break)
+    // Wall-convergence tests — verify the Rao wall profile drives the generated
+    // contour to the design exit radius regardless of numberOfCharLines (L179).
     // -----------------------------------------------------------------------
 
     @Nested
-    @DisplayName("Early Termination Tests")
-    class EarlyTerminationTests {
+    @DisplayName("Wall Convergence Tests")
+    class WallConvergenceTests {
 
         @Test
         @Timeout(value = 30, unit = TimeUnit.SECONDS)
-        @DisplayName("generate() breaks early when max flow angle drops below 0.5° (L176)")
-        void generateBreaksEarlyWhenFlowNearlyAxial() {
-            // wallAngleInitialDegrees = 0.3°  <  0.5°
-            // After the first propagation row the max theta in nextLine ≈ 0.3°,
-            // which satisfies maxTheta < toRadians(0.5) → break at L176 before
-            // exhausting maxRows = 2*5+20 = 30.
-            // axisymmetric=false avoids the source-term correction that could
-            // alter theta, making the early-exit arithmetic straightforward.
-            NozzleDesignParameters nearAxialParams = NozzleDesignParameters.builder()
+        @DisplayName("generate() wall reaches design exit radius for coarse mesh (n=30)")
+        void wallReachesExitRadiusCoarse() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
                     .throatRadius(0.05)
-                    .exitMach(1.5)
+                    .exitMach(3.5)
                     .chamberPressure(7e6)
                     .chamberTemperature(3500)
                     .ambientPressure(101325)
-                    .gasProperties(GasProperties.AIR)
-                    .numberOfCharLines(5)
-                    .wallAngleInitialDegrees(0.3)
+                    .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                    .numberOfCharLines(30)
+                    .wallAngleInitialDegrees(30)
                     .lengthFraction(0.8)
-                    .axisymmetric(false)
                     .build();
 
-            CharacteristicNet net = new CharacteristicNet(nearAxialParams).generate();
+            CharacteristicNet net = new CharacteristicNet(p).generate();
+            double designExitRadius = p.exitRadius();
+            double actualExitRadius = net.getWallPoints().getLast().y();
 
-            // Should have generated at least one row but far fewer than maxRows (30)
             assertThat(net.getNetPoints()).isNotEmpty();
-            assertThat(net.getNetPoints().size()).isLessThan(1 + 30);
+            // Last wall point must reach at least the design exit radius
+            assertThat(actualExitRadius).isGreaterThanOrEqualTo(designExitRadius * 0.95);
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("computed A/A* is consistent between coarse (n=30) and fine (n=300) meshes")
+        void areaRatioIsNIndependent() {
+            NozzleDesignParameters.Builder base = NozzleDesignParameters.builder()
+                    .throatRadius(0.05)
+                    .exitMach(3.5)
+                    .chamberPressure(7e6)
+                    .chamberTemperature(3500)
+                    .ambientPressure(101325)
+                    .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                    .wallAngleInitialDegrees(30)
+                    .lengthFraction(0.8);
+
+            double ar30  = new CharacteristicNet(base.numberOfCharLines(30).build())
+                    .generate().calculateExitAreaRatio();
+            double ar300 = new CharacteristicNet(base.numberOfCharLines(300).build())
+                    .generate().calculateExitAreaRatio();
+
+            // Both meshes must agree to within 5 %
+            assertThat(Math.abs(ar30 - ar300) / ar300).isLessThan(0.05);
         }
     }
 

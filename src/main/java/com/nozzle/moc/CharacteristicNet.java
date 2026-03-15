@@ -71,12 +71,21 @@ public class CharacteristicNet {
      *       centerline to {@link NozzleDesignParameters#wallAngleInitial()} at the wall.</li>
      *   <li><b>Net propagation</b> — each row of interior points is computed by
      *       intersecting adjacent C+ and C− characteristics via
-     *       {@link #computeInteriorPoint}.  Rows are generated until flow is
-     *       nearly axial (max {@code |θ| < 0.5°}) or the row budget is exhausted.</li>
+     *       {@link #computeInteriorPoint}.  Rows are generated until the wall
+     *       reaches the design exit radius or the row budget is exhausted.</li>
      *   <li><b>Wall points</b> — after each interior row, the outermost C+
-     *       characteristic is extended to the evolving wall contour via
-     *       {@link #computeWallPoint}.</li>
+     *       characteristic is intersected with the Rao bell wall profile via
+     *       {@link #computeWallPoint}.  The Rao contour is computed once before
+     *       the loop using {@link #buildRaoWallProfile()}.</li>
      * </ol>
+     *
+     * <p>Because the Rao bell wall is a prescribed contour (not an MOC-derived
+     * streamline), wall points are advanced by stepping through the Rao profile
+     * at a uniform Bézier-parameter cadence rather than by tracing the outermost
+     * C+ characteristic.  Flow states at wall points are assigned via the
+     * isentropic area–velocity relation so that the last wall point always reaches
+     * the design exit radius and Mach number regardless of
+     * {@link NozzleDesignParameters#numberOfCharLines()}.
      *
      * @return This instance for method chaining
      */
@@ -131,14 +140,22 @@ public class CharacteristicNet {
         }
         
         netPoints.add(initialLine);
-        wallPoints.add(initialLine.get(n));  // Last point is wall point
+        // Pre-compute the Rao bell wall profile.  Wall points are taken directly
+        // from this profile (isentropic A–V relation) so that the last wall point
+        // is guaranteed to reach the design exit radius regardless of n.
+        double[][] raoWall = buildRaoWallProfile();
+        // Seed wallPoints from the Rao profile (not the initial data-line wall point)
+        // so that the entire wall sequence uses a single consistent flow model and
+        // the Mach number increases monotonically from M≈1 at the throat to M=exitMach.
+        wallPoints.add(computeRaoWallPoint(raoWall, 0));
+        int nSeg = raoWall.length - 1;  // = 500 uniform Bézier segments
+
         // Propagate the characteristic net
         List<CharacteristicPoint> currentLine = initialLine;
-        int maxRows = 2 * n + 20;
-        
-        for (int row = 0; row < maxRows; row++) {
+
+        for (int wallIdx = 1; wallIdx <= nSeg; wallIdx++) {
             List<CharacteristicPoint> nextLine = new ArrayList<>();
-            
+
             // Compute interior points from adjacent pairs
             // Left point (lower index) is closer to centerline
             // Right point (higher index) is closer to wall
@@ -146,36 +163,33 @@ public class CharacteristicNet {
                 CharacteristicPoint left = currentLine.get(i);
                 CharacteristicPoint right = currentLine.get(i + 1);
                 CharacteristicPoint interior = computeInteriorPoint(left, right);
-                
+
                 // null only if characteristics cross (shock formation); cannot arise from
-                // the smooth expansion fan produced by the initial data line in practice,
-                // as the maxTheta early-exit terminates the loop while flow is still well-ordered.
+                // the smooth expansion fan produced by the initial data line in practice.
                 if (interior != null) {
                     nextLine.add(interior);
                 }
             }
-            
+
             // Unreachable: a valid initial data line always produces at least one
             // non-null interior point, so nextLine is never empty here.
             // if (nextLine.isEmpty()) {
             //     break;
             // }
-            
-            // Add wall point: extend C+ characteristic from last interior point
-            CharacteristicPoint lastInterior = nextLine.getLast();
-            CharacteristicPoint prevWall = wallPoints.getLast();
-            CharacteristicPoint newWall = computeWallPoint(lastInterior, prevWall);
-            
+
+            // Wall point: advance directly along the Rao profile at index wallIdx.
+            // The isentropic area-velocity relation gives the flow state so that the
+            // last wall point has M = exitMach and y = exitRadius by construction.
+            CharacteristicPoint newWall = computeRaoWallPoint(raoWall, wallIdx);
+
             nextLine.add(newWall);
             wallPoints.add(newWall);
-            
 
             netPoints.add(nextLine);
             currentLine = nextLine;
-            
-            // Termination: flow nearly axial
-            double maxTheta = currentLine.stream().mapToDouble(p -> Math.abs(p.theta())).max().orElse(0);
-            if (maxTheta < Math.toRadians(0.5)) {
+
+            // Termination: wall has reached the design exit radius
+            if (newWall.y() >= parameters.exitRadius()) {
                 break;
             }
         }
@@ -184,132 +198,48 @@ public class CharacteristicNet {
     }
     
     /**
-     * Extends the outermost C+ characteristic from an interior point to the
-     * evolving nozzle wall and returns the resulting wall-point.
+     * Creates a wall {@link CharacteristicPoint} directly from the Rao bell wall
+     * profile at Bézier index {@code idx}.
      *
-     * <p>The wall angle is assumed to decay linearly from
-     * {@link NozzleDesignParameters#wallAngleInitial()} at the throat to zero at
-     * the estimated exit ({@link #estimateExitX()}).  The C+ Riemann invariant
-     * {@code Q+ = θ − ν} is preserved along the characteristic.  An iterative
-     * predictor–corrector scheme (20 sweeps) resolves the intersection of the
-     * characteristic line with the linearly-interpolated wall segment.
+     * <p>Because the Rao bell wall is a prescribed contour rather than a computed
+     * streamline, the wall position ({@code x}, {@code y}) and wall angle
+     * ({@code θ}) come directly from the profile.  The Mach number is obtained
+     * from the isentropic area–velocity relation
+     * {@code M = machFromAreaRatio((y/r_t)²)} so that the last wall point
+     * (at {@code idx = nSeg}) has {@code y = r_e} and {@code M ≈ M_exit}.
      *
-     * @param interior  Last interior characteristic point on the current row
-     *                  (the C+ characteristic originates here)
-     * @param prevWall  The preceding wall point; defines the starting segment
-     *                  of the wall for the intersection search
-     * @return The new {@link CharacteristicPoint} on the wall, or {@code null}
-     *         if the computed position is physically unreasonable (NaN, infinite,
-     *         outside the valid radial bounds, or upstream of {@code prevWall})
+     * @param raoWall Pre-computed Rao bell wall profile from
+     *                {@link #buildRaoWallProfile()}; each row is
+     *                {@code {x, radius, angle}}
+     * @param idx     Index into the profile array ({@code 1 ≤ idx ≤ raoWall.length − 1})
+     * @return The {@link CharacteristicPoint} on the Rao wall at the given index
      */
-    private CharacteristicPoint computeWallPoint(CharacteristicPoint interior, CharacteristicPoint prevWall) {
+    private CharacteristicPoint computeRaoWallPoint(double[][] raoWall, int idx) {
         GasProperties gas = parameters.gasProperties();
         double rt = parameters.throatRadius();
-        double thetaMax = parameters.wallAngleInitial();
-        
-        // Q+ is constant along C+ characteristic
-        double Qplus = interior.theta() - interior.nu();
-        
-        // Estimate wall position
-        double exitX = estimateExitX();
-        double dx = rt * 0.05;
-        
-        // C+ characteristic slope
-        double slopePlus = Math.tan(interior.theta() + interior.mu());
-        
-        // Initial estimate
-        double x = interior.x() + dx;
-        double y = interior.y() + slopePlus * dx;
-        
-        // Wall angle decreases from thetaMax to 0 over the nozzle length
-        double wallTheta = thetaMax * Math.max(0, 1 - x / exitX);
-        
-        // From C+: theta = wallTheta (flow tangent to wall)
-        // nu = theta - Qplus
-        double theta = wallTheta;
-        double nu = theta - Qplus;
-        
-        /*
-         Unreachable: nu = wallTheta - Q+; since Q+ = θ - ν and ν > θ for all supersonic
-         points, Q+ is negative, so nu = wallTheta + |Q+| >> 0.001 always.
-         if (nu < 0.001) {
-             nu = 0.001;
-             theta = Qplus + nu;
-         }
-        */
 
-        double mach = gas.machFromPrandtlMeyer(nu);
-        double mu = gas.machAngle(mach);
-        
-        // Iterate to find wall intersection
-        for (int iter = 0; iter < 20; iter++) {
-            // Average slope
-            double avgSlope = Math.tan((interior.theta() + theta) / 2 + (interior.mu() + mu) / 2);
-            
-            // Wall contour: y = prevWall.y + tan(avgWallTheta) * (x - prevWall.x)
-            // where avgWallTheta is average wall angle
-            double avgWallTheta = (prevWall.theta() + wallTheta) / 2;
-            
-            // Find x where characteristic meets wall
-            // From interior: y = interior.y + avgSlope * (x - interior.x)
-            // Wall: y = prevWall.y + tan(avgWallTheta) * (x - prevWall.x)
-            
-            double wallSlope = Math.tan(avgWallTheta);
-            double denom = avgSlope - wallSlope;
-            
-            if (Math.abs(denom) > 1e-10) {
-                x = (prevWall.y() - interior.y() + avgSlope * interior.x() - wallSlope * prevWall.x()) / denom;
-                y = interior.y() + avgSlope * (x - interior.x());
-            }
-            
-            // Update wall angle at new x
-            wallTheta = thetaMax * Math.max(0, 1 - x / exitX);
-            theta = wallTheta;
-            nu = theta - Qplus;
-            
-            /*
-             Unreachable: same invariant as above — nu = wallTheta - Q+ > 0.001.
-             if (nu < 0.001) {
-                 nu = 0.001;
-                 theta = Qplus + nu;
-             }
-            */
+        double x     = raoWall[idx][0];
+        double y     = raoWall[idx][1];
+        double theta = raoWall[idx][2];
 
-           mach = gas.machFromPrandtlMeyer(nu);
-            mu = gas.machAngle(mach);
-        }
-        
-        // Ensure expansion (y must increase for divergent nozzle)
-        if (y <= prevWall.y()) {
-            y = prevWall.y() + rt * 0.01;
-        }
-        if (x <= prevWall.x()) {
-            x = prevWall.x() + rt * 0.02;
-        }
-        
-        /*
-         Unreachable: lines 274-279 clamp y ≥ prevWall.y + rt·0.01 > 0.8·rt and x ≥ 0,
-         so the NaN/bounds condition below is permanently false after those corrections.
-         double re = parameters.exitRadius();
-         if (Double.isNaN(x) || Double.isNaN(y) || Double.isInfinite(x) || Double.isInfinite(y) ||
-                 y < parameters.throatRadius() * 0.8 || y > re * 3.0 || x < 0) {
-             return null;
-         }
-        */
+        // Isentropic Mach number from local area ratio: A/A* = (y/rt)² for axisymmetric
+        double areaRatio = axisymmetric ? (y / rt) * (y / rt) : y / rt;
+        double mach = gas.machFromAreaRatio(Math.max(1.0 + 1e-6, areaRatio));
+        double nu   = gas.prandtlMeyerFunction(mach);
+        double mu   = gas.machAngle(mach);
 
-        double T = parameters.chamberTemperature() * gas.isentropicTemperatureRatio(mach);
-        double P = parameters.chamberPressure() * gas.isentropicPressureRatio(mach);
+        double T   = parameters.chamberTemperature() * gas.isentropicTemperatureRatio(mach);
+        double P   = parameters.chamberPressure()    * gas.isentropicPressureRatio(mach);
         double rho = P / (gas.gasConstant() * T);
-        double V = mach * gas.speedOfSound(T);
+        double V   = mach * gas.speedOfSound(T);
 
         return CharacteristicPoint.create(x, y, mach, theta, nu, mu, P, T, rho, V,
                 CharacteristicPoint.PointType.WALL);
     }
     
     /**
-     * Estimates the axial position of the nozzle exit plane for use in the
-     * wall-angle linear-decay model inside {@link #computeWallPoint}.
-     * The estimate uses the 15° reference cone length scaled by the length fraction.
+     * Estimates the axial position of the nozzle exit plane.
+     * Uses the 15° reference cone length scaled by {@link NozzleDesignParameters#lengthFraction()}.
      *
      * @return Estimated exit axial position in metres
      */
@@ -318,7 +248,86 @@ public class CharacteristicNet {
         double re = parameters.exitRadius();
         return (re - rt) / Math.tan(Math.toRadians(15)) * parameters.lengthFraction();
     }
-    
+
+    /**
+     * Computes the Rao optimum exit (lip) angle using empirical correlations
+     * derived from NASA studies.  The correlation depends on the nozzle length
+     * fraction and the logarithm of the design exit area ratio.
+     *
+     * @return Rao exit angle in radians, clamped to [1°, 15°]
+     */
+    private double computeRaoExitAngle() {
+        double areaRatio = parameters.exitAreaRatio();
+        double lf = parameters.lengthFraction();
+        double ln = Math.log(areaRatio);
+        double thetaE;
+        if (lf >= 0.8) {
+            thetaE = Math.toRadians(8.0 - 0.5 * ln);
+        } else if (lf >= 0.6) {
+            thetaE = Math.toRadians(11.0 - 0.7 * ln);
+        } else {
+            thetaE = Math.toRadians(14.0 - 0.9 * ln);
+        }
+        return Math.max(Math.toRadians(1.0), Math.min(Math.toRadians(15.0), thetaE));
+    }
+
+    /**
+     * Builds the Rao bell nozzle wall profile as a quadratic Bézier curve.
+     *
+     * <p>The curve runs from {@code (0, r_t)} with slope {@code tan(θ_max)} at
+     * the throat to {@code (x_exit, r_e)} with slope {@code tan(θ_E)} at the
+     * exit, where {@code θ_E} is the Rao exit angle from
+     * {@link #computeRaoExitAngle()} and {@code x_exit} is from
+     * {@link #estimateExitX()}.  The single quadratic Bézier control point is
+     * placed at the intersection of the two endpoint tangent lines.
+     *
+     * @return Array of {@code {x, radius, angle}} triples uniformly sampled in
+     *         Bézier parameter {@code t ∈ [0, 1]}; 500 intervals
+     */
+    private double[][] buildRaoWallProfile() {
+        double rt = parameters.throatRadius();
+        double re = parameters.exitRadius();
+        double thetaMax = parameters.wallAngleInitial();
+        double thetaE = computeRaoExitAngle();
+        double exitX = estimateExitX();
+
+        // Ensure the exit angle is strictly less than the entry angle so the Bézier
+        // control point lies within the nozzle (positive x).  For degenerate inputs
+        // where thetaMax is very small, clamp thetaE to 90 % of thetaMax.
+        thetaE = Math.min(thetaE, thetaMax * 0.9);
+
+        double slope0 = Math.tan(thetaMax);
+        double slopeE = Math.tan(thetaE);
+
+        // Start the profile at x0 = rt*0.02 to match the initial-data-line wall point
+        // (initialLine.get(n).x = rt * 0.01 * (1 + 1) = rt * 0.02).  This ensures
+        // every subsequent Rao profile point has x > wallPoints.get(0).x, keeping
+        // the wall x-sequence strictly monotonically increasing.
+        double x0 = rt * 0.02;
+
+        // Quadratic Bézier control point at the intersection of the two endpoint tangents:
+        //   from (x0, rt) with slope slope0  and  from (exitX, re) with slope slopeE
+        double px1 = (re - rt + slope0 * x0 - slopeE * exitX) / (slope0 - slopeE);
+        double py1 = rt + slope0 * (px1 - x0);
+
+        int nSeg = 500;
+        double[][] profile = new double[nSeg + 1][3];
+        for (int i = 0; i <= nSeg; i++) {
+            double t = (double) i / nSeg;
+            double u = 1.0 - t;
+            double x = u * u * x0   + 2.0 * u * t * px1 + t * t * exitX;
+            double y = u * u * rt   + 2.0 * u * t * py1 + t * t * re;
+            // Bézier tangent direction
+            double dxdt = 2.0 * (u * (px1 - x0)  + t * (exitX - px1));
+            double dydt = 2.0 * (u * (py1 - rt)   + t * (re   - py1));
+            double angle = Math.atan2(dydt, dxdt);
+            profile[i][0] = x;
+            profile[i][1] = y;
+            profile[i][2] = angle;
+        }
+        return profile;
+    }
+
     /**
      * Computes the interior intersection point of a C+ characteristic from
      * {@code left} and a C− characteristic from {@code right} using the
