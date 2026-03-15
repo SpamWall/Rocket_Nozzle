@@ -7,6 +7,7 @@ import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.CharacteristicPoint;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -98,26 +99,33 @@ public class HeatTransferModel {
     /**
      * Calculates wall thermal profile along the nozzle.
      *
+     * <p>When {@code flowPoints} is non-empty a {@link KdTree} is built once in
+     * O(n log n) and each contour-point lookup runs in O(log n), replacing the
+     * previous O(n×m) linear scan.
+     *
      * @param flowPoints Flow field points for local conditions
      * @return This instance
      */
     public HeatTransferModel calculate(List<CharacteristicPoint> flowPoints) {
         wallThermalProfile.clear();
-        
+
         List<Point2D> contourPoints = contour.getContourPoints();
         if (contourPoints.isEmpty()) {
             contour.generate(100);
             contourPoints = contour.getContourPoints();
         }
-        
+
+        KdTree kdTree = (flowPoints != null && !flowPoints.isEmpty())
+                ? KdTree.build(flowPoints, 0) : null;
+
         GasProperties gas = parameters.gasProperties();
         double gamma = gas.gamma();
         double Pr = 4.0 * gamma / (9.0 * gamma - 5.0);         // Eucken relation
         double recoveryFactor = Math.pow(Pr, 1.0 / 3.0);       // turbulent boundary layer
 
         for (Point2D point : contourPoints) {
-            // Find nearest flow point
-            CharacteristicPoint nearestFlow = findNearestFlowPoint(point, flowPoints);
+            CharacteristicPoint nearestFlow = (kdTree != null)
+                    ? kdTree.nearest(point.x(), point.y()) : null;
 
             // Local conditions
             double gasTemp = nearestFlow != null ? nearestFlow.temperature()
@@ -153,35 +161,92 @@ public class HeatTransferModel {
     }
     
     /**
-     * Finds the characteristic flow point nearest to a given wall location using
-     * the minimum Euclidean distance in the (x, y) plane.
+     * 2-D k-d tree for O(log n) nearest-neighbour queries over a set of
+     * {@link CharacteristicPoint}s in the (x, y) plane.
      *
-     * @param wallPoint  Wall contour point whose local flow conditions are sought
-     * @param flowPoints Candidate flow-field points from the MOC solution; may be
-     *                   {@code null} or empty
-     * @return The nearest {@link CharacteristicPoint}, or {@code null} if
-     *         {@code flowPoints} is {@code null} or empty
+     * <p>Build cost is O(n log n); each query cost is O(log n) expected.
+     * Axis alternates between x (depth even) and y (depth odd).
      */
-    private CharacteristicPoint findNearestFlowPoint(Point2D wallPoint,
-                                                      List<CharacteristicPoint> flowPoints) {
-        if (flowPoints == null || flowPoints.isEmpty()) {
-            return null;
+    private static final class KdTree {
+
+        private final CharacteristicPoint point;
+        private final KdTree left;
+        private final KdTree right;
+        private final int axis;
+
+        private KdTree(CharacteristicPoint point, KdTree left, KdTree right, int axis) {
+            this.point = point;
+            this.left  = left;
+            this.right = right;
+            this.axis  = axis;
         }
-        
-        CharacteristicPoint nearest = null;
-        double minDist = Double.MAX_VALUE;
-        
-        for (CharacteristicPoint fp : flowPoints) {
-            double dx = fp.x() - wallPoint.x();
-            double dy = fp.y() - wallPoint.y();
-            double dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < minDist) {
-                minDist = dist;
-                nearest = fp;
+
+        /**
+         * Builds a balanced k-d tree from {@code pts} by recursively
+         * median-partitioning on alternating axes.
+         *
+         * @param pts   points to index (copied internally; original list is unchanged)
+         * @param depth current recursion depth (0 for the root)
+         * @return root node of the built tree, or {@code null} if {@code pts} is empty
+         */
+        static KdTree build(List<CharacteristicPoint> pts, int depth) {
+            if (pts.isEmpty()) return null;
+            int axis = depth % 2;
+            List<CharacteristicPoint> sorted = new ArrayList<>(pts);
+            sorted.sort(axis == 0
+                    ? Comparator.comparingDouble(CharacteristicPoint::x)
+                    : Comparator.comparingDouble(CharacteristicPoint::y));
+            int mid = sorted.size() / 2;
+            return new KdTree(
+                    sorted.get(mid),
+                    build(sorted.subList(0, mid), depth + 1),
+                    build(sorted.subList(mid + 1, sorted.size()), depth + 1),
+                    axis);
+        }
+
+        /**
+         * Returns the point in this tree closest to {@code (qx, qy)}.
+         *
+         * @param qx query x-coordinate
+         * @param qy query y-coordinate
+         * @return nearest {@link CharacteristicPoint}
+         */
+        CharacteristicPoint nearest(double qx, double qy) {
+            return search(qx, qy, this, null, Double.MAX_VALUE);
+        }
+
+        private static CharacteristicPoint search(double qx, double qy, KdTree node,
+                                                   CharacteristicPoint best, double bestDistSq) {
+            if (node == null) return best;
+
+            double dx = node.point.x() - qx;
+            double dy = node.point.y() - qy;
+            double distSq = dx * dx + dy * dy;
+            if (distSq < bestDistSq) {
+                best       = node.point;
+                bestDistSq = distSq;
             }
+
+            double axisDiff = node.axis == 0 ? qx - node.point.x() : qy - node.point.y();
+            KdTree near = axisDiff <= 0 ? node.left  : node.right;
+            KdTree far  = axisDiff <= 0 ? node.right : node.left;
+
+            best = search(qx, qy, near, best, bestDistSq);
+            bestDistSq = dist2(best, qx, qy);
+
+            if (axisDiff * axisDiff < bestDistSq) {
+                best = search(qx, qy, far, best, bestDistSq);
+            }
+
+            return best;
         }
-        
-        return nearest;
+
+        private static double dist2(CharacteristicPoint p, double qx, double qy) {
+            if (p == null) return Double.MAX_VALUE;
+            double dx = p.x() - qx;
+            double dy = p.y() - qy;
+            return dx * dx + dy * dy;
+        }
     }
     
     /**

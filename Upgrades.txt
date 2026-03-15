@@ -21,9 +21,6 @@ Here's an organized assessment of the most impactful additions, grouped by value
   ---
   Medium Impact — Code Quality & Professionalism
 
-  Spatial Indexing for Flow Point Lookup
-  findNearestFlowPoint() in HeatTransferModel does a full O(n) linear scan for every wall point. For large characteristic nets this is O(n×m). A simple k-d tree or sorted-by-x lookup would be a significant speedup.
-
   Serialization / Design Database
   There is no way to save a design to disk and reload it. Adding Jackson-based JSON serialization to NozzleDesignParameters, CharacteristicNet, and results would make the library usable as part of a persistent workflow.
 

@@ -66,6 +66,14 @@ class HeatTransferModel_UT {
                     .setCoolantProperties(250, 8000);
             assertThat(model).isNotNull();
         }
+
+        @Test
+        @DisplayName("Should set emissivity")
+        void shouldSetEmissivity() {
+            HeatTransferModel model = new HeatTransferModel(params, contour)
+                    .setEmissivity(0.5);
+            assertThat(model).isNotNull();
+        }
     }
     
     @Nested
