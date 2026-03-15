@@ -267,20 +267,21 @@ public class RaoNozzle {
         if (contourPoints.isEmpty()) {
             generate();
         }
-        
-        // Find surrounding points and interpolate
+
+        double radius = parameters.exitRadius();
+
         for (int i = 1; i < contourPoints.size(); i++) {
             Point2D prev = contourPoints.get(i - 1);
             Point2D curr = contourPoints.get(i);
-            
+
             if (x >= prev.x() && x <= curr.x()) {
                 double t = (x - prev.x()) / (curr.x() - prev.x());
-                return prev.y() + t * (curr.y() - prev.y());
+                radius = prev.y() + t * (curr.y() - prev.y());
+                break;
             }
         }
-        
-        // Return exit radius if beyond range
-        return parameters.exitRadius();
+
+        return radius;
     }
     
     /**

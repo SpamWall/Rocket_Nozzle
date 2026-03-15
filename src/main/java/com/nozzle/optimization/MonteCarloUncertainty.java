@@ -103,6 +103,35 @@ public class MonteCarloUncertainty {
     }
     
     /**
+     * Registers an uncertain parameter with a triangular distribution.
+     *
+     * @param name unique parameter name used in sensitivity output and sample maps
+     * @param min  lower bound of the triangular distribution
+     * @param mode peak (most likely) value; must satisfy {@code min ≤ mode ≤ max}
+     * @param max  upper bound of the triangular distribution
+     * @return this instance, for method chaining
+     */
+    public MonteCarloUncertainty addTriangularParameter(String name, double min, double mode, double max) {
+        uncertainParameters.put(name, new UncertainParameter(name, DistributionType.TRIANGULAR,
+                mode, 0, min, max));
+        return this;
+    }
+
+    /**
+     * Registers an uncertain parameter with a log-normal distribution.
+     *
+     * @param name   unique parameter name used in sensitivity output and sample maps
+     * @param mean   mean of the underlying normal variate (i.e., of ln(X))
+     * @param stdDev standard deviation of the underlying normal variate
+     * @return this instance, for method chaining
+     */
+    public MonteCarloUncertainty addLognormalParameter(String name, double mean, double stdDev) {
+        uncertainParameters.put(name, new UncertainParameter(name, DistributionType.LOGNORMAL,
+                mean, stdDev, 0, 0));
+        return this;
+    }
+
+    /**
      * Registers a representative set of manufacturing and propellant uncertainties
      * derived from typical rocket-engine production tolerances:
      * <ul>
@@ -237,7 +266,10 @@ public class MonteCarloUncertainty {
      *
      * @param index  zero-based sample index, stored in the returned record for traceability
      * @param sample map of parameter name to sampled value for this realization
-     * @return performance result for the sample, or {@code null} on failure
+     * @return performance result for the sample
+     * @throws RuntimeException wrapping any exception thrown during parameter construction
+     *                          or performance evaluation; caught by the {@code Future} and
+     *                          logged at the call site in {@link #run()}
      */
     private SampleResult evaluateSample(int index, Map<String, Double> sample) {
         try {
@@ -284,7 +316,7 @@ public class MonteCarloUncertainty {
             );
             
         } catch (Exception e) {
-            return null;
+            throw new RuntimeException(e);
         }
     }
     

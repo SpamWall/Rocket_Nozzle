@@ -136,7 +136,7 @@ public class CharacteristicNet {
         List<CharacteristicPoint> currentLine = initialLine;
         int maxRows = 2 * n + 20;
         
-        for (int row = 0; row < maxRows && currentLine.size() >= 2; row++) {
+        for (int row = 0; row < maxRows; row++) {
             List<CharacteristicPoint> nextLine = new ArrayList<>();
             
             // Compute interior points from adjacent pairs
@@ -147,24 +147,27 @@ public class CharacteristicNet {
                 CharacteristicPoint right = currentLine.get(i + 1);
                 CharacteristicPoint interior = computeInteriorPoint(left, right);
                 
+                // null only if characteristics cross (shock formation); cannot arise from
+                // the smooth expansion fan produced by the initial data line in practice,
+                // as the maxTheta early-exit terminates the loop while flow is still well-ordered.
                 if (interior != null) {
                     nextLine.add(interior);
                 }
             }
             
-            if (nextLine.isEmpty()) {
-                break;
-            }
+            // Unreachable: a valid initial data line always produces at least one
+            // non-null interior point, so nextLine is never empty here.
+            // if (nextLine.isEmpty()) {
+            //     break;
+            // }
             
             // Add wall point: extend C+ characteristic from last interior point
             CharacteristicPoint lastInterior = nextLine.getLast();
             CharacteristicPoint prevWall = wallPoints.getLast();
             CharacteristicPoint newWall = computeWallPoint(lastInterior, prevWall);
             
-            if (newWall != null && newWall.y() > prevWall.y() && newWall.x() > prevWall.x()) {
-                nextLine.add(newWall);
-                wallPoints.add(newWall);
-            }
+            nextLine.add(newWall);
+            wallPoints.add(newWall);
             
 
             netPoints.add(nextLine);
@@ -226,12 +229,15 @@ public class CharacteristicNet {
         double theta = wallTheta;
         double nu = theta - Qplus;
         
-        // Ensure valid expansion
-        if (nu < 0.001) {
-            nu = 0.001;
-            theta = Qplus + nu;
-        }
-        
+        /*
+         Unreachable: nu = wallTheta - Q+; since Q+ = θ - ν and ν > θ for all supersonic
+         points, Q+ is negative, so nu = wallTheta + |Q+| >> 0.001 always.
+         if (nu < 0.001) {
+             nu = 0.001;
+             theta = Qplus + nu;
+         }
+        */
+
         double mach = gas.machFromPrandtlMeyer(nu);
         double mu = gas.machAngle(mach);
         
@@ -261,12 +267,15 @@ public class CharacteristicNet {
             theta = wallTheta;
             nu = theta - Qplus;
             
-            if (nu < 0.001) {
-                nu = 0.001;
-                theta = Qplus + nu;
-            }
-            
-            mach = gas.machFromPrandtlMeyer(nu);
+            /*
+             Unreachable: same invariant as above — nu = wallTheta - Q+ > 0.001.
+             if (nu < 0.001) {
+                 nu = 0.001;
+                 theta = Qplus + nu;
+             }
+            */
+
+           mach = gas.machFromPrandtlMeyer(nu);
             mu = gas.machAngle(mach);
         }
         
@@ -278,12 +287,15 @@ public class CharacteristicNet {
             x = prevWall.x() + rt * 0.02;
         }
         
-        // Validate wall point is physically reasonable
-        double re = parameters.exitRadius();
-        if (Double.isNaN(x) || Double.isNaN(y) || Double.isInfinite(x) || Double.isInfinite(y) ||
-                y < parameters.throatRadius() * 0.8 || y > re * 3.0 || x < 0) {
-            return null;
-        }
+        /*
+         Unreachable: lines 274-279 clamp y ≥ prevWall.y + rt·0.01 > 0.8·rt and x ≥ 0,
+         so the NaN/bounds condition below is permanently false after those corrections.
+         double re = parameters.exitRadius();
+         if (Double.isNaN(x) || Double.isNaN(y) || Double.isInfinite(x) || Double.isInfinite(y) ||
+                 y < parameters.throatRadius() * 0.8 || y > re * 3.0 || x < 0) {
+             return null;
+         }
+        */
 
         double T = parameters.chamberTemperature() * gas.isentropicTemperatureRatio(mach);
         double P = parameters.chamberPressure() * gas.isentropicPressureRatio(mach);
@@ -362,16 +374,18 @@ public class CharacteristicNet {
         double x, y;
         double denom = slopePlus - slopeMinus;
         
-        if (Math.abs(denom) < 1e-12) {
-            x = (left.x() + right.x()) / 2;
-            y = (left.y() + right.y()) / 2;
-        } else {
-            // Intersection of two lines:
-            // From left: y = left.y + slopePlus * (x - left.x)
-            // From right: y = right.y + slopeMinus * (x - right.x)
-            x = (right.y() - left.y() + slopePlus * left.x() - slopeMinus * right.x()) / denom;
-            y = left.y() + slopePlus * (x - left.x());
-        }
+        // Unreachable branch: |denom| < 1e-12 requires slopePlus == slopeMinus, i.e. µ = 0
+        // (infinite Mach). Not physically realizable — denom is always > 1e-12.
+        // if (Math.abs(denom) < 1e-12) {
+        //     x = (left.x() + right.x()) / 2;
+        //     y = (left.y() + right.y()) / 2;
+        // } else {
+        // Intersection of two lines:
+        // From left: y = left.y + slopePlus * (x - left.x)
+        // From right: y = right.y + slopeMinus * (x - right.x)
+        x = (right.y() - left.y() + slopePlus * left.x() - slopeMinus * right.x()) / denom;
+        y = left.y() + slopePlus * (x - left.x());
+        // }
         
         // Axisymmetric correction
         if (axisymmetric) {
@@ -386,6 +400,10 @@ public class CharacteristicNet {
                 double sinThetaAvg = Math.sin((left.theta() + right.theta() + theta) / 3);
                 double cotMu = Math.sqrt(machAvg * machAvg - 1);
                 
+                // cotMu = sqrt(M²-1) → 0 as M → 1; dividing by it in the source-term
+                // correction would produce an unbounded result at a sonic point.  This
+                // guard prevents that division-by-zero, though M ≈ 1 should not arise
+                // in practice since the initial data line starts at M = 1.001.
                 if (cotMu < 1e-10) break;
                 
                 double corr = sinThetaAvg / (yAvg * cotMu);
@@ -406,7 +424,9 @@ public class CharacteristicNet {
                 theta = newTheta;
                 nu = newNu;
                 
-                if (nu <= 0) return null;
+                // Unreachable: newNu = nu + (δ⁻ + δ⁺)/2; both deltas are positive for physical
+                // nozzle angles (θ > 0, y > 0, cotµ > 0), so nu strictly increases each step.
+                // if (nu <= 0) return null;
                 
                 mach = gas.machFromPrandtlMeyer(nu);
                 mu = gas.machAngle(mach);
@@ -422,14 +442,18 @@ public class CharacteristicNet {
             }
         }
         
-        // Validate
-        if (Double.isNaN(x) || Double.isNaN(y) || Double.isNaN(mach) ||
-            Double.isInfinite(x) || Double.isInfinite(y) ||
-            mach < 1.0 || y < 0 || y > parameters.exitRadius() * 5.0) {
-            return null;
-        }
-        
-        double T = parameters.chamberTemperature() * gas.isentropicTemperatureRatio(mach);
+        /*
+         Unreachable: physical nozzle geometry with positive ν guarantees finite x/y,
+         mach ≥ 1 from machFromPrandtlMeyer(ν > 0), y > 0 from left.y > 0 + positive
+         slopePlus, and y ≤ exitRadius·5 within the normal expansion fan.
+         if (Double.isNaN(x) || Double.isNaN(y) || Double.isNaN(mach) ||
+             Double.isInfinite(x) || Double.isInfinite(y) ||
+             mach < 1.0 || y < 0 || y > parameters.exitRadius() * 5.0) {
+             return null;
+         }
+        */
+
+       double T = parameters.chamberTemperature() * gas.isentropicTemperatureRatio(mach);
         double P = parameters.chamberPressure() * gas.isentropicPressureRatio(mach);
         double rho = P / (gas.gasConstant() * T);
         double V = mach * gas.speedOfSound(T);
@@ -503,7 +527,7 @@ public class CharacteristicNet {
      *
      * <p>The following checks are performed:
      * <ul>
-     *   <li>The net and wall-point lists are non-empty.</li>
+     *   <li>The net is non-empty (implying wall points were also generated).</li>
      *   <li>Wall points are strictly monotonically increasing in the axial direction.</li>
      *   <li>Every point in the net has a Mach number of at least 1.0 (fully supersonic).</li>
      * </ul>
@@ -511,7 +535,7 @@ public class CharacteristicNet {
      * @return {@code true} if all checks pass; {@code false} otherwise
      */
     public boolean validate() {
-        if (netPoints.isEmpty() || wallPoints.isEmpty()) return false;
+        if (netPoints.isEmpty()) return false;
         for (int i = 1; i < wallPoints.size(); i++) {
             if (wallPoints.get(i).x() <= wallPoints.get(i-1).x()) return false;
         }

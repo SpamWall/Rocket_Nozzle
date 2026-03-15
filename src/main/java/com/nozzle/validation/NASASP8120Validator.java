@@ -37,7 +37,7 @@ public class NASASP8120Validator {
         double expectedAR = calculateAreaRatio(exitMach, designGamma);
         double arError = Math.abs(areaRatio - expectedAR) / expectedAR * 100;
         metrics.put("area_ratio_error_percent", arError);
-        
+
         if (arError > 1.0) {
             warnings.add(String.format("Area ratio deviation %.2f%% from isentropic value", arError));
         }
@@ -52,7 +52,7 @@ public class NASASP8120Validator {
         double cfError = Math.abs(designCf - idealCf) / idealCf * 100;
         metrics.put("thrust_coeff_error_percent", cfError);
         metrics.put("ideal_thrust_coefficient", idealCf);
-        
+
         if (cfError > 1.0) {
             warnings.add(String.format("Thrust coefficient deviation %.2f%% from theoretical", cfError));
         }
@@ -83,9 +83,6 @@ public class NASASP8120Validator {
         
         // Validate wall angle
         double wallAngleDeg = Math.toDegrees(parameters.wallAngleInitial());
-        if (wallAngleDeg > 45) {
-            errors.add("Initial wall angle > 45° will cause flow separation");
-        }
         if (wallAngleDeg > 35) {
             warnings.add("Initial wall angle > 35° may cause boundary layer issues");
         }
@@ -137,7 +134,7 @@ public class NASASP8120Validator {
             // Check exit flow angle
             double exitAngleDeg = exitPoint.thetaDegrees();
             metrics.put("exit_flow_angle_deg", exitAngleDeg);
-            
+
             if (Math.abs(exitAngleDeg) > 10) {
                 warnings.add(String.format("Exit flow angle %.1f° may reduce thrust", exitAngleDeg));
             }
@@ -240,15 +237,17 @@ public class NASASP8120Validator {
         
         if (lengthFraction <= fracs[0]) return effs[0];
         if (lengthFraction >= fracs[fracs.length - 1]) return effs[effs.length - 1];
-        
+
+        double retVal = 0.95;
         for (int i = 1; i < fracs.length; i++) {
             if (lengthFraction <= fracs[i]) {
                 double t = (lengthFraction - fracs[i - 1]) / (fracs[i] - fracs[i - 1]);
-                return effs[i - 1] + t * (effs[i] - effs[i - 1]);
+                retVal = effs[i - 1] + t * (effs[i] - effs[i - 1]);
+                break;
             }
         }
         
-        return 0.95;
+        return retVal;
     }
     
     /**

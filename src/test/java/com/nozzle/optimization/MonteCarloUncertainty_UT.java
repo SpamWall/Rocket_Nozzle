@@ -168,6 +168,55 @@ class MonteCarloUncertainty_UT {
     }
     
     @Nested
+    @DisplayName("Distribution Type Tests")
+    class DistributionTypeTests {
+
+        @Test
+        @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        @DisplayName("UNIFORM distribution samples fall within [min, max]")
+        void uniformSamplesAreWithinBounds() {
+            MonteCarloUncertainty mc = new MonteCarloUncertainty(params, 20, 42)
+                    .addUniformParameter("throatRadius", 0.04, 0.06)
+                    .run();
+
+            assertThat(mc.getSampleResults()).isNotEmpty();
+            for (MonteCarloUncertainty.SampleResult r : mc.getSampleResults()) {
+                assertThat(r.inputs().get("throatRadius")).isBetween(0.04, 0.06);
+            }
+        }
+
+        @Test
+        @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        @DisplayName("TRIANGULAR distribution samples fall within [min, max]")
+        void triangularSamplesAreWithinBounds() {
+            MonteCarloUncertainty mc = new MonteCarloUncertainty(params, 20, 42)
+                    .addTriangularParameter("throatRadius", 0.04, 0.05, 0.06)
+                    .run();
+
+            assertThat(mc.getSampleResults()).isNotEmpty();
+            for (MonteCarloUncertainty.SampleResult r : mc.getSampleResults()) {
+                double rt = r.inputs().get("throatRadius");
+                assertThat(rt).isBetween(0.04, 0.06);
+            }
+        }
+
+        @Test
+        @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        @DisplayName("LOGNORMAL distribution samples are strictly positive")
+        void lognormalSamplesArePositive() {
+            // mean = ln(0.05), stdDev = 0.05 → sampled value = exp(ln(0.05) + N(0,0.05)) > 0
+            MonteCarloUncertainty mc = new MonteCarloUncertainty(params, 20, 42)
+                    .addLognormalParameter("throatRadius", Math.log(0.05), 0.05)
+                    .run();
+
+            assertThat(mc.getSampleResults()).isNotEmpty();
+            for (MonteCarloUncertainty.SampleResult r : mc.getSampleResults()) {
+                assertThat(r.inputs().get("throatRadius")).isGreaterThan(0.0);
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("Reproducibility Tests")
     class ReproducibilityTests {
         

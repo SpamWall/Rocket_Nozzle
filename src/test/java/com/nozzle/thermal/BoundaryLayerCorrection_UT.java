@@ -3,6 +3,7 @@ package com.nozzle.thermal;
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.NozzleContour;
+import com.nozzle.moc.CharacteristicPoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -114,29 +115,223 @@ class BoundaryLayerCorrection_UT {
     @Nested
     @DisplayName("BoundaryLayerPoint Tests")
     class BoundaryLayerPointTests {
-        
+
         @Test
         @DisplayName("Points should have valid Reynolds numbers")
         void pointsShouldHaveValidReynoldsNumbers() {
             BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
                     .setForceTurbulent(true)
                     .calculate(List.of());
-            
+
             for (BoundaryLayerCorrection.BoundaryLayerPoint point : bl.getBoundaryLayerProfile()) {
                 assertThat(point.reynoldsNumber()).isGreaterThanOrEqualTo(0);
             }
         }
-        
+
         @Test
         @DisplayName("Shape factor should be reasonable")
         void shapeFactorShouldBeReasonable() {
             BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
                     .calculate(List.of());
-            
+
             for (BoundaryLayerCorrection.BoundaryLayerPoint point : bl.getBoundaryLayerProfile()) {
                 double H = point.shapeFactor();
                 assertThat(H).isBetween(1.0, 3.0);
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Auto-Generate Contour Tests")
+    class AutoGenerateContourTests {
+
+        @Test
+        @DisplayName("calculate() on ungenerated contour triggers auto-generate (L71 TRUE)")
+        void calculateOnUngeneratedContourAutoGenerates() {
+            // Contour not yet generated → contourPoints.isEmpty() == TRUE → generate(100) called
+            NozzleContour ungenerated = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, ungenerated)
+                    .calculate(List.of());
+
+            assertThat(bl.getBoundaryLayerProfile()).isNotEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("Laminar Boundary Layer Tests")
+    class LaminarBoundaryLayerTests {
+
+        @Test
+        @DisplayName("setForceTurbulent(false) with default Re — i=0 laminar, i>0 turbulent; covers all 4 L108 branches")
+        void forceTurbulentFalseWithDefaultTransitionProducesBothRegimes() {
+            // forceTurbulent=false: at i=0 Re=0 ≤ 5e5 → laminar (L108/113/133 FALSE)
+            //                       at i>0 Re>5e5   → turbulent (L108 TRUE via Re>transition)
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
+                    .setForceTurbulent(false)
+                    .calculate(List.of());
+
+            List<BoundaryLayerCorrection.BoundaryLayerPoint> profile = bl.getBoundaryLayerProfile();
+            assertThat(profile).isNotEmpty();
+
+            // First point (runningLength=0) must be laminar
+            assertThat(profile.getFirst().isTurbulent()).isFalse();
+            // Later points (runningLength>0, Re>5e5) must be turbulent
+            assertThat(profile.getLast().isTurbulent()).isTrue();
+        }
+
+        @Test
+        @DisplayName("All-laminar BL with very high transition Re — covers L113/L133 FALSE for all points")
+        void allLaminarBoundaryLayerCoversLaminarPaths() {
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
+                    .setForceTurbulent(false)
+                    .setTransitionReynolds(1e9)
+                    .calculate(List.of());
+
+            List<BoundaryLayerCorrection.BoundaryLayerPoint> profile = bl.getBoundaryLayerProfile();
+            assertThat(profile).isNotEmpty();
+            assertThat(profile.stream().noneMatch(BoundaryLayerCorrection.BoundaryLayerPoint::isTurbulent)).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("Flow Points Branch Tests")
+    class FlowPointsBranchTests {
+
+        /** Creates a minimal CharacteristicPoint at (x, y) with given thermo properties. */
+        private CharacteristicPoint flowPoint(double x, double y, double mach,
+                                              double pressure, double temp, double vel) {
+            return new CharacteristicPoint(x, y, mach, 0.0, 0.5, 0.3,
+                    pressure, temp, pressure / (287.05 * temp), vel,
+                    0, 0, CharacteristicPoint.PointType.WALL);
+        }
+
+        @Test
+        @DisplayName("null flowPoints (L187 null==true short-circuit) — flow stays null throughout")
+        void nullFlowPointsCoverNullShortCircuitBranch() {
+            // findNearestFlowPoint receives null → first operand TRUE → short-circuit return null
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
+                    .calculate(null);
+
+            assertThat(bl.getBoundaryLayerProfile()).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("Non-empty flowPoints (L187 FALSE) — flow != null branches (L94-99 TRUE)")
+        void nonEmptyFlowPointsCoverFlowNotNullBranches() {
+            // A single flow point close to the first contour point so flow != null
+            CharacteristicPoint fp = flowPoint(0.001, 0.051, 1.2, 6_000_000, 3200, 1100);
+
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
+                    .calculate(List.of(fp));
+
+            List<BoundaryLayerCorrection.BoundaryLayerPoint> profile = bl.getBoundaryLayerProfile();
+            assertThat(profile).isNotEmpty();
+            // The first contour point is assigned flow data → mach comes from fp
+            assertThat(profile.getFirst().mach()).isCloseTo(1.2, within(0.01));
+        }
+
+        @Test
+        @DisplayName("Two flow points — second farther from wall covers L196 FALSE (dist >= minDist)")
+        void twoFlowPointsSecondFartherCoversDistNotCloserBranch() {
+            // fp1 near the start of the contour; fp2 very far → fp1 always wins
+            CharacteristicPoint fp1 = flowPoint(0.001, 0.051, 1.2, 6_000_000, 3200, 1100);
+            CharacteristicPoint fp2 = flowPoint(10.0,  10.0,  3.0, 50_000,    1000,  800);
+
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
+                    .calculate(List.of(fp1, fp2));
+
+            // fp1 is always nearest → mach from fp1 at first contour point
+            assertThat(bl.getBoundaryLayerProfile().getFirst().mach()).isCloseTo(1.2, within(0.01));
+        }
+    }
+
+    @Nested
+    @DisplayName("Empty Profile Getter Tests")
+    class EmptyProfileGetterTests {
+
+        @Test
+        @DisplayName("getCorrectedAreaRatio() before calculate() returns design exitAreaRatio (L211 TRUE)")
+        void getCorrectedAreaRatioBeforeCalculateReturnsDesignValue() {
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour);
+            assertThat(bl.getCorrectedAreaRatio()).isCloseTo(params.exitAreaRatio(), within(1e-10));
+        }
+
+        @Test
+        @DisplayName("getThrustCoefficientLoss() before calculate() returns 0 (L228 TRUE)")
+        void getThrustCoefficientLossBeforeCalculateReturnsZero() {
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour);
+            assertThat(bl.getThrustCoefficientLoss()).isEqualTo(0.0);
+        }
+
+        @Test
+        @DisplayName("getExitDisplacementThickness() before calculate() returns 0 (L270 TRUE)")
+        void getExitDisplacementThicknessBeforeCalculateReturnsZero() {
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour);
+            assertThat(bl.getExitDisplacementThickness()).isEqualTo(0.0);
+        }
+
+        @Test
+        @DisplayName("getExitMomentumThickness() before and after calculate() (L280 TRUE+FALSE)")
+        void getExitMomentumThicknessBeforeAndAfterCalculate() {
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour);
+            // L280 TRUE: empty profile → return 0
+            assertThat(bl.getExitMomentumThickness()).isEqualTo(0.0);
+            // L280 FALSE: non-empty profile → return last point value
+            bl.calculate(List.of());
+            assertThat(bl.getExitMomentumThickness()).isGreaterThanOrEqualTo(0.0);
+        }
+    }
+
+    @Nested
+    @DisplayName("Thrust Loop Size-Mismatch Tests")
+    class ThrustLoopSizeMismatchTests {
+
+        @Test
+        @DisplayName("getThrustCoefficientLoss() with blProfile > contourPoints covers L234 b=false exit")
+        void thrustLoopExitsOnContourSizeBeforeBlProfileSize() {
+            // calculate() builds blProfile with 50 entries; then regenerate contour with fewer points
+            // → loop: i < blProfile.size()=50 TRUE but i < contourPoints.size()=5 FALSE at i=5
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
+                    .calculate(List.of());
+
+            contour.generate(5);  // shrink contour after the BL calculation
+            // Coverage goal: exercise the loop exit on the contourPoints.size() bound (b=false)
+            // The numeric result may be NaN/Infinity due to Infinity*ds at i=0 edge case; unchecked.
+            bl.getThrustCoefficientLoss();
+
+            // Verify the blProfile is unchanged (getThrustCoefficientLoss is read-only)
+            assertThat(bl.getBoundaryLayerProfile()).hasSize(50);
+        }
+    }
+
+    @Nested
+    @DisplayName("BoundaryLayerPoint toString Tests")
+    class BoundaryLayerPointToStringTests {
+
+        @Test
+        @DisplayName("toString() on turbulent point contains 'turbulent' (L333 TRUE branch)")
+        void toStringTurbulentPointContainsTurbulent() {
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
+                    .setForceTurbulent(true)
+                    .calculate(List.of());
+
+            String str = bl.getBoundaryLayerProfile().getLast().toString();
+            assertThat(str).contains("turbulent");
+            assertThat(str).startsWith("BL[");
+        }
+
+        @Test
+        @DisplayName("toString() on laminar point contains 'laminar' (L333 FALSE branch)")
+        void toStringLaminarPointContainsLaminar() {
+            // All-laminar profile: forceTurbulent=false + high transition Re
+            BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
+                    .setForceTurbulent(false)
+                    .setTransitionReynolds(1e9)
+                    .calculate(List.of());
+
+            String str = bl.getBoundaryLayerProfile().getLast().toString();
+            assertThat(str).contains("laminar");
         }
     }
 }

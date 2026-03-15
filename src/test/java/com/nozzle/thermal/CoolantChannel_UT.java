@@ -262,4 +262,132 @@ class CoolantChannel_UT {
             assertThat(channel.getHeatTransferCoeffAt(xMid)).isGreaterThan(0.0);
         }
     }
+
+    @Nested
+    @DisplayName("Auto-Generate Contour Tests")
+    class AutoGenerateContourTests {
+
+        @Test
+        @DisplayName("calculate() on ungenerated contour triggers auto-generate (L267 TRUE)")
+        void calculateOnUngeneratedContourAutoGenerates() {
+            NozzleContour ungenerated = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+
+            CoolantChannel channel = new CoolantChannel(ungenerated).calculate();
+
+            assertThat(channel.getProfile()).isNotEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("Empty Profile / Pre-calculate Getter Tests")
+    class EmptyProfileGetterTests {
+
+        @Test
+        @DisplayName("getHeatTransferCoeffAt() before calculate() returns fallback 5000 W/(m²·K) (L414 TRUE)")
+        void getHeatTransferCoeffBeforeCalculateReturnsFallback() {
+            CoolantChannel channel = new CoolantChannel(contour);
+            assertThat(channel.getHeatTransferCoeffAt(0.05)).isCloseTo(5000.0, within(1e-9));
+        }
+
+        @Test
+        @DisplayName("getCoolantTemperatureRise() before calculate() returns 0 (L430 TRUE)")
+        void getCoolantTemperatureRiseBeforeCalculateReturnsZero() {
+            CoolantChannel channel = new CoolantChannel(contour);
+            assertThat(channel.getCoolantTemperatureRise()).isEqualTo(0.0);
+        }
+
+        @Test
+        @DisplayName("getMinBoilingMargin() after hydraulics-only calculate() returns MAX_VALUE (L456 FALSE — all margins filtered)")
+        void getMinBoilingMarginWithHydraulicsOnlyReturnsMaxValue() {
+            // Hydraulics-only: all boilingMargin = 0.0 → filter(m != 0.0) always FALSE → orElse(MAX_VALUE)
+            CoolantChannel channel = new CoolantChannel(contour).calculate();
+            assertThat(channel.getMinBoilingMargin()).isEqualTo(Double.MAX_VALUE);
+        }
+    }
+
+    @Nested
+    @DisplayName("Nucleate Boiling Tests")
+    class NucleateBoilingTests {
+
+        @Test
+        @DisplayName("ChannelPoint.isNucleateBoiling() TRUE — boilingMargin < 0")
+        void isNucleateBoilingTrueWhenMarginNegative() {
+            // Directly construct a record with negative boilingMargin (coldWall > T_sat)
+            CoolantChannel.ChannelPoint boilingPt = new CoolantChannel.ChannelPoint(
+                    0.01, 0.05, 300, 8e6, 1.0, 5000, 50, 3000, 1000, 900, 600, -300.0);
+            assertThat(boilingPt.isNucleateBoiling()).isTrue();
+        }
+
+        @Test
+        @DisplayName("ChannelPoint.isNucleateBoiling() FALSE — boilingMargin >= 0")
+        void isNucleateBoilingFalseWhenMarginPositive() {
+            // Directly construct a record with positive boilingMargin (coldWall < T_sat)
+            CoolantChannel.ChannelPoint subcooledPt = new CoolantChannel.ChannelPoint(
+                    0.01, 0.05, 300, 8e6, 1.0, 5000, 50, 3000, 1000, 350, 600, 250.0);
+            assertThat(subcooledPt.isNucleateBoiling()).isFalse();
+        }
+
+        @Test
+        @DisplayName("isFullySubcooled() TRUE — hydraulics-only mode (all margins = 0.0, not boiling)")
+        void isFullySubcooledTrueWithHydraulicsOnly() {
+            // Hydraulics-only calculate(): all boilingMargin = 0.0
+            // isNucleateBoiling(0.0) = (0.0 < 0.0) = false → noneMatch → isFullySubcooled() = true
+            CoolantChannel channel = new CoolantChannel(contour).calculate();
+            assertThat(channel.isFullySubcooled()).isTrue();
+        }
+
+        @Test
+        @DisplayName("isFullySubcooled() FALSE — LH2 at very low flow: coldWall >> T_sat")
+        void isFullySubcooledFalseWithLh2NucleateBoiling() {
+            // LH2 T_sat ≈ 23 K at 2e5 Pa; any real heat flux drives coldWall >> 23 K → boiling
+            List<HeatTransferModel.WallThermalPoint> thermalProfile =
+                    new HeatTransferModel(params, contour).calculate(List.of()).getWallThermalProfile();
+
+            CoolantChannel channel = new CoolantChannel(contour)
+                    .setCoolant(CoolantChannel.CoolantProperties.LH2, 0.05, 20.0, 2e5)
+                    .calculate(thermalProfile);
+
+            assertThat(channel.isFullySubcooled()).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("Uncovered Utility Method Tests")
+    class UtilityMethodTests {
+
+        @Test
+        @DisplayName("setWallConductivity() changes wall conduction resistance")
+        void setWallConductivityAffectsColdWallTemperature() {
+            List<HeatTransferModel.WallThermalPoint> thermalProfile =
+                    new HeatTransferModel(params, contour)
+                            .calculate(List.of())
+                            .getWallThermalProfile();
+
+            // Low conductivity → more conduction resistance → higher cold-wall temperature
+            CoolantChannel lowCond = new CoolantChannel(contour)
+                    .setCoolant(CoolantChannel.CoolantProperties.RP1, 2.0, 300, 8e6)
+                    .setWallConductivity(5.0)      // low conductivity W/(m·K)
+                    .calculate(thermalProfile);
+
+            CoolantChannel highCond = new CoolantChannel(contour)
+                    .setCoolant(CoolantChannel.CoolantProperties.RP1, 2.0, 300, 8e6)
+                    .setWallConductivity(200.0)     // high conductivity W/(m·K)
+                    .calculate(thermalProfile);
+
+            double minMarginLow  = lowCond.getMinBoilingMargin();
+            double minMarginHigh = highCond.getMinBoilingMargin();
+            // Higher conductivity → lower cold-wall temp → better (larger) boiling margin
+            assertThat(minMarginHigh).isGreaterThan(minMarginLow);
+        }
+
+        @Test
+        @DisplayName("totalFlowArea() equals numberOfChannels × width × height")
+        void totalFlowAreaMatchesAnalyticalFormula() {
+            CoolantChannel channel = new CoolantChannel(contour)
+                    .setChannelGeometry(120, 0.004, 0.006, 0.001);
+
+            double expected = 120 * 0.004 * 0.006;
+            assertThat(channel.totalFlowArea()).isCloseTo(expected, within(1e-12));
+        }
+    }
 }

@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -244,6 +246,184 @@ class CharacteristicNet_UT {
         }
     }
     
+    // -----------------------------------------------------------------------
+    // Planar (2D) net — covers axisymmetric=false branch in computeInteriorPoint
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Planar Net Tests")
+    class PlanarNetTests {
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Planar net (axisymmetric=false) generates without axisymmetric source-term correction")
+        void planarNetGeneratesWithoutAxisymmetricCorrection() {
+            NozzleDesignParameters planarParams = NozzleDesignParameters.builder()
+                    .throatRadius(0.05)
+                    .exitMach(2.5)
+                    .chamberPressure(7e6)
+                    .chamberTemperature(3500)
+                    .ambientPressure(101325)
+                    .gasProperties(GasProperties.AIR)
+                    .numberOfCharLines(10)
+                    .wallAngleInitialDegrees(25)
+                    .lengthFraction(0.8)
+                    .axisymmetric(false)
+                    .build();
+
+            CharacteristicNet net = new CharacteristicNet(planarParams).generate();
+
+            assertThat(net.getNetPoints()).isNotEmpty();
+            assertThat(net.getTotalPointCount()).isGreaterThan(0);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Empty-net accessor — covers calculateExitAreaRatio() wallPoints.isEmpty() TRUE
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Empty Net Accessor Tests")
+    class EmptyNetAccessorTests {
+
+        @Test
+        @DisplayName("calculateExitAreaRatio() before generate() returns the design area ratio (L495 TRUE)")
+        void calculateExitAreaRatioBeforeGenerateReturnsDesignValue() {
+            CharacteristicNet net = new CharacteristicNet(params);
+
+            assertThat(net.calculateExitAreaRatio())
+                    .isCloseTo(params.exitAreaRatio(), within(1e-10));
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // computeInteriorPoint null return — covers L350 (nu <= 0)
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Null Return Branch Tests")
+    class NullReturnBranchTests {
+
+        @Test
+        @DisplayName("computeInteriorPoint returns null when Qminus < Qplus so nu = (Q- - Q+)/2 <= 0 (L350)")
+        void computeInteriorPointReturnsNullForNonPositiveNu() {
+            CharacteristicNet net = new CharacteristicNet(params);
+            GasProperties gas = params.gasProperties();
+            double mu = gas.machAngle(1.5);
+
+            // Q+ = theta_L - nu_L = 0.40 - 0.10 =  0.30
+            // Q- = theta_R + nu_R = 0.05 + 0.10 =  0.15
+            // nu = (Q- - Q+) / 2 = (0.15 - 0.30) / 2 = -0.075  <=  0  →  return null
+            CharacteristicPoint left = CharacteristicPoint.create(
+                    0.01, 0.03, 1.5, 0.40, 0.10, mu,
+                    5e6, 3000, 5.0, 1000, CharacteristicPoint.PointType.INITIAL);
+            CharacteristicPoint right = CharacteristicPoint.create(
+                    0.01, 0.05, 1.5, 0.05, 0.10, mu,
+                    5e6, 3000, 5.0, 1000, CharacteristicPoint.PointType.INITIAL);
+
+            assertThat(net.computeInteriorPoint(left, right)).isNull();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // validate() internal branches — non-monotonic wall (L516) and subsonic (L519)
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Validate Internal Branch Tests")
+    class ValidateInternalBranchTests {
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("validate() returns false when wall points are non-monotonic in x (L516 TRUE)")
+        void validateReturnsFalseForNonMonotonicWallX() throws Exception {
+            CharacteristicNet net = new CharacteristicNet(params).generate();
+            assertThat(net.validate()).isTrue();
+
+            Field wallField = CharacteristicNet.class.getDeclaredField("wallPoints");
+            wallField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            List<CharacteristicPoint> rawWall = (List<CharacteristicPoint>) wallField.get(net);
+
+            CharacteristicPoint last = rawWall.getLast();
+            GasProperties gas = params.gasProperties();
+            double mach = 2.0;
+            // x < last.x()  →  wallPoints.get(i).x() <= wallPoints.get(i-1).x()  →  return false
+            CharacteristicPoint nonMonotonic = CharacteristicPoint.create(
+                    last.x() - 0.01, last.y() + 0.005, mach,
+                    0.0, gas.prandtlMeyerFunction(mach), gas.machAngle(mach),
+                    1e6, 2000, 2.0, 800, CharacteristicPoint.PointType.WALL);
+            rawWall.add(nonMonotonic);
+
+            assertThat(net.validate()).isFalse();
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("validate() returns false when a subsonic point exists in netPoints (L519 TRUE)")
+        void validateReturnsFalseForSubsonicPoint() throws Exception {
+            CharacteristicNet net = new CharacteristicNet(params).generate();
+            assertThat(net.validate()).isTrue();
+
+            Field netField = CharacteristicNet.class.getDeclaredField("netPoints");
+            netField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            List<List<CharacteristicPoint>> rawNet =
+                    (List<List<CharacteristicPoint>>) netField.get(net);
+
+            // mach = 0.5 < 1.0  →  p.mach() < 1.0  →  return false
+            CharacteristicPoint subsonic = CharacteristicPoint.create(
+                    0.10, 0.04, 0.5, 0.0, 0.0, Math.PI / 2,
+                    5e6, 3000, 5.0, 150, CharacteristicPoint.PointType.INTERIOR);
+            rawNet.add(new ArrayList<>(List.of(subsonic)));
+
+            assertThat(net.validate()).isFalse();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Early-termination test — covers L176 (maxTheta < 0.5° break)
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Early Termination Tests")
+    class EarlyTerminationTests {
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("generate() breaks early when max flow angle drops below 0.5° (L176)")
+        void generateBreaksEarlyWhenFlowNearlyAxial() {
+            // wallAngleInitialDegrees = 0.3°  <  0.5°
+            // After the first propagation row the max theta in nextLine ≈ 0.3°,
+            // which satisfies maxTheta < toRadians(0.5) → break at L176 before
+            // exhausting maxRows = 2*5+20 = 30.
+            // axisymmetric=false avoids the source-term correction that could
+            // alter theta, making the early-exit arithmetic straightforward.
+            NozzleDesignParameters nearAxialParams = NozzleDesignParameters.builder()
+                    .throatRadius(0.05)
+                    .exitMach(1.5)
+                    .chamberPressure(7e6)
+                    .chamberTemperature(3500)
+                    .ambientPressure(101325)
+                    .gasProperties(GasProperties.AIR)
+                    .numberOfCharLines(5)
+                    .wallAngleInitialDegrees(0.3)
+                    .lengthFraction(0.8)
+                    .axisymmetric(false)
+                    .build();
+
+            CharacteristicNet net = new CharacteristicNet(nearAxialParams).generate();
+
+            // Should have generated at least one row but far fewer than maxRows (30)
+            assertThat(net.getNetPoints()).isNotEmpty();
+            assertThat(net.getNetPoints().size()).isLessThan(1 + 30);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Different gas properties
+    // -----------------------------------------------------------------------
+
     @Nested
     @DisplayName("Different Gas Properties Tests")
     class DifferentGasPropertiesTests {

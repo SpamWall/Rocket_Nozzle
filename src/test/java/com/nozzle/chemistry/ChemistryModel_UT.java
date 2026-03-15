@@ -381,5 +381,301 @@ class ChemistryModel_UT {
             // g0/RT should be negative for stable species at high temperature
             assertThat(g).isNegative();
         }
+
+        @Test
+        @DisplayName("Species cp uses low-temperature coefficients below 1000 K")
+        void speciesCpLowTemperature() {
+            ChemistryModel.SpeciesData h2o = new ChemistryModel.SpeciesData(
+                    "H2O", 18.015,
+                    new double[]{4.198640560e+00, -2.036434100e-03, 6.520402110e-06, -5.487970620e-09, 1.771978170e-12, -3.029372670e+04, -8.490322080e-01},
+                    new double[]{3.033992490e+00, 2.176918040e-03, -1.640725180e-07, -9.704198700e-11, 1.682009920e-14, -3.000429710e+04, 4.966770100e+00}
+            );
+            // Low-temperature branch (< 1000 K)
+            double cpLow = h2o.cp(500);
+            assertThat(cpLow).isGreaterThan(1000);
+            // Should differ from high-temperature value
+            double cpHigh = h2o.cp(2000);
+            assertThat(cpLow).isNotEqualTo(cpHigh);
+        }
+
+        @Test
+        @DisplayName("Species enthalpy uses low-temperature coefficients below 1000 K")
+        void speciesEnthalpyLowTemperature() {
+            ChemistryModel.SpeciesData h2o = new ChemistryModel.SpeciesData(
+                    "H2O", 18.015,
+                    new double[]{4.198640560e+00, -2.036434100e-03, 6.520402110e-06, -5.487970620e-09, 1.771978170e-12, -3.029372670e+04, -8.490322080e-01},
+                    new double[]{3.033992490e+00, 2.176918040e-03, -1.640725180e-07, -9.704198700e-11, 1.682009920e-14, -3.000429710e+04, 4.966770100e+00}
+            );
+            double hLow = h2o.enthalpy(500);
+            assertThat(hLow).isNotNaN();
+            assertThat(hLow).isFinite();
+            double hHigh = h2o.enthalpy(2000);
+            // Enthalpy increases with temperature for H2O (exothermic formation already in a5)
+            assertThat(hHigh).isGreaterThan(hLow);
+        }
+
+        @Test
+        @DisplayName("Species gibbsOverRT uses low-temperature coefficients below 1000 K")
+        void speciesGibbsOverRTLowTemperature() {
+            ChemistryModel.SpeciesData h2o = new ChemistryModel.SpeciesData(
+                    "H2O", 18.015,
+                    new double[]{4.198640560e+00, -2.036434100e-03, 6.520402110e-06, -5.487970620e-09, 1.771978170e-12, -3.029372670e+04, -8.490322080e-01},
+                    new double[]{3.033992490e+00, 2.176918040e-03, -1.640725180e-07, -9.704198700e-11, 1.682009920e-14, -3.000429710e+04, 4.966770100e+00}
+            );
+            double gLow = h2o.gibbsOverRT(500);
+            assertThat(gLow).isNotNaN();
+            assertThat(gLow).isFinite();
+            // H2O is stable — g0/RT is negative at 500 K too
+            assertThat(gLow).isNegative();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Mixture-ratio branch coverage
+    // -------------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Mixture Ratio Branch Coverage")
+    class MixtureBranchCoverageTests {
+
+        @Test
+        @DisplayName("setLoxRp1Composition fuel-rich branch (MR < 2.0)")
+        void loxRp1FuelRich() {
+            frozenModel.setLoxRp1Composition(1.5);
+            Map<String, Double> fractions = frozenModel.getSpeciesMassFractions();
+            assertThat(fractions).containsKey("CO");
+            double sum = fractions.values().stream().mapToDouble(Double::doubleValue).sum();
+            assertThat(sum).isCloseTo(1.0, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("setLoxRp1Composition oxidizer-rich branch (MR >= 2.8)")
+        void loxRp1OxidizerRich() {
+            frozenModel.setLoxRp1Composition(3.5);
+            Map<String, Double> fractions = frozenModel.getSpeciesMassFractions();
+            assertThat(fractions).containsKey("O2");
+            double sum = fractions.values().stream().mapToDouble(Double::doubleValue).sum();
+            assertThat(sum).isCloseTo(1.0, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("setLoxCh4Composition fuel-rich branch (MR < 3.0)")
+        void loxCh4FuelRich() {
+            ChemistryModel m = ChemistryModel.frozen(GasProperties.LOX_CH4_PRODUCTS);
+            m.setLoxCh4Composition(2.0);
+            Map<String, Double> fractions = m.getSpeciesMassFractions();
+            assertThat(fractions).containsKey("CO");
+            assertThat(fractions).containsKey("H");
+            double sum = fractions.values().stream().mapToDouble(Double::doubleValue).sum();
+            assertThat(sum).isCloseTo(1.0, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("setLoxCh4Composition oxidizer-rich branch (MR >= 4.0)")
+        void loxCh4OxidizerRich() {
+            ChemistryModel m = ChemistryModel.frozen(GasProperties.LOX_CH4_PRODUCTS);
+            m.setLoxCh4Composition(5.0);
+            Map<String, Double> fractions = m.getSpeciesMassFractions();
+            assertThat(fractions).containsKey("O2");
+            double sum = fractions.values().stream().mapToDouble(Double::doubleValue).sum();
+            assertThat(sum).isCloseTo(1.0, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("setLoxLh2Composition fuel-rich branch (MR < 5.0)")
+        void loxLh2FuelRich() {
+            equilibriumModel.setLoxLh2Composition(4.0);
+            Map<String, Double> fractions = equilibriumModel.getSpeciesMassFractions();
+            assertThat(fractions).containsKey("H2");
+            double sum = fractions.values().stream().mapToDouble(Double::doubleValue).sum();
+            assertThat(sum).isCloseTo(1.0, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("setLoxLh2Composition oxidizer-rich branch (MR >= 7.0)")
+        void loxLh2OxidizerRich() {
+            equilibriumModel.setLoxLh2Composition(8.0);
+            Map<String, Double> fractions = equilibriumModel.getSpeciesMassFractions();
+            assertThat(fractions).containsKey("O2");
+            double sum = fractions.values().stream().mapToDouble(Double::doubleValue).sum();
+            assertThat(sum).isCloseTo(1.0, within(1e-6));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Property fallback branch coverage
+    // -------------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Property Fallback Branch Coverage")
+    class PropertyFallbackTests {
+
+        @Test
+        @DisplayName("normalizeComposition sum=0 branch — empty map leaves state unchanged")
+        void normalizeCompositionEmptyMap() {
+            // setSpeciesMassFractions with an empty map → sum = 0 → FALSE branch of 'if (sum > 0)'
+            frozenModel.setSpeciesMassFractions(Map.of());
+            assertThat(frozenModel.getSpeciesMassFractions()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("calculateMolecularWeight returns base when fractions are empty")
+        void molecularWeightEmptyFractions() {
+            // No fractions set → isEmpty() TRUE → returns baseProperties.molecularWeight()
+            double mw = frozenModel.calculateMolecularWeight();
+            assertThat(mw).isEqualTo(GasProperties.LOX_RP1_PRODUCTS.molecularWeight());
+        }
+
+        @Test
+        @DisplayName("calculateCp returns base when fractions are empty")
+        void cpEmptyFractions() {
+            // No fractions set → isEmpty() TRUE → returns baseProperties.specificHeatCp()
+            double cp = frozenModel.calculateCp(3000);
+            assertThat(cp).isEqualTo(GasProperties.LOX_RP1_PRODUCTS.specificHeatCp());
+        }
+
+        @Test
+        @DisplayName("calculateMolecularWeight falls back when all species are unknown (invMW=0)")
+        void molecularWeightUnknownSpecies() {
+            // Unknown species → speciesDatabase.get() returns null → invMW stays 0
+            // → ternary FALSE branch: returns baseProperties.molecularWeight()
+            frozenModel.setSpeciesMassFractions(Map.of("XYZZY_FUEL", 1.0));
+            double mw = frozenModel.calculateMolecularWeight();
+            assertThat(mw).isEqualTo(GasProperties.LOX_RP1_PRODUCTS.molecularWeight());
+        }
+
+        @Test
+        @DisplayName("calculateCp falls back when all species are unknown (cp=0)")
+        void cpUnknownSpecies() {
+            // Unknown species → species == null → cp stays 0
+            // → ternary FALSE branch: returns baseProperties.specificHeatCp()
+            frozenModel.setSpeciesMassFractions(Map.of("XYZZY_FUEL", 1.0));
+            double cp = frozenModel.calculateCp(3000);
+            assertThat(cp).isEqualTo(GasProperties.LOX_RP1_PRODUCTS.specificHeatCp());
+        }
+
+        @Test
+        @DisplayName("getEffectiveProperties returns base for EQUILIBRIUM model with empty fractions")
+        void effectivePropertiesEquilibriumEmptyFractions() {
+            // EQUILIBRIUM + isEmpty() TRUE → returns baseProperties
+            GasProperties props = equilibriumModel.getEffectiveProperties(3000);
+            assertThat(props.gamma()).isEqualTo(GasProperties.LOX_LH2_PRODUCTS.gamma());
+        }
+
+        @Test
+        @DisplayName("getEffectiveProperties computes effective properties for EQUILIBRIUM with fractions set")
+        void effectivePropertiesEquilibriumWithFractions() {
+            // EQUILIBRIUM + non-empty fractions → full calculation path (not early-return)
+            equilibriumModel.setLoxLh2Composition(6.0);
+            GasProperties props = equilibriumModel.getEffectiveProperties(3000);
+            assertThat(props.gamma()).isBetween(1.1, 1.5);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Equilibrium solver edge-case branch coverage
+    // -------------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Equilibrium Solver Edge Cases")
+    class EquilibriumSolverEdgeCaseTests {
+
+        @Test
+        @DisplayName("FINITE_RATE model returns without modifying composition")
+        void finiteRateModelDoesNotEquilibrate() {
+            // ModelType.FINITE_RATE != EQUILIBRIUM → early return branch
+            ChemistryModel finiteRate = new ChemistryModel(
+                    ChemistryModel.ModelType.FINITE_RATE, GasProperties.LOX_LH2_PRODUCTS);
+            finiteRate.setLoxLh2Composition(6.0);
+            Map<String, Double> before = Map.copyOf(finiteRate.getSpeciesMassFractions());
+
+            finiteRate.calculateEquilibrium(3200, 7e6);
+
+            assertThat(finiteRate.getSpeciesMassFractions()).isEqualTo(before);
+        }
+
+        @Test
+        @DisplayName("Starting from pure reactants triggers Newton-step damping")
+        void startingFromPureReactantsTriggersDamping() {
+            // H2O starts at MIN_MOLES; equilibrium needs large n(H2O).
+            // First Newton step: correction = ln(n_equil/n_initial) >> 2 → damping fires
+            // (maxCorrMajor > 2.0 branch in calculateEquilibrium).
+            ChemistryModel m = ChemistryModel.equilibrium(GasProperties.LOX_LH2_PRODUCTS);
+            // Pure H2 + O2 (near stoichiometric by mass) — no H2O in initial composition
+            m.setSpeciesMassFractions(Map.of("H2", 0.111, "O2", 0.889));
+            m.calculateEquilibrium(3500, 5e6);
+
+            Map<String, Double> result = m.getSpeciesMassFractions();
+            assertThat(result).isNotEmpty();
+            // H2O must appear in products (regardless of dissociation level at 3500 K)
+            assertThat(result).containsKey("H2O");
+            double sum = result.values().stream().mapToDouble(Double::doubleValue).sum();
+            assertThat(sum).isCloseTo(1.0, within(1e-5));
+        }
+
+        @Test
+        @DisplayName("Low-temperature equilibrium exercises minor-species and trace-filter branches")
+        void lowTemperatureEquilibriumExercisesMinorAndTraceFilterBranches() {
+            // At 800 K the Newton solver may drive some trace-level active species
+            // (H, O) toward MIN_MOLES, exercising:
+            //   • the minor-species clamping path  (n[j] <= nTotal*1e-8)
+            //   • the trace-threshold filter        (massFraction <= 1e-10)
+            // The test asserts only conserved quantities so it stays valid regardless of
+            // exactly which species fall below the threshold.
+            ChemistryModel m = ChemistryModel.equilibrium(GasProperties.LOX_LH2_PRODUCTS);
+            m.setLoxLh2Composition(6.0);
+            m.calculateEquilibrium(800, 7e6);
+
+            Map<String, Double> result = m.getSpeciesMassFractions();
+            assertThat(result).isNotEmpty();
+            // H2O must dominate at this temperature
+            assertThat(result.getOrDefault("H2O", 0.0)).isGreaterThan(0.5);
+            // Mass fractions must still sum to 1 (normalizeComposition is called after filter)
+            double sum = result.values().stream().mapToDouble(Double::doubleValue).sum();
+            assertThat(sum).isCloseTo(1.0, within(1e-6));
+            // Every reported species must be above the trace threshold
+            result.values().forEach(v -> assertThat(v).isGreaterThan(1e-10));
+        }
+
+        @Test
+        @DisplayName("LOX/RP-1 fuel-rich equilibrium conserves C, H, O elements")
+        void loxRp1FuelRichEquilibriumConverges() {
+            // Exercises CO2-inactive species detection (C is present, but verifies
+            // the speciesActive path for all elements including C)
+            ChemistryModel m = ChemistryModel.equilibrium(GasProperties.LOX_RP1_PRODUCTS);
+            m.setLoxRp1Composition(1.5);  // fuel-rich
+            m.calculateEquilibrium(3000, 7e6);
+
+            Map<String, Double> result = m.getSpeciesMassFractions();
+            assertThat(result).isNotEmpty();
+            double sum = result.values().stream().mapToDouble(Double::doubleValue).sum();
+            assertThat(sum).isCloseTo(1.0, within(1e-5));
+        }
+
+        @Test
+        @DisplayName("LOX/CH4 oxidizer-rich equilibrium conserves elements")
+        void loxCh4OxidizerRichEquilibriumConverges() {
+            ChemistryModel m = ChemistryModel.equilibrium(GasProperties.LOX_CH4_PRODUCTS);
+            m.setLoxCh4Composition(5.0);  // oxidizer-rich
+            m.calculateEquilibrium(3000, 7e6);
+
+            Map<String, Double> result = m.getSpeciesMassFractions();
+            assertThat(result).isNotEmpty();
+            double sum = result.values().stream().mapToDouble(Double::doubleValue).sum();
+            assertThat(sum).isCloseTo(1.0, within(1e-5));
+        }
+
+        @Test
+        @DisplayName("LOX/LH2 oxidizer-rich equilibrium contains excess O2")
+        void loxLh2OxidizerRichEquilibriumConverges() {
+            ChemistryModel m = ChemistryModel.equilibrium(GasProperties.LOX_LH2_PRODUCTS);
+            m.setLoxLh2Composition(8.0);  // oxidizer-rich
+            m.calculateEquilibrium(3200, 7e6);
+
+            Map<String, Double> result = m.getSpeciesMassFractions();
+            assertThat(result).isNotEmpty();
+            double sum = result.values().stream().mapToDouble(Double::doubleValue).sum();
+            assertThat(sum).isCloseTo(1.0, within(1e-5));
+        }
     }
 }
