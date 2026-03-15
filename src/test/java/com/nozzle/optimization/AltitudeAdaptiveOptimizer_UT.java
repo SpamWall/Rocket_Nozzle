@@ -135,9 +135,57 @@ class AltitudeAdaptiveOptimizer_UT {
                     ))
                     .addAltitudeCondition(0, 1.0, 60)
                     .optimize();
-            
+
             List<AltitudeAdaptiveOptimizer.OptimizationResult> top3 = opt.getTopResults(3);
             assertThat(top3).hasSizeLessThanOrEqualTo(3);
+        }
+
+        @Test
+        @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        @DisplayName("Candidates with different length fractions should produce distinct objective values")
+        void distinctLengthFractionsShouldYieldDistinctObjectives() {
+            // 1 AR × 3 LF × 1 WA = 3 candidates; geometry efficiency differs across LF
+            // via the Rao exit-angle correlation so objectives must not all be equal.
+            AltitudeAdaptiveOptimizer opt = new AltitudeAdaptiveOptimizer(params,
+                    new AltitudeAdaptiveOptimizer.OptimizationConfig(
+                            new double[]{1.0},
+                            new double[]{0.7, 0.8, 0.9},
+                            new double[]{30}
+                    ))
+                    .addStandardProfile()
+                    .optimize();
+
+            List<AltitudeAdaptiveOptimizer.OptimizationResult> results = opt.getTopResults(3);
+            assertThat(results).hasSize(3);
+            long distinct = results.stream()
+                    .mapToDouble(AltitudeAdaptiveOptimizer.OptimizationResult::objectiveValue)
+                    .distinct()
+                    .count();
+            assertThat(distinct).isEqualTo(3);
+        }
+
+        @Test
+        @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        @DisplayName("Candidates with different wall angles should produce distinct objective values")
+        void distinctWallAnglesShouldYieldDistinctObjectives() {
+            // 1 AR × 1 LF × 3 WA = 3 candidates; the RMS divergence angle includes
+            // wallAngleInitial so objectives must not all be equal.
+            AltitudeAdaptiveOptimizer opt = new AltitudeAdaptiveOptimizer(params,
+                    new AltitudeAdaptiveOptimizer.OptimizationConfig(
+                            new double[]{1.0},
+                            new double[]{0.8},
+                            new double[]{25, 30, 35}
+                    ))
+                    .addStandardProfile()
+                    .optimize();
+
+            List<AltitudeAdaptiveOptimizer.OptimizationResult> results = opt.getTopResults(3);
+            assertThat(results).hasSize(3);
+            long distinct = results.stream()
+                    .mapToDouble(AltitudeAdaptiveOptimizer.OptimizationResult::objectiveValue)
+                    .distinct()
+                    .count();
+            assertThat(distinct).isEqualTo(3);
         }
     }
     

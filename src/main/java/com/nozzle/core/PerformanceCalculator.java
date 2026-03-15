@@ -170,13 +170,26 @@ public class PerformanceCalculator {
     }
 
     /**
-     * Determines the exit flow angle and computes the divergence factor
-     * {@code λ = (1 + cos α_exit) / 2}.
+     * Determines the effective divergence angle and computes the divergence factor
+     * {@code λ = (1 + cos α_eff) / 2}.
      * The angle source is selected in priority order:
      * <ol>
      *   <li>Last wall-point flow angle from the {@link com.nozzle.moc.CharacteristicNet}.</li>
      *   <li>Finite-difference slope of the last two points from the {@link com.nozzle.geometry.NozzleContour}.</li>
-     *   <li>Fallback: 30% of the initial wall angle from the design parameters.</li>
+     *   <li>Fallback: RMS of the Rao exit angle and the initial wall angle, giving the
+     *       optimizer objective sensitivity to all three design parameters
+     *       ({@link NozzleDesignParameters#lengthFraction()},
+     *        {@link NozzleDesignParameters#exitAreaRatio()}, and
+     *        {@link NozzleDesignParameters#wallAngleInitial()}):
+     *       <ul>
+     *         <li>Rao exit angle: {@code θ_E = (20 − 15·L_f) − (1.3 − L_f)·ln(AR)} degrees,
+     *             clamped to [1°, 15°], continuous in both L_f and AR.</li>
+     *         <li>Effective divergence: {@code α_eff = √(0.1·θ_max² + 0.9·θ_E²)}, where
+     *             θ_max is {@code wallAngleInitial}.  This represents the RMS angle when
+     *             approximately 10% of the nozzle's effective length operates near the
+     *             throat inflection angle and the remaining 90% near the Rao exit angle.</li>
+     *       </ul>
+     *   </li>
      * </ol>
      *
      * @return Divergence factor λ in the range (0, 1]; 1 = fully axial flow
@@ -197,8 +210,19 @@ public class PerformanceCalculator {
                 exitAngle = Math.atan((last.y() - prev.y()) / (last.x() - prev.x()));
             }
         } else {
-            // Estimate from initial wall angle
-            exitAngle = parameters.wallAngleInitial() * 0.3;
+            // Rao bell exit-angle correlation (Huzel & Huang 1992):
+            //   θ_E = (20 - 15·lf) - (1.3 - lf)·ln(AR)  [degrees]
+            // Recovers 11° - 0.7·ln(AR) at lf=0.6 and 8° - 0.5·ln(AR) at lf=0.8,
+            // and varies continuously so that both lengthFraction and exitMach matter.
+            double ar        = parameters.exitAreaRatio();
+            double lf        = parameters.lengthFraction();
+            double lnAr      = Math.log(ar);
+            double thetaEDeg = (20.0 - 15.0 * lf) - (1.3 - lf) * lnAr;
+            double thetaE    = Math.toRadians(Math.max(1.0, Math.min(15.0, thetaEDeg)));
+            // RMS effective angle: throat inflection region (~10% of effective nozzle
+            // length) operates near wallAngleInitial; the downstream bell (~90%) near θ_E.
+            double wallAngle = parameters.wallAngleInitial();
+            exitAngle = Math.sqrt(0.1 * wallAngle * wallAngle + 0.9 * thetaE * thetaE);
         }
 
         // Divergence factor (lambda)

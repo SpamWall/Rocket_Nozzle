@@ -70,7 +70,7 @@ public class Main {
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
-           System.out.printf("  Output files saved to: %s%n", outputDir.toAbsolutePath());
+            System.out.printf("  Output files saved to: %s%n", outputDir.toAbsolutePath());
             System.out.println("=".repeat(70));
 
         } catch (Exception e) {

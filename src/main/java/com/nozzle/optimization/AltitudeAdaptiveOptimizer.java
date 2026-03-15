@@ -1,6 +1,7 @@
 package com.nozzle.optimization;
 
 import com.nozzle.core.NozzleDesignParameters;
+import com.nozzle.core.PerformanceCalculator;
 import com.nozzle.core.ShockExpansionModel;
 
 import java.util.ArrayList;
@@ -162,9 +163,11 @@ public class AltitudeAdaptiveOptimizer {
     /**
      * Evaluates a single candidate nozzle design across all altitude conditions
      * registered in {@link #altitudeProfile}.
-     * For each altitude, a {@link com.nozzle.core.ShockExpansionModel} is used to
-     * compute the off-design thrust coefficient and specific impulse, accounting
-     * for flow separation or overexpansion shock losses.
+     * Geometry-dependent losses (divergence, boundary-layer, chemistry) are computed
+     * once via {@link PerformanceCalculator} and applied as a fixed efficiency factor
+     * to the altitude-varying off-design thrust coefficient from
+     * {@link com.nozzle.core.ShockExpansionModel}, which handles flow separation and
+     * over/under-expansion shocks.
      * The mission-averaged objective is the dwell-time-and-weight-weighted mean Isp.
      *
      * @param candidate The nozzle design parameters to evaluate
@@ -175,7 +178,11 @@ public class AltitudeAdaptiveOptimizer {
         double totalObjective = 0;
         double totalWeight = 0;
         List<AltitudePerformance> performances = new ArrayList<>();
-        
+
+        // Geometry-dependent losses (divergence via Rao exit-angle correlation, BL, chemistry)
+        // are invariant across altitudes — compute once per candidate.
+        double geometryEfficiency = PerformanceCalculator.simple(candidate).calculate().getEfficiency();
+
         for (AltitudeCondition condition : altitudeProfile) {
             // Create modified parameters for this altitude
             NozzleDesignParameters altParams = NozzleDesignParameters.builder()
@@ -190,27 +197,27 @@ public class AltitudeAdaptiveOptimizer {
                     .lengthFraction(candidate.lengthFraction())
                     .axisymmetric(candidate.axisymmetric())
                     .build();
-            
-            // Calculate off-design performance with shock-expansion correction.
+
+            // Off-design Cf from shock-expansion model (handles separation, over/under-expansion).
             ShockExpansionModel shockModel = new ShockExpansionModel(altParams);
             ShockExpansionModel.OffDesignResult offDesign = shockModel.compute(condition.pressure());
 
-            double cf = offDesign.thrustCoefficient();
-            double performanceMetric = offDesign.specificImpulse();
+            // Apply geometry losses to the altitude-corrected Cf.
+            double cf = offDesign.thrustCoefficient() * geometryEfficiency;
+            double performanceMetric = candidate.characteristicVelocity() * cf / 9.80665;
             boolean separated = !offDesign.isFullyFlowing();
 
-            // Thrust from corrected Cf (already accounts for separation truncation).
             double thrust = cf * candidate.chamberPressure() * candidate.throatArea();
 
-           performances.add(new AltitudePerformance(condition.altitude(),
+            performances.add(new AltitudePerformance(condition.altitude(),
                     cf, performanceMetric, thrust, separated));
-            
+
             totalObjective += condition.weight() * condition.dwellTime() * performanceMetric;
             totalWeight += condition.weight() * condition.dwellTime();
         }
-        
+
         double normalizedObjective = totalWeight > 0 ? totalObjective / totalWeight : 0;
-        
+
         return new OptimizationResult(candidate, normalizedObjective, performances);
     }
     
