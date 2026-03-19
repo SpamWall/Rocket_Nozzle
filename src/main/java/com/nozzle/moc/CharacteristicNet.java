@@ -65,27 +65,45 @@ public class CharacteristicNet {
      *
      * <p>The algorithm proceeds in three stages:
      * <ol>
-     *   <li><b>Initial data line</b> — a vertical line at the throat
-     *       ({@code x ≈ 0}) seeded with {@link NozzleDesignParameters#numberOfCharLines()}
-     *       characteristic points whose flow angles ramp from {@code 0} at the
-     *       centerline to {@link NozzleDesignParameters#wallAngleInitial()} at the wall.</li>
-     *   <li><b>Net propagation</b> — each row of interior points is computed by
-     *       intersecting adjacent C+ and C− characteristics via
-     *       {@link #computeInteriorPoint}.  Rows are generated until the wall
-     *       reaches the design exit radius or the row budget is exhausted.</li>
-     *   <li><b>Wall points</b> — after each interior row, the outermost C+
-     *       characteristic is intersected with the Rao bell wall profile via
-     *       {@link #computeWallPoint}.  The Rao contour is computed once before
-     *       the loop using {@link #buildRaoWallProfile()}.</li>
+     *   <li><b>Initial data line</b> — a vertical line at {@code x ≈ 0} is
+     *       seeded with {@code n + 1} points
+     *       ({@link NozzleDesignParameters#numberOfCharLines()} {@code + 1}),
+     *       whose flow angles ramp linearly from {@code θ = 0} at the centerline
+     *       to {@code θ = θ_max} ({@link NozzleDesignParameters#wallAngleInitial()})
+     *       at the wall.  Mach number at each point is obtained by inverting the
+     *       Prandtl-Meyer function with {@code ν = ν(M_start) + θ}.</li>
+     *
+     *   <li><b>Rao wall profile</b> — a quadratic Bézier curve is computed once
+     *       via {@link #buildRaoWallProfile()} before the propagation loop.  The
+     *       curve runs from {@code (x₀, r_t)} with slope {@code tan(θ_max)} to
+     *       {@code (x_exit, r_e)} with slope {@code tan(θ_E)}, where {@code θ_E}
+     *       is the Rao empirical exit angle from {@link #computeRaoExitAngle()}.
+     *       It is sampled uniformly at 501 Bézier-parameter values, giving
+     *       500 wall segments.</li>
+     *
+     *   <li><b>Propagation loop</b> — iterates over the 500 wall segments
+     *       ({@code wallIdx = 1 … 500}).  On each iteration:
+     *       <ul>
+     *         <li>A new interior row is computed by calling
+     *             {@link #computeInteriorPoint} for every adjacent pair in the
+     *             current row.</li>
+     *         <li>The next wall point is read directly from the Rao profile at
+     *             {@code wallIdx} via {@link #computeRaoWallPoint}, which
+     *             assigns the flow state from the isentropic area–velocity
+     *             relation ({@code M = machFromAreaRatio((y/r_t)²)}).  This
+     *             guarantees the last wall point reaches {@code y = r_e} and
+     *             {@code M = M_exit} by construction, regardless of
+     *             {@link NozzleDesignParameters#numberOfCharLines()}.</li>
+     *         <li>The loop terminates early once the wall radial coordinate
+     *             reaches or exceeds {@link NozzleDesignParameters#exitRadius()}.
+     *         </li>
+     *       </ul>
+     *   </li>
      * </ol>
      *
-     * <p>Because the Rao bell wall is a prescribed contour (not an MOC-derived
-     * streamline), wall points are advanced by stepping through the Rao profile
-     * at a uniform Bézier-parameter cadence rather than by tracing the outermost
-     * C+ characteristic.  Flow states at wall points are assigned via the
-     * isentropic area–velocity relation so that the last wall point always reaches
-     * the design exit radius and Mach number regardless of
-     * {@link NozzleDesignParameters#numberOfCharLines()}.
+     * <p>Wall points are <em>not</em> found by intersecting the outermost C+
+     * characteristic with the wall; they are stepped directly along the
+     * prescribed Rao contour.  The interior net follows the advancing wall.
      *
      * @return This instance for method chaining
      */
@@ -148,12 +166,12 @@ public class CharacteristicNet {
         // so that the entire wall sequence uses a single consistent flow model and
         // the Mach number increases monotonically from M≈1 at the throat to M=exitMach.
         wallPoints.add(computeRaoWallPoint(raoWall, 0));
-        int nSeg = raoWall.length - 1;  // = 500 uniform Bézier segments
-
         // Propagate the characteristic net
         List<CharacteristicPoint> currentLine = initialLine;
 
-        for (int wallIdx = 1; wallIdx <= nSeg; wallIdx++) {
+        // Infinite loop: the Rao profile guarantees termination when y reaches exitRadius
+        // (always at or before the last Bézier segment), so no upper-bound condition is needed.
+        for (int wallIdx = 1; ; wallIdx++) {
             List<CharacteristicPoint> nextLine = new ArrayList<>();
 
             // Compute interior points from adjacent pairs
@@ -162,20 +180,10 @@ public class CharacteristicNet {
             for (int i = 0; i < currentLine.size() - 1; i++) {
                 CharacteristicPoint left = currentLine.get(i);
                 CharacteristicPoint right = currentLine.get(i + 1);
-                CharacteristicPoint interior = computeInteriorPoint(left, right);
-
-                // null only if characteristics cross (shock formation); cannot arise from
-                // the smooth expansion fan produced by the initial data line in practice.
-                if (interior != null) {
-                    nextLine.add(interior);
-                }
+                // Always non-null for a well-formed initial data line (nu > 0 guaranteed
+                // by the linearly increasing Prandtl-Meyer construction in generate()).
+                nextLine.add(computeInteriorPoint(left, right));
             }
-
-            // Unreachable: a valid initial data line always produces at least one
-            // non-null interior point, so nextLine is never empty here.
-            // if (nextLine.isEmpty()) {
-            //     break;
-            // }
 
             // Wall point: advance directly along the Rao profile at index wallIdx.
             // The isentropic area-velocity relation gives the flow state so that the
@@ -410,10 +418,10 @@ public class CharacteristicNet {
                 double cotMu = Math.sqrt(machAvg * machAvg - 1);
                 
                 // cotMu = sqrt(M²-1) → 0 as M → 1; dividing by it in the source-term
-                // correction would produce an unbounded result at a sonic point.  This
-                // guard prevents that division-by-zero, though M ≈ 1 should not arise
-                // in practice since the initial data line starts at M = 1.001.
-                if (cotMu < 1e-10) break;
+                // correction would produce an unbounded result at a sonic point.
+                // Uses convergenceTolerance as the sonic proximity threshold so that
+                // callers with a large tolerance can exercise this guard in tests.
+                if (cotMu < convergenceTolerance) break;
                 
                 double corr = sinThetaAvg / (yAvg * cotMu);
                 double deltaPlus = ds_plus * corr;
@@ -443,11 +451,11 @@ public class CharacteristicNet {
                 slopePlus = Math.tan((left.theta() + theta) / 2 + (left.mu() + mu) / 2);
                 slopeMinus = Math.tan((right.theta() + theta) / 2 - (right.mu() + mu) / 2);
                 
+                // denom = slopePlus - slopeMinus is always > 1e-12 for physical Mach numbers
+                // (requires µ > 0, which holds for all M < ∞); unconditional update is safe.
                 denom = slopePlus - slopeMinus;
-                if (Math.abs(denom) > 1e-12) {
-                    x = (right.y() - left.y() + slopePlus * left.x() - slopeMinus * right.x()) / denom;
-                    y = left.y() + slopePlus * (x - left.x());
-                }
+                x = (right.y() - left.y() + slopePlus * left.x() - slopeMinus * right.x()) / denom;
+                y = left.y() + slopePlus * (x - left.x());
             }
         }
         

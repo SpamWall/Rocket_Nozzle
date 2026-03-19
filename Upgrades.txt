@@ -3,10 +3,7 @@ Continue to write all code using the jakarta coding guidelines and accepted obje
 Here's an organized assessment of the most impactful additions, grouped by value:
 
   ---
-  High Impact — Physics Completeness
-
-  Plug / Aerospike Nozzle
-  A fundamentally different architecture with natural altitude compensation. Would significantly extend the scope of what the library can design and compare.
+  High Impact
 
   ---
   High Impact — Missing Analysis Capabilities

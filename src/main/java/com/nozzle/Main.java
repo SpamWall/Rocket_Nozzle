@@ -8,6 +8,8 @@ import com.nozzle.core.PerformanceCalculator;
 import com.nozzle.core.ShockExpansionModel;
 import com.nozzle.export.*;
 import com.nozzle.geometry.NozzleContour;
+import com.nozzle.moc.AerospikeNozzle;
+import com.nozzle.moc.AltitudePerformance;
 import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.RaoNozzle;
 import com.nozzle.optimization.AltitudeAdaptiveOptimizer;
@@ -38,6 +40,9 @@ import java.util.List;
  * - Shock-expansion off-design analysis
  * - OpenFOAM case export (rhoCentralFoam, axisymmetric wedge)
  * - Thermal stress and fatigue life analysis (Timoshenko, Basquin, Coffin-Manson)
+ * - Aerospike (plug) nozzle design via MOC kernel-flow algorithm
+ * - Altitude compensation comparison: aerospike vs. bell nozzle
+ * - Aerospike export: CSV spike contour, altitude performance, DXF, STEP, STL, CFD mesh
  */
 public class Main {
 
@@ -67,6 +72,7 @@ public class Main {
             demonstrateFlowSeparationAndShockExpansion();
             demonstrateThermalStressAnalysis(outputDir);
             demonstrateExports(outputDir);
+            demonstrateAerospikeNozzle(outputDir);
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -710,5 +716,142 @@ public class Main {
                         "0/p", "0/T", "0/U", "0/k", "0/omega"));
 
         System.out.println("\nAll export files saved to: " + outputDir.toAbsolutePath());
+    }
+
+    /**
+     * Demonstrates the aerospike (plug) nozzle: design, geometry, performance, altitude
+     * compensation, and all six new export formats.
+     */
+    private static void demonstrateAerospikeNozzle(Path outputDir) throws Exception {
+        System.out.println("\n--- AEROSPIKE (PLUG) NOZZLE ---\n");
+
+        NozzleDesignParameters params = NozzleDesignParameters.builder()
+                .throatRadius(0.05)          // 50 mm outer throat radius
+                .exitMach(3.0)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500)
+                .ambientPressure(101325)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(30)
+                .lengthFraction(0.8)
+                .axisymmetric(true)
+                .build();
+
+        // ---- 1. Generate spike contour ----
+        System.out.println("Generating aerospike nozzle (60% spike radius ratio, 80% truncation)...");
+        long t0 = System.currentTimeMillis();
+        AerospikeNozzle nozzle = new AerospikeNozzle(params, 0.60, 0.80, 100).generate();
+        System.out.printf("  Completed in %d ms%n", System.currentTimeMillis() - t0);
+
+        // ---- 2. Spike geometry ----
+        double rt  = params.throatRadius();
+        double ri  = rt * nozzle.getSpikeRadiusRatio();
+        System.out.println("\nSpike Geometry:");
+        System.out.printf("  Outer throat radius (rt):     %.1f mm%n",  rt  * 1000);
+        System.out.printf("  Inner throat radius (ri):     %.1f mm%n",  ri  * 1000);
+        System.out.printf("  Spike radius ratio (ri/rt):   %.2f%n",     nozzle.getSpikeRadiusRatio());
+        System.out.printf("  Truncation fraction:          %.2f%n",     nozzle.getTruncationFraction());
+        System.out.printf("  Full spike length:            %.4f m%n",   nozzle.getFullSpikeLength());
+        System.out.printf("  Truncated spike length:       %.4f m%n",   nozzle.getTruncatedLength());
+        System.out.printf("  Truncated base radius:        %.2f mm%n",  nozzle.getTruncatedBaseRadius() * 1000);
+        System.out.printf("  Spike contour points (full):  %d%n",       nozzle.getFullSpikeContour().size());
+        System.out.printf("  Spike contour points (trunc): %d%n",       nozzle.getTruncatedSpikeContour().size());
+
+        // ---- 3. Annular area calculations ----
+        System.out.println("\nAnnular Flow Areas:");
+        System.out.printf("  Throat area (At):   %.4f cm²%n", nozzle.getAnnularThroatArea() * 1e4);
+        System.out.printf("  Exit area   (Ae):   %.4f cm²%n", nozzle.getAnnularExitArea()   * 1e4);
+        System.out.printf("  Ae/At ratio:        %.3f  (design: %.3f)%n",
+                nozzle.getAnnularExitArea() / nozzle.getAnnularThroatArea(),
+                params.exitAreaRatio());
+
+        // ---- 4. Thrust coefficient vs. bell nozzle ----
+        System.out.println("\nThrust Coefficient Comparison (Aerospike vs. Bell Nozzle):");
+        System.out.printf("  %-18s  %-10s  %-10s  %-10s%n",
+                "Condition", "Aerospike", "Bell", "Advantage");
+        System.out.println("  " + "-".repeat(54));
+        double[][] conditions = {
+            {101325,  0},   // sea level
+            { 50000,  5},   // ~5 km
+            { 20000, 12},   // ~12 km
+            {  5000, 20},   // ~20 km
+            {  1000, 32},   // ~32 km
+        };
+        for (double[] c : conditions) {
+            double pa  = c[0];
+            double alt = c[1];
+            double cfA = nozzle.calculateThrustCoefficient(pa);
+            double cfB = nozzle.calculateBellNozzleThrustCoefficient(pa);
+            System.out.printf("  pa=%.0f Pa (~%.0f km)  %.4f     %.4f     %+.4f%n",
+                    pa, alt, cfA, cfB, cfA - cfB);
+        }
+
+        // ---- 5. Altitude performance sweep ----
+        double[] altitudePressures = {101325, 70000, 50000, 30000, 20000, 10000, 5000, 2000, 1000};
+        AltitudePerformance perf = nozzle.calculateAltitudePerformance(altitudePressures);
+
+        System.out.println("\nAltitude Performance Sweep:");
+        System.out.printf("  %-14s  %-10s  %-10s  %-12s%n",
+                "pa (Pa)", "Aero Cf", "Bell Cf", "Aero Isp (s)");
+        System.out.println("  " + "-".repeat(50));
+        for (int i = 0; i < altitudePressures.length; i++) {
+            System.out.printf("  %-14.0f  %-10.4f  %-10.4f  %-12.1f%n",
+                    perf.ambientPressures()[i],
+                    perf.aerospikeCf()[i],
+                    perf.bellNozzleCf()[i],
+                    perf.aerospikeIsp()[i]);
+        }
+
+        int iMaxAdv = perf.indexOfMaxAltitudeAdvantage();
+        System.out.printf("%n  Max altitude advantage at pa=%.0f Pa: +%.4f Cf%n",
+                perf.ambientPressures()[iMaxAdv],
+                perf.aerospikeCf()[iMaxAdv] - perf.bellNozzleCf()[iMaxAdv]);
+        System.out.printf("  Average advantage over sweep:         +%.4f Cf%n",
+                perf.averageAltitudeAdvantage());
+
+        // ---- 6. Isp at sea level ----
+        System.out.printf("%n  Isp at sea level:  %.1f s%n", nozzle.calculateIsp(101325));
+        System.out.printf("  Isp at ~vacuum:    %.1f s%n",   nozzle.calculateIsp(1000));
+
+        // ---- 7. Exports ----
+        System.out.println("\nAerospike Exports:");
+        Path aeroDir = outputDir.resolve("aerospike");
+
+        // CSV
+        CSVExporter csv = new CSVExporter();
+        csv.exportSpikeContour(nozzle, aeroDir.resolve("spike_contour.csv"));
+        csv.exportAltitudePerformance(perf, aeroDir.resolve("altitude_performance.csv"));
+        csv.exportAerospikeReport(nozzle, altitudePressures, aeroDir.resolve("report"));
+        System.out.println("  CSV: spike_contour.csv, altitude_performance.csv, report/");
+
+        // DXF
+        new DXFExporter().setScaleFactor(1000)
+                .exportAerospikeContour(nozzle, aeroDir.resolve("aerospike.dxf"));
+        System.out.println("  DXF: aerospike.dxf  (layers: SPIKE, COWL, AXIS)");
+
+        // STEP
+        new STEPExporter().exportAerospikeRevolvedSolid(nozzle, aeroDir.resolve("aerospike.step"));
+        System.out.println("  STEP: aerospike.step  (truncated spike, revolved solid)");
+
+        // STL
+        STLExporter stl = new STLExporter().setCircumferentialSegments(72).setBinaryFormat(true);
+        stl.exportAerospikeMesh(nozzle, aeroDir.resolve("aerospike.stl"));
+        System.out.printf("  STL:  aerospike.stl  (%d triangles, binary)%n",
+                stl.estimateTriangleCount(nozzle.getTruncatedSpikeContour().size()));
+
+        // CFD meshes
+        CFDMeshExporter cfd = new CFDMeshExporter().setAxialCells(100).setRadialCells(50);
+        cfd.exportAerospike(nozzle, aeroDir.resolve("aerospike_blockMeshDict"),
+                CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
+        cfd.exportAerospike(nozzle, aeroDir.resolve("aerospike.geo"),
+                CFDMeshExporter.Format.GMSH_GEO);
+        cfd.exportAerospike(nozzle, aeroDir.resolve("aerospike.xyz"),
+                CFDMeshExporter.Format.PLOT3D);
+        System.out.println("  CFD:  aerospike_blockMeshDict, aerospike.geo, aerospike.xyz");
+        System.out.printf("        (annular domain: spike inner wall → r=%.0f mm outer cowl)%n",
+                rt * 1000);
+
+        System.out.printf("%nAerospike output saved to: %s%n", aeroDir.toAbsolutePath());
     }
 }

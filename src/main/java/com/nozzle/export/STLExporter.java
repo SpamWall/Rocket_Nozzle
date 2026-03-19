@@ -2,6 +2,7 @@ package com.nozzle.export;
 
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
+import com.nozzle.moc.AerospikeNozzle;
 
 import java.io.BufferedWriter;
 import java.io.DataOutputStream;
@@ -334,6 +335,29 @@ public class STLExporter {
         }
     }
     
+    /**
+     * Exports the aerospike truncated spike surface as a revolved STL mesh.
+     *
+     * <p>The truncated spike contour is revolved around the x-axis using the same
+     * algorithm as {@link #exportMesh(NozzleContour, Path)}.  Because the spike tip
+     * may not lie on the axis, an end cap is added automatically by
+     * {@link #generateTriangles} if the tip radius exceeds 1 µm.
+     *
+     * @param nozzle   Aerospike nozzle (must have been generated)
+     * @param filePath Destination STL file path
+     * @throws IOException If the file cannot be written
+     */
+    public void exportAerospikeMesh(AerospikeNozzle nozzle, Path filePath) throws IOException {
+        // getTruncatedSpikeContour() generates lazily and always returns >= 2 points.
+        List<Point2D> spike = nozzle.getTruncatedSpikeContour();
+        List<Triangle> triangles = generateTriangles(spike);
+        if (binaryFormat) {
+            exportBinarySTL(triangles, filePath);
+        } else {
+            exportAsciiSTL(triangles, filePath);
+        }
+    }
+
     /**
      * Returns the estimated total triangle count for a revolution mesh with the
      * given number of profile points.  Includes the lateral wall triangles and

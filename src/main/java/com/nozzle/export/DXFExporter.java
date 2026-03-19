@@ -2,6 +2,7 @@ package com.nozzle.export;
 
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
+import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.CharacteristicPoint;
 
@@ -211,9 +212,46 @@ public class DXFExporter {
     private void writeLine(BufferedWriter writer, Point2D start, Point2D end, String layer)
             throws IOException {
         writer.write("0\nLINE\n8\n" + layer + "\n");
-        writer.write(String.format("10\n%.6f\n20\n%.6f\n30\n0.0\n", 
+        writer.write(String.format("10\n%.6f\n20\n%.6f\n30\n0.0\n",
                 start.x() * scaleFactor, start.y() * scaleFactor));
-        writer.write(String.format("11\n%.6f\n21\n%.6f\n31\n0.0\n", 
+        writer.write(String.format("11\n%.6f\n21\n%.6f\n31\n0.0\n",
                 end.x() * scaleFactor, end.y() * scaleFactor));
+    }
+
+    /**
+     * Exports aerospike geometry as a DXF file with three layers:
+     * <ul>
+     *   <li>{@code SPIKE} — the full ideal spike contour polyline</li>
+     *   <li>{@code COWL} — a line from the inner throat radius to the outer throat
+     *       radius at x = 0, representing the annular throat face</li>
+     *   <li>{@code AXIS} — symmetry axis from x = 0 to the spike-tip x position</li>
+     * </ul>
+     *
+     * @param nozzle   Aerospike nozzle (must have been generated)
+     * @param filePath Destination DXF file path
+     * @throws IOException If the file cannot be written
+     */
+    public void exportAerospikeContour(AerospikeNozzle nozzle, Path filePath) throws IOException {
+        // getFullSpikeContour() generates lazily, so the list is always non-empty after this call.
+        List<Point2D> spike = nozzle.getFullSpikeContour();
+
+        double rt = nozzle.getParameters().throatRadius();
+        double ri = rt * nozzle.getSpikeRadiusRatio();
+        double xTip = spike.getLast().x();
+
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writer.write(DXF_HEADER);
+
+            // Spike contour
+            writePolyline(writer, spike, "SPIKE");
+
+            // Annular throat face: inner (spike-tip at x=0) to outer (cowl lip)
+            writeLine(writer, new Point2D(0, ri), new Point2D(0, rt), "COWL");
+
+            // Symmetry axis
+            writeLine(writer, new Point2D(0, 0), new Point2D(xTip, 0), "AXIS");
+
+            writer.write(DXF_FOOTER);
+        }
     }
 }

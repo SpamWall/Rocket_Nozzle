@@ -3,6 +3,8 @@ package com.nozzle.export;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
+import com.nozzle.moc.AerospikeNozzle;
+import com.nozzle.moc.AltitudePerformance;
 import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.CharacteristicPoint;
 import com.nozzle.thermal.BoundaryLayerCorrection;
@@ -313,5 +315,81 @@ public class CSVExporter {
             throws IOException {
         writer.write(String.format("%s%s%.8g%s%s", name, DELIMITER, value, DELIMITER, unit));
         writer.write(NEWLINE);
+    }
+
+    /**
+     * Exports aerospike spike contour points to CSV.
+     *
+     * <p>Both the full ideal spike and the truncated spike are written in a single
+     * file; the {@code contour} column distinguishes them ({@code "full"} or
+     * {@code "truncated"}).
+     *
+     * @param nozzle   Aerospike nozzle (must have been generated)
+     * @param filePath Output file path
+     * @throws IOException If write fails
+     */
+    public void exportSpikeContour(AerospikeNozzle nozzle, Path filePath) throws IOException {
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writer.write("contour,x_m,y_m");
+            writer.write(NEWLINE);
+            for (Point2D p : nozzle.getFullSpikeContour()) {
+                writer.write(String.format("full%s%.8f%s%.8f", DELIMITER, p.x(), DELIMITER, p.y()));
+                writer.write(NEWLINE);
+            }
+            for (Point2D p : nozzle.getTruncatedSpikeContour()) {
+                writer.write(String.format("truncated%s%.8f%s%.8f",
+                        DELIMITER, p.x(), DELIMITER, p.y()));
+                writer.write(NEWLINE);
+            }
+        }
+    }
+
+    /**
+     * Exports altitude-performance data to CSV.
+     *
+     * @param perf     Altitude performance record
+     * @param filePath Output file path
+     * @throws IOException If write fails
+     */
+    public void exportAltitudePerformance(AltitudePerformance perf, Path filePath)
+            throws IOException {
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writer.write("ambient_pressure_Pa,aerospike_cf,bell_nozzle_cf,aerospike_isp_s");
+            writer.write(NEWLINE);
+            double[] pa   = perf.ambientPressures();
+            double[] acf  = perf.aerospikeCf();
+            double[] bcf  = perf.bellNozzleCf();
+            double[] aisp = perf.aerospikeIsp();
+            for (int i = 0; i < pa.length; i++) {
+                writer.write(String.format("%.2f%s%.6f%s%.6f%s%.4f",
+                        pa[i], DELIMITER, acf[i], DELIMITER, bcf[i], DELIMITER, aisp[i]));
+                writer.write(NEWLINE);
+            }
+        }
+    }
+
+    /**
+     * Exports a complete aerospike design report to CSV files in {@code outputDir}.
+     *
+     * <p>Creates three files:
+     * <ul>
+     *   <li>{@code aerospike_design_parameters.csv} — scalar design parameters</li>
+     *   <li>{@code aerospike_spike_contour.csv} — full and truncated spike contours</li>
+     *   <li>{@code aerospike_altitude_performance.csv} — per-altitude thrust and Isp</li>
+     * </ul>
+     *
+     * @param nozzle           Aerospike nozzle (must have been generated)
+     * @param ambientPressures Array of ambient pressures in Pa for the performance sweep
+     * @param outputDir        Output directory (created if it does not exist)
+     * @throws IOException If write fails
+     */
+    public void exportAerospikeReport(AerospikeNozzle nozzle, double[] ambientPressures,
+                                       Path outputDir) throws IOException {
+        Files.createDirectories(outputDir);
+        exportDesignParameters(nozzle.getParameters(),
+                outputDir.resolve("aerospike_design_parameters.csv"));
+        exportSpikeContour(nozzle, outputDir.resolve("aerospike_spike_contour.csv"));
+        AltitudePerformance perf = nozzle.calculateAltitudePerformance(ambientPressures);
+        exportAltitudePerformance(perf, outputDir.resolve("aerospike_altitude_performance.csv"));
     }
 }

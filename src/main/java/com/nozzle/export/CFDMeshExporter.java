@@ -2,6 +2,7 @@ package com.nozzle.export;
 
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
+import com.nozzle.moc.AerospikeNozzle;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -111,7 +112,7 @@ public class CFDMeshExporter {
             case CGNS -> exportCGNS(contour, filePath);
         }
     }
-    
+
     /**
      * Exports an OpenFOAM {@code blockMeshDict} for an axisymmetric 5° wedge mesh.
      * The mesh uses a single hex block with a spline edge along the wall profile
@@ -416,5 +417,295 @@ public class CFDMeshExporter {
     public void exportCGNS(NozzleContour contour, Path filePath) throws IOException {
         // CGNS is binary; export a simplified text version with grid coordinates
         exportPlot3D(contour, filePath);
+    }
+
+    // -------------------------------------------------------------------------
+    // Aerospike mesh export
+    // -------------------------------------------------------------------------
+
+    /**
+     * Dispatches the aerospike mesh export to the appropriate format-specific method.
+     *
+     * <p>The aerospike flow domain is annular: the inner wall follows the spike
+     * contour profile and the outer boundary is held at the cowl-lip radius
+     * {@code rt} (throat outer radius).  This gives:
+     * <ul>
+     *   <li>Inlet patch — annular face at x = 0, r ∈ [ri, rt]</li>
+     *   <li>Outlet patch — annular face at x = L_spike, r ∈ [r_spike_tip, rt]</li>
+     *   <li>Inner-wall patch — the spike surface</li>
+     *   <li>Outer-wall patch — constant r = rt (freestream or cowl)</li>
+     * </ul>
+     *
+     * @param nozzle   Aerospike nozzle (must have been generated)
+     * @param filePath Destination file path
+     * @param format   Target mesh format
+     * @throws IOException If the file cannot be written
+     */
+    public void exportAerospike(AerospikeNozzle nozzle, Path filePath, Format format)
+            throws IOException {
+        switch (format) {
+            case OPENFOAM_BLOCKMESH -> exportAerospikeOpenFOAM(nozzle, filePath);
+            case GMSH_GEO -> exportAerospikeGmsh(nozzle, filePath);
+            case PLOT3D -> exportAerospikePlot3D(nozzle, filePath);
+            case CGNS -> exportAerospikePlot3D(nozzle, filePath);
+        }
+    }
+
+    /**
+     * Exports an OpenFOAM {@code blockMeshDict} for the aerospike annular flow domain.
+     * Uses a 5° axisymmetric wedge topology with the inner wall following the spike
+     * contour and the outer wall at constant radius {@code rt}.
+     *
+     * @param nozzle   Aerospike nozzle (must have been generated)
+     * @param filePath Destination file path
+     * @throws IOException If the file cannot be written
+     */
+    private void exportAerospikeOpenFOAM(AerospikeNozzle nozzle, Path filePath)
+            throws IOException {
+        List<Point2D> spike = nozzle.getTruncatedSpikeContour();
+        double rt = nozzle.getParameters().throatRadius();
+        double L  = nozzle.getTruncatedLength();
+        double ri = nozzle.getParameters().throatRadius() * nozzle.getSpikeRadiusRatio();
+        double rTip = nozzle.getTruncatedBaseRadius();
+
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writer.write("FoamFile\n{\n");
+            writer.write("    version     2.0;\n");
+            writer.write("    format      ascii;\n");
+            writer.write("    class       dictionary;\n");
+            writer.write("    object      blockMeshDict;\n");
+            writer.write("}\n\n");
+            writer.write("convertToMeters 1.0;\n\n");
+
+            double wedge = Math.toRadians(2.5);
+
+            // Four corner vertices of the annular domain (wedge geometry)
+            // 0,1: inlet inner (spike surface at x=0, r=ri)
+            // 2,3: inlet outer (cowl lip at x=0, r=rt)
+            // 4,5: outlet inner (spike tip, r=rTip)
+            // 6,7: outlet outer (x=L, r=rt)
+            writer.write("vertices\n(\n");
+            writeWedgeVertex(writer, 0,  ri, wedge, 0);
+            writeWedgeVertex(writer, 1,  rt, wedge, 0);
+            writeWedgeVertex(writer, 2,  rTip, wedge, L);
+            writeWedgeVertex(writer, 3,  rt, wedge, L);
+            writer.write(");\n\n");
+
+            writer.write("blocks\n(\n");
+            writer.write(String.format(
+                    "    hex (0 1 3 2 0 1 3 2) (%d %d 1)\n", axialCells, radialCells));
+            writer.write("    simpleGrading (\n");
+            writer.write("        1\n");
+            writer.write(String.format(
+                    "        ((0.5 0.5 %.2f) (0.5 0.5 %.2f))\n",
+                    expansionRatio, 1.0 / expansionRatio));
+            writer.write("        1\n");
+            writer.write("    )\n");
+            writer.write(");\n\n");
+
+            // Spline edges along inner (spike) wall
+            writer.write("edges\n(\n");
+            writer.write("    spline 0 2 (\n");
+            for (int i = 1; i < spike.size() - 1; i++) {
+                Point2D p = spike.get(i);
+                writer.write(String.format("        (%.8f %.8f %.8f)\n",
+                        p.x(), p.y() * Math.cos(wedge), p.y() * Math.sin(wedge)));
+            }
+            writer.write("    )\n");
+            writer.write(");\n\n");
+
+            writer.write("boundary\n(\n");
+            writer.write("    inlet\n    {\n        type patch;\n");
+            writer.write("        faces ((0 1 1 0));\n    }\n\n");
+            writer.write("    outlet\n    {\n        type patch;\n");
+            writer.write("        faces ((2 3 3 2));\n    }\n\n");
+            writer.write("    spike\n    {\n        type wall;\n");
+            writer.write("        faces ((0 2 2 0));\n    }\n\n");
+            writer.write("    cowl\n    {\n        type wall;\n");
+            writer.write("        faces ((1 3 3 1));\n    }\n\n");
+            writer.write("    wedge0\n    {\n        type wedge;\n");
+            writer.write("        faces ((0 1 3 2));\n    }\n\n");
+            writer.write("    wedge1\n    {\n        type wedge;\n");
+            writer.write("        faces ((0 2 3 1));\n    }\n");
+            writer.write(");\n\n");
+            writer.write("mergePatchPairs\n(\n);\n");
+        }
+    }
+
+    /** Writes a pair of wedge vertices (±z) for OpenFOAM blockMeshDict. */
+    private static void writeWedgeVertex(BufferedWriter writer, int id,
+                                          double r, double wedge, double x) throws IOException {
+        double y = r * Math.cos(wedge);
+        double z = r * Math.sin(wedge);
+        writer.write(String.format("    (%.8f %.8f %.8f) // %d+\n", x, y,  z, id));
+        writer.write(String.format("    (%.8f %.8f %.8f) // %d-\n", x, y, -z, id));
+    }
+
+    /**
+     * Exports a Gmsh {@code .geo} script for the aerospike annular flow domain.
+     * Physical groups: {@code inlet}, {@code outlet}, {@code spike}, {@code cowl},
+     * {@code fluid}.
+     *
+     * @param nozzle   Aerospike nozzle (must have been generated)
+     * @param filePath Destination {@code .geo} file path
+     * @throws IOException If the file cannot be written
+     */
+    private void exportAerospikeGmsh(AerospikeNozzle nozzle, Path filePath) throws IOException {
+        List<Point2D> spike = nozzle.getTruncatedSpikeContour();
+        double rt  = nozzle.getParameters().throatRadius();
+        double L   = nozzle.getTruncatedLength();
+        double rTip = nozzle.getTruncatedBaseRadius();
+
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writer.write("// Gmsh geometry file for aerospike nozzle annular domain\n");
+            writer.write("// Generated by Nozzle MOC Design Tool\n\n");
+            writer.write(String.format("lc = %.6f;\n\n", rt / radialCells));
+
+            // Spike wall points
+            int pid = 1;
+            List<Integer> spikeIds = new ArrayList<>();
+            for (Point2D p : spike) {
+                writer.write(String.format("Point(%d) = {%.8f, %.8f, 0, lc};\n",
+                        pid, p.x(), p.y()));
+                spikeIds.add(pid++);
+            }
+
+            // Outer wall corners (x=0, rt) and (x=L, rt)
+            int pInletOuter  = pid++;
+            int pOutletOuter = pid++;
+            writer.write(String.format("Point(%d) = {%.8f, %.8f, 0, lc}; // inlet outer\n",
+                    pInletOuter,  0.0, rt));
+            writer.write(String.format("Point(%d) = {%.8f, %.8f, 0, lc}; // outlet outer\n",
+                    pOutletOuter, L,   rt));
+            writer.write("\n");
+
+            int lid = 1;
+
+            // Spike spline
+            StringBuilder spikePts = new StringBuilder();
+            for (int i = 0; i < spikeIds.size(); i++) {
+                if (i > 0) spikePts.append(", ");
+                spikePts.append(spikeIds.get(i));
+            }
+            writer.write(String.format("Spline(%d) = {%s}; // Spike\n", lid, spikePts));
+            int spikeSpline = lid++;
+
+            // Outlet (spike tip to outer)
+            writer.write(String.format("Line(%d) = {%d, %d}; // Outlet\n",
+                    lid, spikeIds.getLast(), pOutletOuter));
+            int outletLine = lid++;
+
+            // Outer cowl (outlet to inlet)
+            writer.write(String.format("Line(%d) = {%d, %d}; // Cowl\n",
+                    lid, pOutletOuter, pInletOuter));
+            int cowlLine = lid++;
+
+            // Inlet (outer to spike start)
+            writer.write(String.format("Line(%d) = {%d, %d}; // Inlet\n",
+                    lid, pInletOuter, spikeIds.getFirst()));
+            int inletLine = lid++;
+
+            writer.write("\n");
+            writer.write(String.format("Curve Loop(1) = {%d, %d, %d, %d};\n",
+                    spikeSpline, outletLine, cowlLine, inletLine));
+            writer.write("Plane Surface(1) = {1};\n\n");
+
+            writer.write("Physical Curve(\"inlet\")  = {" + inletLine   + "};\n");
+            writer.write("Physical Curve(\"outlet\") = {" + outletLine  + "};\n");
+            writer.write("Physical Curve(\"spike\")  = {" + spikeSpline + "};\n");
+            writer.write("Physical Curve(\"cowl\")   = {" + cowlLine    + "};\n");
+            writer.write("Physical Surface(\"fluid\") = {1};\n\n");
+
+            writer.write(String.format("Transfinite Curve {%d, %d} = %d Using Progression 1;\n",
+                    spikeSpline, cowlLine, axialCells + 1));
+            writer.write(String.format("Transfinite Curve {%d, %d} = %d Using Progression %.2f;\n",
+                    inletLine, outletLine, radialCells + 1, expansionRatio));
+            writer.write("Transfinite Surface {1};\n");
+            writer.write("Recombine Surface {1};\n");
+        }
+    }
+
+    /**
+     * Exports the aerospike flow domain as a 2-D structured Plot3D grid.
+     * The grid spans from the spike surface (j=0) to the outer cowl radius r=rt (j=nj-1),
+     * with a power-law radial stretching.
+     *
+     * @param nozzle   Aerospike nozzle (must have been generated)
+     * @param filePath Destination file path
+     * @throws IOException If the file cannot be written
+     */
+    private void exportAerospikePlot3D(AerospikeNozzle nozzle, Path filePath) throws IOException {
+        List<Point2D> spike = nozzle.getTruncatedSpikeContour();
+        double rt = nozzle.getParameters().throatRadius();
+        double L  = nozzle.getTruncatedLength();
+
+        int ni = axialCells + 1;
+        int nj = radialCells + 1;
+
+        double[][] x = new double[ni][nj];
+        double[][] y = new double[ni][nj];
+
+        for (int i = 0; i < ni; i++) {
+            double xi    = (double) i / (ni - 1) * L;
+            double rInner = spikeRadiusAt(spike, xi);
+            double rOuter = rt;
+
+            for (int j = 0; j < nj; j++) {
+                double eta = (double) j / (nj - 1);
+                eta = 1.0 - Math.pow(1.0 - eta, expansionRatio);
+                x[i][j] = xi;
+                y[i][j] = rInner + eta * (rOuter - rInner);
+            }
+        }
+
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writer.write("1\n");
+            writer.write(String.format("%d %d 1\n", ni, nj));
+            for (int j = 0; j < nj; j++) {
+                for (int i = 0; i < ni; i++) {
+                    writer.write(String.format("%.8e ", x[i][j]));
+                    if ((i + 1) % 5 == 0) writer.write("\n");
+                }
+            }
+            writer.write("\n");
+            for (int j = 0; j < nj; j++) {
+                for (int i = 0; i < ni; i++) {
+                    writer.write(String.format("%.8e ", y[i][j]));
+                    if ((i + 1) % 5 == 0) writer.write("\n");
+                }
+            }
+            writer.write("\n");
+            for (int j = 0; j < nj; j++) {
+                for (int i = 0; i < ni; i++) {
+                    writer.write("0.0 ");
+                    if ((i + 1) % 5 == 0) writer.write("\n");
+                }
+            }
+        }
+    }
+
+    /**
+     * Linearly interpolates the spike surface radius at axial position {@code x}.
+     * Clamps to the first/last contour radius outside the contour range.
+     *
+     * @param spike Ordered spike contour points (x monotonically increasing)
+     * @param x     Axial query position in metres
+     * @return Interpolated spike surface radius in metres
+     */
+    private static double spikeRadiusAt(List<Point2D> spike, double x) {
+        if (x <= spike.getFirst().x()) return spike.getFirst().y();
+        // Walk segments left-to-right; return as soon as x is within the segment.
+        // When x >= spike.getLast().x() the loop exhausts and falls through to the
+        // final return — equivalent to the former early-return guard, but reachable
+        // by the final grid station at xi = L in exportAerospikePlot3D.
+        for (int i = 0; i < spike.size() - 1; i++) {
+            Point2D a = spike.get(i);
+            Point2D b = spike.get(i + 1);
+            if (x < b.x()) {
+                double t = (x - a.x()) / (b.x() - a.x());
+                return a.y() + t * (b.y() - a.y());
+            }
+        }
+        return spike.getLast().y();  // x >= spike.getLast().x()
     }
 }

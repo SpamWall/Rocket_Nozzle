@@ -440,6 +440,155 @@ class CharacteristicNet_UT {
     }
 
     // -----------------------------------------------------------------------
+    // computeRaoExitAngle() length-fraction branches (L282/L284)
+    //   lf >= 0.8 TRUE  → already covered by default params (lf=0.8)
+    //   lf >= 0.8 FALSE, lf >= 0.6 TRUE  → lf=0.7
+    //   lf >= 0.8 FALSE, lf >= 0.6 FALSE → lf=0.5
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Rao Exit Angle Length-Fraction Branch Tests")
+    class RaoExitAngleBranchTests {
+
+        private NozzleDesignParameters buildWith(double lf) {
+            return NozzleDesignParameters.builder()
+                    .throatRadius(0.05)
+                    .exitMach(2.5)
+                    .chamberPressure(7e6)
+                    .chamberTemperature(3500)
+                    .ambientPressure(101325)
+                    .gasProperties(GasProperties.AIR)
+                    .numberOfCharLines(10)
+                    .wallAngleInitialDegrees(25)
+                    .lengthFraction(lf)
+                    .axisymmetric(true)
+                    .build();
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("lf=0.7 exercises else-if (lf >= 0.6) branch of computeRaoExitAngle")
+        void lengthFraction07ExercisesElseIfBranch() {
+            CharacteristicNet net = new CharacteristicNet(buildWith(0.7)).generate();
+            assertThat(net.validate()).isTrue();
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("lf=0.5 exercises else branch of computeRaoExitAngle")
+        void lengthFraction05ExercisesElseBranch() {
+            CharacteristicNet net = new CharacteristicNet(buildWith(0.5)).generate();
+            assertThat(net.validate()).isTrue();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Axisymmetric-correction iteration branches:
+    //   L419 for-loop exhausted (iter >= maxIterations)
+    //   L421 yAvg < 1e-10 early break
+    //   L434 cotMu < convergenceTolerance early break
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Axisymmetric Correction Iteration Branch Tests")
+    class AxisymmetricCorrectionBranchTests {
+
+        // Helpers – build characteristic points with known Riemann invariants.
+        // Qplus = theta_L - nu_L, Qminus = theta_R + nu_R
+        // nu_interior = (Qminus - Qplus)/2 must be > 0.
+
+        private CharacteristicPoint makePoint(double x, double y, double mach,
+                                              double theta, GasProperties gas,
+                                              CharacteristicPoint.PointType type) {
+            double nu = gas.prandtlMeyerFunction(mach);
+            double mu = gas.machAngle(mach);
+            double T = 3500 * gas.isentropicTemperatureRatio(mach);
+            double P = 7e6 * gas.isentropicPressureRatio(mach);
+            double rho = P / (gas.gasConstant() * T);
+            double V = mach * gas.speedOfSound(T);
+            return CharacteristicPoint.create(x, y, mach, theta, nu, mu, P, T, rho, V, type);
+        }
+
+        @Test
+        @DisplayName("axisymmetric iteration exhausts maxIterations when convergenceTolerance=0 (L419 loop false)")
+        void iterationExhaustsMaxIterations() {
+            // convergenceTolerance=0.0 → Math.abs(Δθ) < 0.0 is always false → convergence break never fires.
+            // cotMu = sqrt(M²-1) ≈ 1.15 for M=1.5 which is NOT < 0.0 → sonic guard never fires.
+            // With maxIter=2 the for-loop condition (iter < 2) evaluates to false at iter=2 → L419 covered.
+            CharacteristicNet net = new CharacteristicNet(params, 0.0, 2);
+            GasProperties gas = params.gasProperties();
+
+            CharacteristicPoint left  = makePoint(0.01, 0.04, 1.5, Math.toRadians(10), gas,
+                    CharacteristicPoint.PointType.INITIAL);
+            CharacteristicPoint right = makePoint(0.01, 0.05, 1.6, Math.toRadians(15), gas,
+                    CharacteristicPoint.PointType.INITIAL);
+
+            CharacteristicPoint interior = net.computeInteriorPoint(left, right);
+            assertThat(interior).isNotNull();
+            assertThat(interior.mach()).isGreaterThanOrEqualTo(1.0);
+        }
+
+        @Test
+        @DisplayName("axisymmetric iteration breaks early when yAvg < 1e-10 (L421 true)")
+        void iterationBreaksForNearZeroYAvg() {
+            // y values ≈ 1e-15 so yAvg = (y_left + y_right + y_intersection)/3 ≈ 0 < 1e-10.
+            // The loop breaks immediately; computeInteriorPoint still returns a valid point.
+            CharacteristicNet net = new CharacteristicNet(params); // axisymmetric=true
+            GasProperties gas = params.gasProperties();
+
+            double mach = 1.5;
+            double nu = gas.prandtlMeyerFunction(mach);
+            double mu = gas.machAngle(mach);
+            double T  = 3500 * gas.isentropicTemperatureRatio(mach);
+            double P  = 7e6  * gas.isentropicPressureRatio(mach);
+            double rho = P / (gas.gasConstant() * T);
+            double V   = mach * gas.speedOfSound(T);
+
+            // theta_L=0.10, nu_L=nu → Qplus = 0.10 - nu
+            // theta_R=0.15, nu_R=nu → Qminus = 0.15 + nu
+            // nu_interior = (0.15 + nu - (0.10 - nu))/2 = (0.05 + 2*nu)/2 > 0 ✓
+            CharacteristicPoint left = CharacteristicPoint.create(
+                    0.001, 1e-15, mach, 0.10, nu, mu, P, T, rho, V,
+                    CharacteristicPoint.PointType.INITIAL);
+            CharacteristicPoint right = CharacteristicPoint.create(
+                    0.001, 2e-15, mach, 0.15, nu, mu, P, T, rho, V,
+                    CharacteristicPoint.PointType.INITIAL);
+
+            CharacteristicPoint interior = net.computeInteriorPoint(left, right);
+            assertThat(interior).isNotNull();
+        }
+
+        @Test
+        @DisplayName("axisymmetric iteration breaks early when cotMu < convergenceTolerance (L434 true)")
+        void iterationBreaksForNearSonicCotMu() {
+            // convergenceTolerance=1.0 → sonic guard fires when cotMu = sqrt(M²-1) < 1.0,
+            // i.e., when machAvg < sqrt(2) ≈ 1.414.  With M=1.2, cotMu ≈ 0.663 < 1.0. ✓
+            CharacteristicNet net = new CharacteristicNet(params, 1.0, 100);
+            GasProperties gas = params.gasProperties();
+
+            double mach = 1.2;
+            double nu   = gas.prandtlMeyerFunction(mach);
+            double mu   = gas.machAngle(mach);
+            double T    = 3500 * gas.isentropicTemperatureRatio(mach);
+            double P    = 7e6  * gas.isentropicPressureRatio(mach);
+            double rho  = P / (gas.gasConstant() * T);
+            double V    = mach * gas.speedOfSound(T);
+
+            // Qplus = 0.05 - nu_L, Qminus = 0.08 + nu_R  → nu_interior = (0.08+nu+0.05-0.05+nu)/2 > 0
+            CharacteristicPoint left = CharacteristicPoint.create(
+                    0.01, 0.04, mach, 0.05, nu, mu, P, T, rho, V,
+                    CharacteristicPoint.PointType.INITIAL);
+            CharacteristicPoint right = CharacteristicPoint.create(
+                    0.01, 0.05, mach, 0.08, nu, mu, P, T, rho, V,
+                    CharacteristicPoint.PointType.INITIAL);
+
+            CharacteristicPoint interior = net.computeInteriorPoint(left, right);
+            assertThat(interior).isNotNull();
+            assertThat(interior.mach()).isGreaterThanOrEqualTo(1.0);
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Different gas properties
     // -----------------------------------------------------------------------
 

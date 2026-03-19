@@ -2,6 +2,7 @@ package com.nozzle.export;
 
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
+import com.nozzle.moc.AerospikeNozzle;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -231,6 +232,28 @@ public class STEPExporter {
         writer.write("END-ISO-10303-21;\n");
     }
     
+    /**
+     * Exports the aerospike truncated spike contour as a revolved STEP solid.
+     *
+     * <p>The spike contour (inner wall of the annular flow path) is revolved 360°
+     * around the x-axis using the same SURFACE_OF_REVOLUTION encoding as
+     * {@link #exportRevolvedSolid(NozzleContour, Path)}.
+     *
+     * @param nozzle   Aerospike nozzle (must have been generated)
+     * @param filePath Destination STEP file path
+     * @throws IOException If the file cannot be written
+     */
+    public void exportAerospikeRevolvedSolid(AerospikeNozzle nozzle, Path filePath)
+            throws IOException {
+        // getTruncatedSpikeContour() generates lazily, so the list is always non-empty after this call.
+        List<Point2D> spike = nozzle.getTruncatedSpikeContour();
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writeHeader(writer);
+            writeData(writer, spike);
+            writeFooter(writer);
+        }
+    }
+
     /**
      * Exports a simplified STEP file with just the profile curve.
      *
