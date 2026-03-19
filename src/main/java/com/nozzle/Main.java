@@ -817,6 +817,7 @@ public class Main {
         // ---- 7. Exports ----
         System.out.println("\nAerospike Exports:");
         Path aeroDir = outputDir.resolve("aerospike");
+        Files.createDirectories(aeroDir);
 
         // CSV
         CSVExporter csv = new CSVExporter();
