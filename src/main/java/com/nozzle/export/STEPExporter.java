@@ -53,7 +53,7 @@ public class STEPExporter {
     }
 
     /**
-     * Sets the organisation name recorded in the STEP file header.
+     * Sets the organization name recorded in the STEP file header.
      *
      * @param org Organisation name string
      * @return This instance for method chaining
@@ -85,7 +85,7 @@ public class STEPExporter {
     
     /**
      * Writes the ISO-10303-21 HEADER section including FILE_DESCRIPTION,
-     * FILE_NAME (with current ISO timestamp, author, and organisation), and
+     * FILE_NAME (with current ISO timestamp, author, and organization), and
      * FILE_SCHEMA.
      *
      * @param writer Output writer (must be open)
@@ -233,7 +233,7 @@ public class STEPExporter {
     }
     
     /**
-     * Exports the aerospike truncated spike contour as a revolved STEP solid.
+     * Exports the Aerospike truncated spike contour as a revolved STEP solid.
      *
      * <p>The spike contour (inner wall of the annular flow path) is revolved 360°
      * around the x-axis using the same SURFACE_OF_REVOLUTION encoding as

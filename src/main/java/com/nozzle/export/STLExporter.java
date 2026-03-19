@@ -336,7 +336,7 @@ public class STLExporter {
     }
     
     /**
-     * Exports the aerospike truncated spike surface as a revolved STL mesh.
+     * Exports the Aerospike truncated spike surface as a revolved STL mesh.
      *
      * <p>The truncated spike contour is revolved around the x-axis using the same
      * algorithm as {@link #exportMesh(NozzleContour, Path)}.  Because the spike tip

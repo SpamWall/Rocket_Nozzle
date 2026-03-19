@@ -219,7 +219,7 @@ public class DXFExporter {
     }
 
     /**
-     * Exports aerospike geometry as a DXF file with three layers:
+     * Exports Aerospike geometry as a DXF file with three layers:
      * <ul>
      *   <li>{@code SPIKE} — the full ideal spike contour polyline</li>
      *   <li>{@code COWL} — a line from the inner throat radius to the outer throat

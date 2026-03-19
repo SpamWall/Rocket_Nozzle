@@ -156,7 +156,7 @@ public class CSVExporter {
     public void exportBoundaryLayerProfile(BoundaryLayerCorrection boundaryLayer, 
                                             Path filePath) throws IOException {
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
-            writer.write("x,y,running_length,reynolds,delta,delta_star,theta,cf,turbulent,mach");
+            writer.write("x,y,running_length,Reynolds,delta,delta_star,theta,cf,turbulent,mach");
             writer.write(NEWLINE);
             
             for (var point : boundaryLayer.getBoundaryLayerProfile()) {
@@ -214,8 +214,8 @@ public class CSVExporter {
      *
      * @param net       Characteristic net
      * @param contour   Nozzle contour (may be null)
-     * @param heat      Heat transfer model (may be null)
-     * @param bl        Boundary layer model (may be null)
+     * @param heat      Heat transfer model (It may be null)
+     * @param bl        Boundary layer model (It may be null)
      * @param outputDir Output directory
      * @throws IOException If write fails
      */

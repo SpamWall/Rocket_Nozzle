@@ -121,7 +121,7 @@ public class OpenFOAMExporter {
     public OpenFOAMExporter setRadialGrading(double g)   { this.radialGrading = g;      return this; }
 
     /**
-     * Enables or disables turbulence modelling.  When enabled, k-ω SST is written
+     * Enables or disables turbulence modeling.  When enabled, k-ω SST is written
      * to {@code constant/turbulenceProperties} and the {@code 0/k} and {@code 0/omega}
      * fields are generated.  When disabled, a laminar simulation type is written.
      *
@@ -131,7 +131,7 @@ public class OpenFOAMExporter {
     public OpenFOAMExporter setTurbulenceEnabled(boolean b) { this.turbulenceEnabled = b; return this; }
 
     /**
-     * Sets the turbulent intensity fraction used to initialise the {@code k} and
+     * Sets the turbulent intensity fraction used to initialize the {@code k} and
      * {@code omega} fields from the chamber speed of sound
      * ({@code k₀ = 1.5 · (I · a₀)²}).
      *
@@ -323,7 +323,7 @@ public class OpenFOAMExporter {
             w.println("writeControl    adjustableRunTime;");
             w.println("writeInterval   5e-4;");
             w.println("purgeWrite      5;");
-            w.println("writeFormat     ascii;");
+            w.println("writeFormat     ASCII;");
             w.println("writePrecision  10;");
             w.println("writeCompression off;");
             w.println();
@@ -341,7 +341,7 @@ public class OpenFOAMExporter {
     /**
      * Writes {@code system/fvSchemes} with the Kurganov-Tadmor central-upwind flux
      * scheme, van Leer reconstruction for primitive variables, and limited linear
-     * discretisation for all transported scalars.
+     * discretization for all transported scalars.
      *
      * @param file Destination file path
      * @throws IOException if the file cannot be written
