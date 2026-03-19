@@ -156,7 +156,7 @@ class CSVExporter_UT {
 
             assertThat(out).exists();
             String content = Files.readString(out);
-            assertThat(content).contains("running_length,reynolds");
+            assertThat(content).contains("running_length,Reynolds");
             assertThat(content).contains("true");
         }
 
