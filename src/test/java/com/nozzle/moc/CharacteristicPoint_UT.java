@@ -209,19 +209,75 @@ class CharacteristicPoint_UT {
         assertThat(str).contains("INTERIOR");
     }
     
-    @Test
-    @DisplayName("Should implement equals correctly")
-    void shouldImplementEqualsCorrectly() {
-        CharacteristicPoint same = CharacteristicPoint.create(
-                0.1, 0.05, 2.0, Math.toRadians(10), Math.toRadians(26.38), Math.toRadians(30),
-                100000, 2000, 0.17, 1200,
-                CharacteristicPoint.PointType.INTERIOR
-        );
-        
-        CharacteristicPoint different = CharacteristicPoint.of(0.2, 0.05, 2.0, 
-                Math.toRadians(10), Math.toRadians(26.38), Math.toRadians(30));
-        
-        assertThat(point).isEqualTo(same);
-        assertThat(point).isNotEqualTo(different);
+    @Nested
+    @DisplayName("Equals and HashCode Tests")
+    class EqualsHashCodeTests {
+
+        @Test
+        @DisplayName("equals returns true for same reference")
+        void equalsReturnsTrueForSameReference() {
+            assertThat(point.equals(point)).isTrue();
+        }
+
+        @Test
+        @DisplayName("equals returns false for null and non-CharacteristicPoint")
+        void equalsReturnsFalseForNullAndOtherType() {
+            assertThat(point.equals(null)).isFalse();
+            assertThat(point.equals("not a point")).isFalse();
+        }
+
+        @Test
+        @DisplayName("equals returns true when x, y, mach, and theta all match")
+        void equalsReturnsTrueWhenAllKeyFieldsMatch() {
+            CharacteristicPoint same = CharacteristicPoint.create(
+                    0.1, 0.05, 2.0, Math.toRadians(10), Math.toRadians(26.38), Math.toRadians(30),
+                    100000, 2000, 0.17, 1200,
+                    CharacteristicPoint.PointType.INTERIOR
+            );
+            assertThat(point).isEqualTo(same);
+        }
+
+        @Test
+        @DisplayName("equals returns false when x differs")
+        void equalsReturnsFalseWhenXDiffers() {
+            CharacteristicPoint diffX = CharacteristicPoint.of(0.2, 0.05, 2.0,
+                    Math.toRadians(10), Math.toRadians(26.38), Math.toRadians(30));
+            assertThat(point).isNotEqualTo(diffX);
+        }
+
+        @Test
+        @DisplayName("equals returns false when y differs (x same)")
+        void equalsReturnsFalseWhenYDiffers() {
+            CharacteristicPoint diffY = CharacteristicPoint.of(0.1, 0.09, 2.0,
+                    Math.toRadians(10), Math.toRadians(26.38), Math.toRadians(30));
+            assertThat(point).isNotEqualTo(diffY);
+        }
+
+        @Test
+        @DisplayName("equals returns false when mach differs (x, y same)")
+        void equalsReturnsFalseWhenMachDiffers() {
+            CharacteristicPoint diffMach = CharacteristicPoint.of(0.1, 0.05, 3.0,
+                    Math.toRadians(10), Math.toRadians(26.38), Math.toRadians(30));
+            assertThat(point).isNotEqualTo(diffMach);
+        }
+
+        @Test
+        @DisplayName("equals returns false when theta differs (x, y, mach same)")
+        void equalsReturnsFalseWhenThetaDiffers() {
+            CharacteristicPoint diffTheta = CharacteristicPoint.of(0.1, 0.05, 2.0,
+                    Math.toRadians(15), Math.toRadians(26.38), Math.toRadians(30));
+            assertThat(point).isNotEqualTo(diffTheta);
+        }
+
+        @Test
+        @DisplayName("hashCode is consistent with equals")
+        void hashCodeIsConsistentWithEquals() {
+            CharacteristicPoint same = CharacteristicPoint.create(
+                    0.1, 0.05, 2.0, Math.toRadians(10), Math.toRadians(26.38), Math.toRadians(30),
+                    100000, 2000, 0.17, 1200,
+                    CharacteristicPoint.PointType.INTERIOR
+            );
+            assertThat(point.hashCode()).isEqualTo(same.hashCode());
+        }
     }
 }

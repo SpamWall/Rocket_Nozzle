@@ -14,6 +14,9 @@ public final class PropellantComposition {
 
     private final Map<String, Double> massFractions = new HashMap<>();
 
+    /** Creates an empty {@code PropellantComposition} with no species assigned. */
+    public PropellantComposition() {}
+
     /**
      * Replaces the current composition with the supplied mass-fraction map.
      * The fractions are normalized so they sum to 1.0.

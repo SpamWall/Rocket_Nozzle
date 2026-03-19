@@ -191,7 +191,7 @@ public class AerospikeNozzle {
      * Calculates the aerospike thrust coefficient at a given ambient pressure,
      * exploiting the nozzle's natural altitude-compensation property.
      *
-     * <h3>Altitude-compensation model</h3>
+     * <h4>Altitude-compensation model</h4>
      * Let {@code M_pa} be the Mach number at which the isentropic exit pressure equals
      * {@code ambientPressure}.
      * <ul>

@@ -207,25 +207,100 @@ class RaoNozzle_UT {
     @Nested
     @DisplayName("Length Fraction Tests")
     class LengthFractionTests {
-        
+
         @Test
         @DisplayName("Higher length fraction should give longer nozzle")
         void higherLengthFractionShouldGiveLongerNozzle() {
             RaoNozzle short80 = new RaoNozzle(params, 0.6, 100).generate();
             RaoNozzle long80 = new RaoNozzle(params, 1.0, 100).generate();
-            
+
             assertThat(long80.getActualLength())
                     .isGreaterThan(short80.getActualLength());
         }
-        
+
         @Test
         @DisplayName("Shorter nozzle should have larger exit angle")
         void shorterNozzleShouldHaveLargerExitAngle() {
             RaoNozzle short60 = new RaoNozzle(params, 0.6, 100).generate();
             RaoNozzle long100 = new RaoNozzle(params, 1.0, 100).generate();
-            
+
             assertThat(short60.getExitAngle())
                     .isGreaterThan(long100.getExitAngle());
+        }
+
+        @Test
+        @DisplayName("lengthFraction below 0.6 uses the else branch for both angle correlations")
+        void veryShortLengthFractionUsesElseBranch() {
+            // lengthFraction=0.5 < 0.6 → hits the else branch in both if-else chains
+            // inside calculateAngles (inflectionAngle and exitAngle)
+            RaoNozzle veryShort = new RaoNozzle(params, 0.5, 100).generate();
+            assertThat(Math.toDegrees(veryShort.getInflectionAngle())).isBetween(15.0, 45.0);
+            assertThat(Math.toDegrees(veryShort.getExitAngle())).isBetween(1.0, 15.0);
+        }
+    }
+
+    @Nested
+    @DisplayName("Lazy Generation Tests")
+    class LazyGenerationTests {
+
+        @Test
+        @DisplayName("getContourPoints triggers generation when contour is empty")
+        void getContourPointsTriggersLazyGeneration() {
+            // raoNozzle from setUp has not had generate() called
+            List<Point2D> points = raoNozzle.getContourPoints();
+            assertThat(points).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("getRadiusAt covers all four && branches including negative x")
+        void getRadiusAtCoversAllBranches() {
+            // isEmpty()=true: triggers lazy generation
+            double rMid = raoNozzle.getRadiusAt(0.01);
+            assertThat(rMid).isGreaterThan(0);
+
+            // x < prev.x() on first iteration (first-condition-false branch):
+            // contour starts at x=0, so x=-0.1 makes (x >= prev.x()) false immediately
+            double rBefore = raoNozzle.getRadiusAt(-0.1);
+            assertThat(rBefore).isCloseTo(params.exitRadius(), within(1e-9));
+
+            // x >= prev.x() true && x <= curr.x() false (x past contour end)
+            double rPast = raoNozzle.getRadiusAt(raoNozzle.getActualLength() * 10);
+            assertThat(rPast).isCloseTo(params.exitRadius(), within(1e-9));
+        }
+
+        @Test
+        @DisplayName("getAngleAt covers all four && branches including negative x")
+        void getAngleAtCoversAllBranches() {
+            // isEmpty()=true: triggers lazy generation
+            raoNozzle.getAngleAt(0.01);
+
+            // x < prev.x() on first iteration (first-condition-false branch)
+            raoNozzle.getAngleAt(-0.1);
+
+            // x >= prev.x() true && x <= curr.x() false → falls through to return exitAngle
+            double angle = raoNozzle.getAngleAt(raoNozzle.getActualLength() * 10);
+            assertThat(angle).isEqualTo(raoNozzle.getExitAngle());
+        }
+    }
+
+    @Nested
+    @DisplayName("Edge-Case Comparison Tests")
+    class EdgeCaseComparisonTests {
+
+        @Test
+        @DisplayName("compareTo with ungenerated net covers empty-contour and empty-wall branches")
+        void compareToWithEmptyNetCoversAllEmptyBranches() {
+            // raoNozzle not yet generated → covers contourPoints.isEmpty()=true in compareTo
+            // Ungenerated CharacteristicNet → empty wall points →
+            //   covers mocWall.isEmpty() ? 0 ternary and
+            //   calculateMOCThrustCoefficient wallPoints.isEmpty()=true
+            CharacteristicNet emptyNet = new CharacteristicNet(params);
+            RaoNozzle.NozzleComparison comparison = raoNozzle.compareTo(emptyNet);
+
+            assertThat(comparison.maxRadiusDifference()).isEqualTo(0.0);
+            assertThat(comparison.avgRadiusDifference()).isEqualTo(0.0);
+            assertThat(comparison.mocLength()).isEqualTo(0.0);
+            assertThat(comparison.mocThrustCoefficient()).isGreaterThan(0);
         }
     }
 }
