@@ -356,13 +356,224 @@ class AblativeNozzleModel_UT {
                     AblativeNozzleModel.AblativeMaterial.CARBON_PHENOLIC,
                     AblativeNozzleModel.AblativeMaterial.SILICA_PHENOLIC,
                     AblativeNozzleModel.AblativeMaterial.EPDM,
-                    AblativeNozzleModel.AblativeMaterial.GRAPHITE)) {
+                    AblativeNozzleModel.AblativeMaterial.GRAPHITE,
+                    AblativeNozzleModel.AblativeMaterial.CARBON_CARBON)) {
                 assertThat(mat.preExponentialFactor()).isGreaterThan(0.0);
                 assertThat(mat.activationEnergy()).isGreaterThan(0.0);
                 assertThat(mat.charThermalConductivity()).isGreaterThan(0.0);
                 assertThat(mat.virginThermalConductivity()).isGreaterThan(0.0);
                 assertThat(mat.density()).isGreaterThan(0.0);
             }
+        }
+
+        @Test
+        @DisplayName("Carbon-carbon has higher activation energy than carbon-phenolic (sublimation-limited)")
+        void carbonCarbonHasHighestActivationEnergy() {
+            assertThat(AblativeNozzleModel.AblativeMaterial.CARBON_CARBON.activationEnergy())
+                    .isGreaterThan(AblativeNozzleModel.AblativeMaterial.CARBON_PHENOLIC.activationEnergy());
+        }
+
+        @Test
+        @DisplayName("charRateAt() returns positive rate at any positive temperature")
+        void charRateAtReturnsPositiveValue() {
+            AblativeNozzleModel.AblativeMaterial mat = AblativeNozzleModel.AblativeMaterial.CARBON_PHENOLIC;
+
+            assertThat(mat.charRateAt(1000.0)).isGreaterThan(0.0);
+        }
+
+        @Test
+        @DisplayName("charRateAt() is strictly monotonically increasing with temperature (Arrhenius)")
+        void charRateAtIncreasesWithTemperature() {
+            AblativeNozzleModel.AblativeMaterial mat = AblativeNozzleModel.AblativeMaterial.CARBON_PHENOLIC;
+
+            assertThat(mat.charRateAt(1500.0)).isGreaterThan(mat.charRateAt(1000.0));
+            assertThat(mat.charRateAt(2000.0)).isGreaterThan(mat.charRateAt(1500.0));
+        }
+
+        @Test
+        @DisplayName("charRateAt() matches manual Arrhenius calculation")
+        void charRateAtMatchesManualCalculation() {
+            AblativeNozzleModel.AblativeMaterial mat = AblativeNozzleModel.AblativeMaterial.EPDM;
+            double T = 1200.0;
+            double R = 8.314462;
+            double expected = mat.preExponentialFactor() * Math.exp(-mat.activationEnergy() / (R * T));
+
+            assertThat(mat.charRateAt(T)).isCloseTo(expected, within(1e-15));
+        }
+
+        @Test
+        @DisplayName("EPDM chars faster than carbon-carbon at typical SRM wall temperature")
+        void epdmCharsFasterThanCarbonCarbon() {
+            assertThat(AblativeNozzleModel.AblativeMaterial.EPDM.charRateAt(1500.0))
+                    .isGreaterThan(AblativeNozzleModel.AblativeMaterial.CARBON_CARBON.charRateAt(1500.0));
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Mechanical erosion supplement
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Mechanical Erosion Tests")
+    class MechanicalErosionTests {
+
+        @Test
+        @DisplayName("setErosionFactor returns this instance (fluent API)")
+        void setErosionFactorReturnsThis() {
+            AblativeNozzleModel configured = new AblativeNozzleModel(params, contour)
+                    .setErosionFactor(1e-5);
+
+            assertThat(configured).isNotNull();
+        }
+
+        @Test
+        @DisplayName("setErosionFactor throws IllegalArgumentException for negative value")
+        void setErosionFactorRejectsNegativeValue() {
+            AblativeNozzleModel mdl = new AblativeNozzleModel(params, contour);
+
+            assertThatThrownBy(() -> mdl.setErosionFactor(-1e-5))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("erosionFactor must be >= 0");
+        }
+
+        @Test
+        @DisplayName("Non-zero erosionFactor increases recession depth versus pure Arrhenius")
+        void erosionFactorIncreasesRecession() {
+            AblativeNozzleModel pure = new AblativeNozzleModel(params, contour)
+                    .setMaterial(AblativeNozzleModel.AblativeMaterial.GRAPHITE)
+                    .setInitialLinerThickness(0.10)
+                    .setErosionFactor(0.0)
+                    .calculate(List.of());
+
+            AblativeNozzleModel withErosion = new AblativeNozzleModel(params, contour)
+                    .setMaterial(AblativeNozzleModel.AblativeMaterial.GRAPHITE)
+                    .setInitialLinerThickness(0.10)
+                    .setErosionFactor(1.0e-4)
+                    .calculate(List.of());
+
+            assertThat(withErosion.getMaxRecessionDepth())
+                    .isGreaterThan(pure.getMaxRecessionDepth());
+        }
+
+        @Test
+        @DisplayName("Zero erosionFactor matches default (pure Arrhenius) behaviour")
+        void zeroErosionFactorMatchesDefault() {
+            AblativeNozzleModel defaultModel = new AblativeNozzleModel(params, contour)
+                    .setMaterial(AblativeNozzleModel.AblativeMaterial.GRAPHITE)
+                    .calculate(List.of());
+
+            AblativeNozzleModel explicitZero = new AblativeNozzleModel(params, contour)
+                    .setMaterial(AblativeNozzleModel.AblativeMaterial.GRAPHITE)
+                    .setErosionFactor(0.0)
+                    .calculate(List.of());
+
+            assertThat(explicitZero.getMaxRecessionDepth())
+                    .isCloseTo(defaultModel.getMaxRecessionDepth(), within(1e-15));
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Ablated mass
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Ablated Mass Tests")
+    class AblatedMassTests {
+
+        @Test
+        @DisplayName("getAblatedMassPerStation() has same size as profile after calculate()")
+        void ablatedMassPerStationSizeMatchesProfile() {
+            model.calculate(List.of());
+
+            assertThat(model.getAblatedMassPerStation()).hasSize(model.getProfile().size());
+        }
+
+        @Test
+        @DisplayName("getAblatedMassPerStation() is empty before calculate()")
+        void ablatedMassPerStationEmptyBeforeCalculate() {
+            assertThat(model.getAblatedMassPerStation()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("getAblatedMassPerStation() values are non-negative")
+        void ablatedMassPerStationNonNegative() {
+            model.calculate(List.of());
+
+            assertThat(model.getAblatedMassPerStation())
+                    .allSatisfy(m -> assertThat(m).isGreaterThanOrEqualTo(0.0));
+        }
+
+        @Test
+        @DisplayName("getAblatedMassPerStation() equals density × recessDepth at every station")
+        void ablatedMassPerStationEqualsRhoTimesRecession() {
+            model.calculate(List.of());
+
+            double rho = AblativeNozzleModel.AblativeMaterial.CARBON_PHENOLIC.density();
+            List<AblativeNozzleModel.AblativePoint> profile = model.getProfile();
+            List<Double> masses = model.getAblatedMassPerStation();
+
+            for (int i = 0; i < profile.size(); i++) {
+                assertThat(masses.get(i))
+                        .isCloseTo(rho * profile.get(i).recessDepth(), within(1e-10));
+            }
+        }
+
+        @Test
+        @DisplayName("getTotalAblatedMass() returns 0 before calculate()")
+        void totalAblatedMassZeroBeforeCalculate() {
+            assertThat(model.getTotalAblatedMass()).isEqualTo(0.0);
+        }
+
+        @Test
+        @DisplayName("getTotalAblatedMass() is positive after calculate()")
+        void totalAblatedMassPositiveAfterCalculate() {
+            model.calculate(List.of());
+
+            assertThat(model.getTotalAblatedMass()).isGreaterThan(0.0);
+        }
+
+        @Test
+        @DisplayName("Longer burn time produces greater total ablated mass")
+        void longerBurnIncreasesTotalAblatedMass() {
+            AblativeNozzleModel shortBurn = new AblativeNozzleModel(params, contour)
+                    .setMaterial(AblativeNozzleModel.AblativeMaterial.GRAPHITE)
+                    .setInitialLinerThickness(0.10)
+                    .setBurnTime(5.0)
+                    .calculate(List.of());
+
+            AblativeNozzleModel longBurn = new AblativeNozzleModel(params, contour)
+                    .setMaterial(AblativeNozzleModel.AblativeMaterial.GRAPHITE)
+                    .setInitialLinerThickness(0.10)
+                    .setBurnTime(30.0)
+                    .calculate(List.of());
+
+            assertThat(longBurn.getTotalAblatedMass())
+                    .isGreaterThan(shortBurn.getTotalAblatedMass());
+        }
+
+        @Test
+        @DisplayName("Higher density material produces greater total ablated mass at same recession depth")
+        void higherDensityProducesMoreAblatedMass() {
+            // GRAPHITE (1800 kg/m³) vs EPDM (1150 kg/m³); EPDM recedes faster
+            // but with graphite's low erosion we still compare densities at the same
+            // material by constructing custom materials that differ only in density.
+            AblativeNozzleModel.AblativeMaterial lowDensity = new AblativeNozzleModel.AblativeMaterial(
+                    "Test-Low", 1.0e-3, 6.0e4, 50.0, 30.0, 500.0);
+            AblativeNozzleModel.AblativeMaterial highDensity = new AblativeNozzleModel.AblativeMaterial(
+                    "Test-High", 1.0e-3, 6.0e4, 50.0, 30.0, 2000.0);
+
+            AblativeNozzleModel lowRho = new AblativeNozzleModel(params, contour)
+                    .setMaterial(lowDensity)
+                    .setInitialLinerThickness(0.10)
+                    .calculate(List.of());
+
+            AblativeNozzleModel highRho = new AblativeNozzleModel(params, contour)
+                    .setMaterial(highDensity)
+                    .setInitialLinerThickness(0.10)
+                    .calculate(List.of());
+
+            assertThat(highRho.getTotalAblatedMass())
+                    .isGreaterThan(lowRho.getTotalAblatedMass());
         }
     }
 

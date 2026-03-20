@@ -8,9 +8,6 @@ Here's an organized assessment of the most impactful additions, grouped by value
   ---
   High Impact — Missing Analysis Capabilities
 
-  Ablative Nozzle Model
-  Solid rocket motors use ablative liners. The library currently has no char rate, recession prediction, or erosion model. A simple Arrhenius-based char rate model would cover a large class of real nozzles.
-
   Radiation-Cooled Extension Model
   Large nozzle extensions (like on the RL-10) are uncooled and reach equilibrium wall temperature via radiation. The current model assumes regenerative cooling everywhere. A separate equilibrium-radiation model for the extension section would be realistic.
 

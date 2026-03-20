@@ -43,6 +43,13 @@ public class AblativeNozzleModel {
     /** Universal gas constant in J/(mol·K). */
     private static final double R_UNIVERSAL = 8.314462;
 
+    /**
+     * Reference pressure for the mechanical erosion scaling law [Pa].
+     * Chosen as 1 MPa so that {@code erosionFactor} has intuitive units of m/s
+     * at a representative SRM chamber pressure.
+     */
+    private static final double P_REF = 1.0e6;
+
     private final NozzleDesignParameters parameters;
     private final NozzleContour contour;
 
@@ -50,6 +57,14 @@ public class AblativeNozzleModel {
     private double initialLinerThickness = 0.020;  // m
     private double burnTime = 10.0;                // s
     private int timeSteps = 100;
+
+    /**
+     * Mechanical (particle-impingement) erosion factor {@code k_e} [m/s].
+     * The erosion supplement {@code ṙ_mech = k_e · (P_c / P_ref)^0.8} is
+     * added to the Arrhenius rate at every station.  The default value of 0
+     * disables mechanical erosion, preserving the pure-Arrhenius behaviour.
+     */
+    private double erosionFactor = 0.0;
 
     private final List<AblativePoint> profile = new ArrayList<>();
 
@@ -107,6 +122,44 @@ public class AblativeNozzleModel {
      */
     public AblativeNozzleModel setTimeSteps(int steps) {
         this.timeSteps = steps;
+        return this;
+    }
+
+    /**
+     * Sets the mechanical (particle-impingement) erosion factor {@code k_e}.
+     *
+     * <p>In solid-rocket motors the exhaust is laden with alumina (Al₂O₃)
+     * particles that mechanically erode the char layer in addition to the
+     * thermal pyrolysis captured by the Arrhenius expression.  The erosion
+     * supplement is modelled as:
+     *
+     * <pre>  ṙ_mech = k_e · (P_c / P_ref)^0.8</pre>
+     *
+     * where {@code P_ref = 1 MPa} and the {@code 0.8} exponent mirrors the
+     * Bartz pressure scaling for convective heat flux.  The total surface
+     * recession rate at each station is therefore:
+     *
+     * <pre>  ṙ_total = A · exp(−Ea / (R · T_surface)) + k_e · (P_c / P_ref)^0.8</pre>
+     *
+     * <p>Typical values for alumina-loaded SRM propellants:
+     * <ul>
+     *   <li>Carbon-phenolic throat: {@code k_e ≈ 0.5–2 × 10⁻⁵} m/s</li>
+     *   <li>Silica-phenolic extension: {@code k_e ≈ 1–4 × 10⁻⁵} m/s</li>
+     * </ul>
+     *
+     * <p>Set to 0 (default) to disable mechanical erosion and use the pure
+     * Arrhenius model.
+     *
+     * @param factor Erosion factor in m/s (must be ≥ 0)
+     * @return This instance
+     * @throws IllegalArgumentException if {@code factor} is negative
+     */
+    public AblativeNozzleModel setErosionFactor(double factor) {
+        if (factor < 0.0) {
+            throw new IllegalArgumentException(
+                    "erosionFactor must be >= 0, got: " + factor);
+        }
+        this.erosionFactor = factor;
         return this;
     }
 
@@ -190,19 +243,31 @@ public class AblativeNozzleModel {
         double dt = burnTime / timeSteps;
         double charDepth = 0.0;
 
-        // Instantaneous char rate is constant because T_surface is held fixed.
-        // Computed here to avoid redundant exp() calls inside the loop.
-        double instantCharRate = material.preExponentialFactor()
+        // Arrhenius pyrolysis term — constant because T_surface is held fixed.
+        double arrheniusRate = material.preExponentialFactor()
                 * Math.exp(-material.activationEnergy() / (R_UNIVERSAL * T_surface));
 
+        // Mechanical erosion supplement from particle impingement (§ setErosionFactor).
+        // Scales as (P_c / P_ref)^0.8, consistent with Bartz heat-flux pressure exponent.
+        double mechanicalRate = erosionFactor
+                * Math.pow(parameters.chamberPressure() / P_REF, 0.8);
+
+        double totalCharRate = arrheniusRate + mechanicalRate;
+
+        // Both rate terms are constant for this station (T_surface is held fixed,
+        // erosionFactor and Pc are global constants).  The Euler loop is retained
+        // rather than collapsed to the closed form min(thickness, rate·burnTime)
+        // so that future callers can override integrateRecession() and introduce
+        // temperature-history feedback (e.g. insulating char-layer growth) without
+        // restructuring the loop.
         for (int step = 0; step < timeSteps; step++) {
-            charDepth = Math.min(initialLinerThickness, charDepth + instantCharRate * dt);
+            charDepth = Math.min(initialLinerThickness, charDepth + totalCharRate * dt);
         }
 
         boolean perforated = charDepth >= initialLinerThickness;
         double remaining = initialLinerThickness - charDepth;
 
-        return new AblativePoint(x, y, T_surface, instantCharRate,
+        return new AblativePoint(x, y, T_surface, totalCharRate,
                 charDepth, remaining, initialLinerThickness, perforated);
     }
 
@@ -255,6 +320,57 @@ public class AblativeNozzleModel {
      */
     public boolean isPerforatedAnywhere() {
         return profile.stream().anyMatch(AblativePoint::isPerforated);
+    }
+
+    /**
+     * Returns the ablated mass per unit annular area [kg/m²] at each axial
+     * station, in the same order as {@link #getProfile()}.
+     *
+     * <p>The ablated mass per unit area at station {@code i} is:
+     * <pre>  Δm_i = ρ_material · recessDepth_i</pre>
+     *
+     * <p>This quantity is useful for mass-budget analysis: multiply by the
+     * local annular area {@code 2π r Δx} to obtain the absolute mass loss at
+     * each station.
+     *
+     * @return List of ablated mass per unit area [kg/m²]; empty before
+     *         {@link #calculate} is called
+     */
+    public List<Double> getAblatedMassPerStation() {
+        double rho = material.density();
+        return profile.stream()
+                .map(pt -> rho * pt.recessDepth())
+                .toList();
+    }
+
+    /**
+     * Returns the total ablated mass [kg] integrated over the full nozzle
+     * contour using the trapezoidal rule on the annular surface area.
+     *
+     * <p>Each adjacent pair of axial stations defines an annular frustum of
+     * width {@code Δx} and mean radius {@code (r_i + r_{i+1}) / 2}.  The
+     * ablated mass of that frustum is:
+     * <pre>  Δm = ρ · (recession_i + recession_{i+1}) / 2 · 2π · r_mean · |Δx|</pre>
+     *
+     * @return Total ablated mass in kg; 0 if fewer than two stations are
+     *         available or {@link #calculate} has not been called
+     */
+    public double getTotalAblatedMass() {
+        if (profile.size() < 2) return 0.0;
+
+        double rho = material.density();
+        double totalMass = 0.0;
+
+        for (int i = 0; i < profile.size() - 1; i++) {
+            AblativePoint a = profile.get(i);
+            AblativePoint b = profile.get(i + 1);
+            double dx = Math.abs(b.x() - a.x());
+            double rMean = (a.y() + b.y()) * 0.5;
+            double recessionMean = (a.recessDepth() + b.recessDepth()) * 0.5;
+            totalMass += rho * recessionMean * 2.0 * Math.PI * rMean * dx;
+        }
+
+        return totalMass;
     }
 
     // -----------------------------------------------------------------------
@@ -334,6 +450,24 @@ public class AblativeNozzleModel {
             double virginThermalConductivity,
             double density
     ) {
+
+        /**
+         * Returns the instantaneous Arrhenius char rate [m/s] at the given
+         * surface temperature, without any mechanical erosion supplement.
+         *
+         * <pre>  ṙ(T) = A · exp(−Ea / (R · T))</pre>
+         *
+         * <p>This convenience method is useful for generating material char-rate
+         * curves and for sensitivity studies without constructing a full model.
+         *
+         * @param surfaceTemperature Surface temperature in K (must be &gt; 0)
+         * @return Arrhenius char rate in m/s
+         */
+        public double charRateAt(double surfaceTemperature) {
+            return preExponentialFactor
+                    * Math.exp(-activationEnergy / (R_UNIVERSAL * surfaceTemperature));
+        }
+
         /**
          * Carbon-phenolic — the preferred high-performance ablative for
          * solid-rocket motor nozzles and re-entry vehicles.  High activation
@@ -398,6 +532,36 @@ public class AblativeNozzleModel {
                 120.0,     // k_char   [W/(m·K)]
                 60.0,      // k_virgin [W/(m·K)]
                 1800.0     // ρ  [kg/m³]
+        );
+
+        /**
+         * Carbon–carbon (C/C) composite — the preferred material for
+         * high-performance SRM nozzle throat inserts and exit-cone liners
+         * operating above ≈ 2 500 K.  The woven carbon–carbon structure
+         * oxidises extremely slowly via the Arrhenius mechanism; the dominant
+         * failure mode is sublimation and particle-impingement erosion rather
+         * than classic pyrolysis.
+         *
+         * <p>Very high thermal conductivity spreads heat rapidly, limiting
+         * peak surface temperature and further reducing the already-negligible
+         * Arrhenius char rate.  Pair with {@link AblativeNozzleModel#setErosionFactor(double)} to model
+         * the alumina-particle erosion that governs C/C throat recession in
+         * aluminised SRM propellants.
+         *
+         * <p>Char rate ≈ 2.0 × 10⁻⁵ mm/s at 2 500 K (Arrhenius only);
+         * mechanical erosion typically dominates.
+         *
+         * <p>References: Kuo &amp; Acharya, <em>Fundamentals of Solid-Propellant
+         * Combustion</em>, AIAA, 1984; Tran et al., "Ablative and Erosive
+         * Characteristics of C/C Nozzles", AIAA 2002-3826.
+         */
+        public static final AblativeMaterial CARBON_CARBON = new AblativeMaterial(
+                "Carbon-Carbon Composite",
+                5.0e-5,    // A  [m/s] — very low, sublimation-limited
+                1.1e5,     // Ea [J/mol] — high barrier; C oxidation kinetics
+                50.0,      // k_char   [W/(m·K)] — C/C retains high k even charred
+                40.0,      // k_virgin [W/(m·K)]
+                1900.0     // ρ  [kg/m³]
         );
     }
 }

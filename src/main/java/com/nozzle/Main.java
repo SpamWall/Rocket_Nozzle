@@ -14,6 +14,7 @@ import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.RaoNozzle;
 import com.nozzle.optimization.AltitudeAdaptiveOptimizer;
 import com.nozzle.optimization.MonteCarloUncertainty;
+import com.nozzle.thermal.AblativeNozzleModel;
 import com.nozzle.thermal.BoundaryLayerCorrection;
 import com.nozzle.thermal.CoolantChannel;
 import com.nozzle.thermal.HeatTransferModel;
@@ -43,6 +44,7 @@ import java.util.List;
  * - Aerospike (plug) nozzle design via MOC kernel-flow algorithm
  * - Altitude compensation comparison: aerospike vs. bell nozzle
  * - Aerospike export: CSV spike contour, altitude performance, DXF, STEP, STL, CFD mesh
+ * - Ablative liner analysis: Arrhenius char rate, mechanical erosion supplement, ablated mass budget
  */
 public class Main {
 
@@ -73,6 +75,7 @@ public class Main {
             demonstrateThermalStressAnalysis(outputDir);
             demonstrateExports(outputDir);
             demonstrateAerospikeNozzle(outputDir);
+            demonstrateAblativeLiner();
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -854,5 +857,166 @@ public class Main {
                 rt * 1000);
 
         System.out.printf("%nAerospike output saved to: %s%n", aeroDir.toAbsolutePath());
+    }
+
+    /**
+     * Demonstrates the ablative liner char-rate model for solid rocket motor nozzles.
+     *
+     * <p>Shows:
+     * <ul>
+     *   <li>Material char-rate curves via {@code charRateAt(T)} — no full model required</li>
+     *   <li>Full recession profile driven by the Bartz heat-transfer output</li>
+     *   <li>Mechanical (particle-impingement) erosion supplement for aluminised SRM propellants</li>
+     *   <li>Ablated mass budget: per-station [kg/m²] and total [kg]</li>
+     * </ul>
+     */
+    private static void demonstrateAblativeLiner() {
+        System.out.println("\n--- ABLATIVE LINER ANALYSIS (SRM NOZZLE) ---\n");
+
+        // SRM-representative parameters: higher chamber pressure, shorter burn time,
+        // cooler chamber temp (solid propellant vs. liquid bipropellant).
+        NozzleDesignParameters params = NozzleDesignParameters.builder()
+                .throatRadius(0.05)
+                .exitMach(3.0)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500)
+                .ambientPressure(101325)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(30)
+                .lengthFraction(0.8)
+                .axisymmetric(true)
+                .build();
+
+        NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+        contour.generate(60);
+
+        // ---- 1. Material char-rate curves (no model run needed) ----
+        System.out.println("Arrhenius Char Rate at Key Temperatures [mm/s]:");
+        System.out.printf("  %-28s  %8s  %8s  %8s  %8s%n",
+                "Material", "500 K", "1000 K", "1500 K", "2500 K");
+        System.out.println("  " + "-".repeat(64));
+
+        AblativeNozzleModel.AblativeMaterial[] materials = {
+                AblativeNozzleModel.AblativeMaterial.CARBON_PHENOLIC,
+                AblativeNozzleModel.AblativeMaterial.SILICA_PHENOLIC,
+                AblativeNozzleModel.AblativeMaterial.EPDM,
+                AblativeNozzleModel.AblativeMaterial.GRAPHITE,
+                AblativeNozzleModel.AblativeMaterial.CARBON_CARBON,
+        };
+
+        for (AblativeNozzleModel.AblativeMaterial mat : materials) {
+            System.out.printf("  %-28s  %8.4f  %8.4f  %8.4f  %8.4f%n",
+                    mat.name(),
+                    mat.charRateAt(500)  * 1000,
+                    mat.charRateAt(1000) * 1000,
+                    mat.charRateAt(1500) * 1000,
+                    mat.charRateAt(2500) * 1000);
+        }
+
+        // ---- 2. Build heat-transfer profile for the throat region ----
+        List<HeatTransferModel.WallThermalPoint> heatProfile =
+                new HeatTransferModel(params, contour)
+                        .setWallProperties(1.0, 0.020)     // carbon-phenolic k, 20 mm liner
+                        .setCoolantProperties(300.0, 0.0)  // no active cooling (ablative only)
+                        .calculate(List.of())
+                        .getWallThermalProfile();
+
+        System.out.printf("%nHeat-transfer baseline:%n");
+        System.out.printf("  Max gas-side wall temperature: %.0f K%n",
+                heatProfile.stream().mapToDouble(HeatTransferModel.WallThermalPoint::wallTemperature)
+                        .max().orElse(0));
+
+        // ---- 3. Pure Arrhenius recession — material comparison ----
+        double burnTime       = 10.0;   // s
+        double linerThickness = 0.020;  // 20 mm
+
+        System.out.printf("%nPure Arrhenius Recession after %.0f s burn (%.0f mm liner):%n",
+                burnTime, linerThickness * 1000);
+        System.out.printf("  %-28s  %12s  %12s  %10s%n",
+                "Material", "Max recess (mm)", "Min remain (mm)", "Perforated");
+        System.out.println("  " + "-".repeat(68));
+
+        for (AblativeNozzleModel.AblativeMaterial mat : materials) {
+            AblativeNozzleModel mdl = new AblativeNozzleModel(params, contour)
+                    .setMaterial(mat)
+                    .setInitialLinerThickness(linerThickness)
+                    .setBurnTime(burnTime)
+                    .calculate(heatProfile);
+
+            System.out.printf("  %-28s  %12.4f  %12.4f  %10s%n",
+                    mat.name(),
+                    mdl.getMaxRecessionDepth()      * 1000,
+                    mdl.getMinRemainingThickness()  * 1000,
+                    mdl.isPerforatedAnywhere() ? "YES" : "no");
+        }
+
+        // ---- 4. Mechanical erosion supplement (aluminised SRM propellant) ----
+        // Alumina particles in the exhaust add an impingement erosion term:
+        //   ṙ_mech = k_e · (P_c / 1 MPa)^0.8
+        // k_e = 1e-5 m/s is representative for a carbon-phenolic throat with ~15% Al loading.
+        double k_e = 1.0e-5;  // m/s
+
+        AblativeNozzleModel pureArrhenius = new AblativeNozzleModel(params, contour)
+                .setMaterial(AblativeNozzleModel.AblativeMaterial.CARBON_PHENOLIC)
+                .setInitialLinerThickness(linerThickness)
+                .setBurnTime(burnTime)
+                .setErosionFactor(0.0)
+                .calculate(heatProfile);
+
+        AblativeNozzleModel withErosion = new AblativeNozzleModel(params, contour)
+                .setMaterial(AblativeNozzleModel.AblativeMaterial.CARBON_PHENOLIC)
+                .setInitialLinerThickness(linerThickness)
+                .setBurnTime(burnTime)
+                .setErosionFactor(k_e)
+                .calculate(heatProfile);
+
+        System.out.printf("%nMechanical Erosion Supplement (carbon-phenolic, k_e = %.0e m/s):%n", k_e);
+        System.out.printf("  Pure Arrhenius:  max recession = %.4f mm%n",
+                pureArrhenius.getMaxRecessionDepth() * 1000);
+        System.out.printf("  With erosion:    max recession = %.4f mm   (+%.2f%%)%n",
+                withErosion.getMaxRecessionDepth() * 1000,
+                (withErosion.getMaxRecessionDepth() / pureArrhenius.getMaxRecessionDepth() - 1.0) * 100);
+
+        // ---- 5. Ablated mass budget ----
+        System.out.printf("%nAblated Mass Budget (carbon-phenolic, with erosion):%n");
+        System.out.printf("  Total ablated mass:  %.4f kg%n", withErosion.getTotalAblatedMass());
+
+        // Print per-station summary for the first 3 and last 3 stations
+        List<AblativeNozzleModel.AblativePoint> profile  = withErosion.getProfile();
+        List<Double>                             massPerStation = withErosion.getAblatedMassPerStation();
+        int n = profile.size();
+        System.out.printf("  Per-station Δm/A [kg/m²]  (showing first 3 and last 3 of %d):%n", n);
+        System.out.printf("    %-10s  %-12s  %s%n", "x (m)", "r (mm)", "Δm/A (kg/m²)");
+
+        // Build a deduplicated, ordered set of head/tail indices safe for any profile size.
+        java.util.LinkedHashSet<Integer> indexSet = new java.util.LinkedHashSet<>();
+        for (int i = 0; i < Math.min(3, n); i++) indexSet.add(i);
+        for (int i = Math.max(0, n - 3); i < n; i++) indexSet.add(i);
+
+        int prev = -1;
+        for (int i : indexSet) {
+            if (prev >= 0 && i > prev + 1) System.out.println("    ...");
+            AblativeNozzleModel.AblativePoint pt = profile.get(i);
+            System.out.printf("    %-10.4f  %-12.2f  %.4f%n",
+                    pt.x(), pt.y() * 1000, massPerStation.get(i));
+            prev = i;
+        }
+
+        // ---- 6. Carbon-carbon throat insert scenario ----
+        // C/C is used at the throat where heat flux peaks; Arrhenius recession is negligible
+        // but mechanical erosion from alumina drives the total wear rate.
+        AblativeNozzleModel ccThroat = new AblativeNozzleModel(params, contour)
+                .setMaterial(AblativeNozzleModel.AblativeMaterial.CARBON_CARBON)
+                .setInitialLinerThickness(0.010)   // 10 mm C/C insert
+                .setBurnTime(burnTime)
+                .setErosionFactor(5.0e-6)          // lower erosion factor — C/C resists particles better
+                .calculate(heatProfile);
+
+        System.out.printf("%nCarbon-Carbon Throat Insert (10 mm, k_e = 5×10⁻⁶ m/s):%n");
+        System.out.printf("  Max recession:    %.4f mm%n", ccThroat.getMaxRecessionDepth() * 1000);
+        System.out.printf("  Min remaining:    %.4f mm%n", ccThroat.getMinRemainingThickness() * 1000);
+        System.out.printf("  Total ablated mass: %.6f kg%n", ccThroat.getTotalAblatedMass());
+        System.out.printf("  Perforated:       %s%n", ccThroat.isPerforatedAnywhere() ? "YES" : "no");
     }
 }
