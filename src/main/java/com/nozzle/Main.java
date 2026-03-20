@@ -16,6 +16,7 @@ import com.nozzle.optimization.AltitudeAdaptiveOptimizer;
 import com.nozzle.optimization.MonteCarloUncertainty;
 import com.nozzle.thermal.AblativeNozzleModel;
 import com.nozzle.thermal.BoundaryLayerCorrection;
+import com.nozzle.thermal.RadiationCooledExtension;
 import com.nozzle.thermal.CoolantChannel;
 import com.nozzle.thermal.HeatTransferModel;
 import com.nozzle.thermal.ThermalStressAnalysis;
@@ -45,6 +46,7 @@ import java.util.List;
  * - Altitude compensation comparison: aerospike vs. bell nozzle
  * - Aerospike export: CSV spike contour, altitude performance, DXF, STEP, STL, CFD mesh
  * - Ablative liner analysis: Arrhenius char rate, mechanical erosion supplement, ablated mass budget
+ * - Radiation-cooled extension analysis: equilibrium wall temperature, material comparison, overtemperature detection
  */
 public class Main {
 
@@ -76,6 +78,7 @@ public class Main {
             demonstrateExports(outputDir);
             demonstrateAerospikeNozzle(outputDir);
             demonstrateAblativeLiner();
+            demonstrateRadiationCooledExtension();
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -742,7 +745,7 @@ public class Main {
                 .build();
 
         // ---- 1. Generate spike contour ----
-        System.out.println("Generating aerospike nozzle (60% spike radius ratio, 80% truncation)...");
+        System.out.println("Generating Aerospike nozzle (60% spike radius ratio, 80% truncation)...");
         long t0 = System.currentTimeMillis();
         AerospikeNozzle nozzle = new AerospikeNozzle(params, 0.60, 0.80, 100).generate();
         System.out.printf("  Completed in %d ms%n", System.currentTimeMillis() - t0);
@@ -819,7 +822,7 @@ public class Main {
 
         // ---- 7. Exports ----
         System.out.println("\nAerospike Exports:");
-        Path aeroDir = outputDir.resolve("aerospike");
+        Path aeroDir = outputDir.resolve("Aerospike");
         Files.createDirectories(aeroDir);
 
         // CSV
@@ -846,13 +849,13 @@ public class Main {
 
         // CFD meshes
         CFDMeshExporter cfd = new CFDMeshExporter().setAxialCells(100).setRadialCells(50);
-        cfd.exportAerospike(nozzle, aeroDir.resolve("aerospike_blockMeshDict"),
+        cfd.exportAerospike(nozzle, aeroDir.resolve("Aerospike_blockMeshDict"),
                 CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
         cfd.exportAerospike(nozzle, aeroDir.resolve("aerospike.geo"),
                 CFDMeshExporter.Format.GMSH_GEO);
         cfd.exportAerospike(nozzle, aeroDir.resolve("aerospike.xyz"),
                 CFDMeshExporter.Format.PLOT3D);
-        System.out.println("  CFD:  aerospike_blockMeshDict, aerospike.geo, aerospike.xyz");
+        System.out.println("  CFD:  Aerospike_blockMeshDict, aerospike.geo, aerospike.xyz");
         System.out.printf("        (annular domain: spike inner wall → r=%.0f mm outer cowl)%n",
                 rt * 1000);
 
@@ -1018,5 +1021,133 @@ public class Main {
         System.out.printf("  Min remaining:    %.4f mm%n", ccThroat.getMinRemainingThickness() * 1000);
         System.out.printf("  Total ablated mass: %.6f kg%n", ccThroat.getTotalAblatedMass());
         System.out.printf("  Perforated:       %s%n", ccThroat.isPerforatedAnywhere() ? "YES" : "no");
+    }
+
+    /**
+     * Demonstrates the radiation-cooled extension model.
+     *
+     * <p>Shows:
+     * <ul>
+     *   <li>Equilibrium wall temperature profile driven by the Bartz/Eckert
+     *       convective model balanced against surface radiation</li>
+     *   <li>Material comparison across all four presets</li>
+     *   <li>Effect of environment temperature (space vs. sea-level test)</li>
+     *   <li>Overtemperature detection and temperature margin</li>
+     *   <li>Total radiated power budget</li>
+     * </ul>
+     */
+    private static void demonstrateRadiationCooledExtension() {
+        System.out.println("\n--- RADIATION-COOLED NOZZLE EXTENSION ---\n");
+
+        // RL-10-representative LOX/LH2 upper-stage engine (moderate chamber pressure,
+        // high-expansion ratio, long burn).  The bell nozzle is regeneratively cooled
+        // up to the throat region; the extension is radiation-cooled.
+        NozzleDesignParameters params = NozzleDesignParameters.builder()
+                .throatRadius(0.05)
+                .exitMach(4.0)
+                .chamberPressure(3.5e6)          // 3.5 MPa — representative upper stage
+                .chamberTemperature(3250)         // LOX/LH2 combustion temperature
+                .ambientPressure(101325)
+                .gasProperties(GasProperties.LOX_LH2_PRODUCTS)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(30)
+                .lengthFraction(0.8)
+                .axisymmetric(true)
+                .build();
+
+        NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+        contour.generate(60);
+
+        // The regeneratively cooled section ends at x ≈ 30 % of the bell length;
+        // the radiation-cooled extension begins there.
+        double extensionStartX = contour.getLength() * 0.30;
+
+        // ---- 1. Baseline: Niobium C-103 in space vacuum ----
+        RadiationCooledExtension baseModel = new RadiationCooledExtension(params, contour)
+                .setMaterial(RadiationCooledExtension.ExtensionMaterial.NIOBIUM_C103)
+                .setExtensionStartX(extensionStartX)
+                .setEnvironmentTemperature(3.0)   // deep-space vacuum
+                .calculate(List.of());
+
+        System.out.printf("Extension starts at x = %.4f m (%.0f%% of bell length)%n",
+                extensionStartX, 30.0);
+        System.out.printf("Extension stations in profile: %d%n%n", baseModel.getProfile().size());
+
+        System.out.printf("Niobium C-103 baseline (space, T_env = 3 K):%n");
+        System.out.printf("  Max wall temperature:   %.0f K   (limit: %.0f K)%n",
+                baseModel.getMaxWallTemperature(),
+                RadiationCooledExtension.ExtensionMaterial.NIOBIUM_C103.temperatureLimit());
+        System.out.printf("  Min temperature margin: %.0f K%n",
+                baseModel.getMinTemperatureMargin());
+        System.out.printf("  Total radiated power:   %.2f kW%n",
+                baseModel.getTotalRadiatedPower() / 1000);
+        System.out.printf("  Overtemperature:        %s%n",
+                baseModel.isOvertemperatureAnywhere() ? "YES" : "no");
+
+        // ---- 2. Station-by-station profile (first 3 and last 3) ----
+        List<RadiationCooledExtension.ExtensionPoint> extProfile = baseModel.getProfile();
+        int n = extProfile.size();
+        if (n > 0) {
+            System.out.printf("%n  Station profile (x, r, T_wall, T_aw, margin):%n");
+            System.out.printf("    %-10s  %-8s  %-10s  %-10s  %-10s%n",
+                    "x (m)", "r (mm)", "T_wall (K)", "T_aw (K)", "margin (K)");
+
+            java.util.LinkedHashSet<Integer> indexSet = new java.util.LinkedHashSet<>();
+            for (int i = 0; i < Math.min(3, n); i++) indexSet.add(i);
+            for (int i = Math.max(0, n - 3); i < n; i++) indexSet.add(i);
+
+            int prev = -1;
+            for (int i : indexSet) {
+                if (prev >= 0 && i > prev + 1) System.out.println("    ...");
+                RadiationCooledExtension.ExtensionPoint pt = extProfile.get(i);
+                System.out.printf("    %-10.4f  %-8.2f  %-10.0f  %-10.0f  %-10.0f%n",
+                        pt.x(), pt.y() * 1000,
+                        pt.wallTemperature(), pt.recoveryTemperature(), pt.temperatureMargin());
+                prev = i;
+            }
+        }
+
+        // ---- 3. Material comparison ----
+        RadiationCooledExtension.ExtensionMaterial[] materials = {
+                RadiationCooledExtension.ExtensionMaterial.NIOBIUM_C103,
+                RadiationCooledExtension.ExtensionMaterial.RHENIUM_IRIDIUM,
+                RadiationCooledExtension.ExtensionMaterial.TITANIUM_6AL_4V,
+                RadiationCooledExtension.ExtensionMaterial.CARBON_CARBON,
+        };
+
+        System.out.printf("%nMaterial comparison (space environment, same extension geometry):%n");
+        System.out.printf("  %-34s  %10s  %10s  %10s  %10s%n",
+                "Material", "Max T (K)", "Margin (K)", "Power (kW)", "Overtemp");
+        System.out.println("  " + "-".repeat(82));
+
+        for (RadiationCooledExtension.ExtensionMaterial mat : materials) {
+            RadiationCooledExtension mdl = new RadiationCooledExtension(params, contour)
+                    .setMaterial(mat)
+                    .setExtensionStartX(extensionStartX)
+                    .setEnvironmentTemperature(3.0)
+                    .calculate(List.of());
+
+            System.out.printf("  %-34s  %10.0f  %10.0f  %10.2f  %10s%n",
+                    mat.name(),
+                    mdl.getMaxWallTemperature(),
+                    mdl.getMinTemperatureMargin(),
+                    mdl.getTotalRadiatedPower() / 1000,
+                    mdl.isOvertemperatureAnywhere() ? "YES" : "no");
+        }
+
+        // ---- 4. Ground test vs. space: effect of environment temperature ----
+        RadiationCooledExtension groundTest = new RadiationCooledExtension(params, contour)
+                .setMaterial(RadiationCooledExtension.ExtensionMaterial.NIOBIUM_C103)
+                .setExtensionStartX(extensionStartX)
+                .setEnvironmentTemperature(300.0)   // sea-level ground test
+                .calculate(List.of());
+
+        System.out.printf("%nEnvironment temperature effect (Niobium C-103, same extension):%n");
+        System.out.printf("  Space  (T_env =   3 K): max T_wall = %.0f K, margin = %.0f K%n",
+                baseModel.getMaxWallTemperature(), baseModel.getMinTemperatureMargin());
+        System.out.printf("  Ground (T_env = 300 K): max T_wall = %.0f K, margin = %.0f K%n",
+                groundTest.getMaxWallTemperature(), groundTest.getMinTemperatureMargin());
+        System.out.printf("  Wall temperature increase on ground: +%.0f K%n",
+                groundTest.getMaxWallTemperature() - baseModel.getMaxWallTemperature());
     }
 }

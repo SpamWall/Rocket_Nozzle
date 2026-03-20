@@ -3,16 +3,6 @@ Continue to write all code using the jakarta coding guidelines and accepted obje
 Here's an organized assessment of the most impactful additions, grouped by value:
 
   ---
-  High Impact
-
-  ---
-  High Impact — Missing Analysis Capabilities
-
-  Radiation-Cooled Extension Model
-  Large nozzle extensions (like on the RL-10) are uncooled and reach equilibrium wall temperature via radiation. The current model assumes regenerative cooling everywhere. A separate equilibrium-radiation model for the extension section would be realistic.
-
-
-  ---
   Medium Impact — Code Quality & Professionalism
 
   Serialization / Design Database
