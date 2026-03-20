@@ -14,6 +14,8 @@ import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.RaoNozzle;
 import com.nozzle.optimization.AltitudeAdaptiveOptimizer;
 import com.nozzle.optimization.MonteCarloUncertainty;
+import com.nozzle.io.DesignDocument;
+import com.nozzle.io.NozzleSerializer;
 import com.nozzle.thermal.AblativeNozzleModel;
 import com.nozzle.thermal.BoundaryLayerCorrection;
 import com.nozzle.thermal.RadiationCooledExtension;
@@ -79,6 +81,7 @@ public class Main {
             demonstrateAerospikeNozzle(outputDir);
             demonstrateAblativeLiner();
             demonstrateRadiationCooledExtension();
+            demonstrateSerialization(outputDir);
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -1149,5 +1152,121 @@ public class Main {
                 groundTest.getMaxWallTemperature(), groundTest.getMinTemperatureMargin());
         System.out.printf("  Wall temperature increase on ground: +%.0f K%n",
                 groundTest.getMaxWallTemperature() - baseModel.getMaxWallTemperature());
+    }
+
+    /**
+     * Demonstrates JSON serialization and deserialization of a complete nozzle design.
+     *
+     * <ul>
+     *   <li>Saves design parameters alone (pre-computation snapshot).</li>
+     *   <li>Runs the MOC solver and saves the full design including wall points and contour.</li>
+     *   <li>Loads the full design back and verifies parameter round-trip fidelity.</li>
+     * </ul>
+     */
+    /**
+     * Demonstrates a three-stage persistent workflow using {@link NozzleSerializer}.
+     *
+     * <p>Each stage represents a separate program invocation that loads from the
+     * file written by the previous stage, mirroring how a real design tool would
+     * separate initial parameterisation, expensive computation, and downstream
+     * analysis into independent sessions.
+     *
+     * <ul>
+     *   <li><b>Stage 1 – Capture design intent:</b> build parameters and save a
+     *       parameters-only document.  No solver is run.</li>
+     *   <li><b>Stage 2 – Solve and checkpoint:</b> load the intent document, run
+     *       the MOC solver and contour generator, then overwrite the file with a
+     *       full design document containing the computed flow field.</li>
+     *   <li><b>Stage 3 – Reload and analyse:</b> load the full document and run
+     *       performance and validation calculations directly from the restored
+     *       parameters — the MOC solver is not re-executed.</li>
+     * </ul>
+     */
+    private static void demonstrateSerialization(Path outputDir) {
+        System.out.println("\n--- JSON SERIALIZATION (PERSISTENT WORKFLOW) ---\n");
+
+        Path checkpoint = outputDir.resolve("workflow_design.json");
+
+        // ----------------------------------------------------------------
+        // Stage 1 — Capture design intent (no computation yet)
+        // ----------------------------------------------------------------
+        System.out.println("  Stage 1: Capture design intent");
+
+        NozzleDesignParameters params = NozzleDesignParameters.builder()
+                .throatRadius(0.05)
+                .exitMach(3.5)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500)
+                .ambientPressure(101325)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(30)
+                .lengthFraction(0.8)
+                .build();
+
+        NozzleSerializer.save(NozzleSerializer.document(params), checkpoint);
+        System.out.printf("    Parameters saved to:    %s%n", checkpoint.getFileName());
+        System.out.printf("    Throat radius:          %.1f mm%n", params.throatRadius() * 1000);
+        System.out.printf("    Exit Mach:              %.2f%n", params.exitMach());
+        System.out.printf("    Chamber pressure:       %.1f MPa%n", params.chamberPressure() / 1e6);
+
+        // ----------------------------------------------------------------
+        // Stage 2 — Load intent, run solver, checkpoint full design
+        // ----------------------------------------------------------------
+        System.out.println("\n  Stage 2: Run MOC solver and save full design");
+
+        DesignDocument intent = NozzleSerializer.load(checkpoint);
+        NozzleDesignParameters solverParams = intent.parameters();
+
+        long t0 = System.currentTimeMillis();
+        CharacteristicNet net = new CharacteristicNet(solverParams).generate();
+        NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, solverParams);
+        contour.generate(200);
+        long elapsed = System.currentTimeMillis() - t0;
+
+        NozzleSerializer.save(NozzleSerializer.document(solverParams, net, contour), checkpoint);
+        System.out.printf("    Solver completed in:    %d ms%n", elapsed);
+        System.out.printf("    MOC wall points:        %d%n", net.getWallPoints().size());
+        System.out.printf("    MOC net rows:           %d%n", net.getNetPoints().size());
+        System.out.printf("    Contour points:         %d%n", contour.getContourPoints().size());
+        System.out.printf("    Full design saved to:   %s%n", checkpoint.getFileName());
+
+        // ----------------------------------------------------------------
+        // Stage 3 — Reload full design, analyse without re-running solver
+        // ----------------------------------------------------------------
+        System.out.println("\n  Stage 3: Reload checkpoint and run downstream analysis");
+
+        DesignDocument full = NozzleSerializer.load(checkpoint);
+        NozzleDesignParameters rp = full.parameters();
+
+        System.out.printf("    Schema version:         %s%n", full.version());
+        System.out.printf("    Created at:             %s%n", full.createdAt());
+        System.out.printf("    Wall points restored:   %d%n", full.wallPoints().size());
+        System.out.printf("    Contour points restored:%d%n", full.contourPoints().size());
+
+        // Performance analysis driven entirely by the restored parameters
+        PerformanceCalculator perf = PerformanceCalculator.simple(rp).calculate();
+        System.out.printf("%n    Performance (from restored parameters):%n");
+        System.out.printf("      Thrust coefficient:   %.4f%n", perf.getActualThrustCoefficient());
+        System.out.printf("      Specific impulse:     %.1f s%n", perf.getSpecificImpulse());
+        System.out.printf("      Thrust:               %.2f kN%n", perf.getThrust() / 1000);
+        System.out.printf("      Efficiency:           %.2f%%%n", perf.getEfficiency() * 100);
+
+        // Validation against NASA SP-8120 using restored parameters
+        NASASP8120Validator.ValidationResult validation =
+                new NASASP8120Validator().validate(rp);
+        System.out.printf("%n    NASA SP-8120 validation (from restored parameters):%n");
+        System.out.printf("      Overall status:       %s%n",
+                validation.isValid() ? "PASS" : "FAIL");
+        System.out.printf("      Warnings:             %d%n", validation.warnings().size());
+
+        // Confirm the round-trip preserved all numeric fields exactly
+        boolean paramsMatch =
+                Math.abs(rp.throatRadius()       - params.throatRadius())       < 1e-12 &&
+                Math.abs(rp.exitMach()           - params.exitMach())           < 1e-12 &&
+                Math.abs(rp.chamberPressure()    - params.chamberPressure())    < 1e-12 &&
+                Math.abs(rp.chamberTemperature() - params.chamberTemperature()) < 1e-12 &&
+                rp.numberOfCharLines() == params.numberOfCharLines();
+        System.out.printf("%n    Parameter round-trip exact: %b%n", paramsMatch);
     }
 }

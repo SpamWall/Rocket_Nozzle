@@ -1,5 +1,7 @@
 package com.nozzle.core;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 
@@ -18,6 +20,7 @@ import jakarta.validation.constraints.Positive;
  * @param lengthFraction      Fractional length compared to 15° cone (Rao parameter)
  * @param axisymmetric        True for axisymmetric nozzle, false for 2D planar
  */
+@JsonDeserialize(builder = NozzleDesignParameters.Builder.class)
 public record NozzleDesignParameters(
         @Positive double throatRadius,
         @Min(1) double exitMach,
@@ -221,6 +224,7 @@ public record NozzleDesignParameters(
      * angle, length fraction 0.8, axisymmetric geometry).
      * Overriding any subset before calling {@link #build()} is sufficient.
      */
+    @JsonPOJOBuilder(withPrefix = "")
     public static class Builder {
 
         /** Creates a {@code Builder} preloaded with all default parameter values. */

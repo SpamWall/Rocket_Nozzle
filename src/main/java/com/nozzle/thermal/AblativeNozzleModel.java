@@ -12,7 +12,7 @@ import java.util.List;
  *
  * <p>Ablative liners are used primarily in solid-rocket motor nozzles, and in
  * liquid-rocket nozzle extensions where regenerative cooling is impractical.
- * As the hot gas heats the liner, the organic matrix pyrolyses at the char
+ * As the hot gas heats the liner, the organic matrix pyrolysis at the char
  * front and the char layer grows inward toward the back wall.
  *
  * <p>At each axial station the model computes:
@@ -62,7 +62,7 @@ public class AblativeNozzleModel {
      * Mechanical (particle-impingement) erosion factor {@code k_e} [m/s].
      * The erosion supplement {@code ṙ_mech = k_e · (P_c / P_ref)^0.8} is
      * added to the Arrhenius rate at every station.  The default value of 0
-     * disables mechanical erosion, preserving the pure-Arrhenius behaviour.
+     * disables mechanical erosion, preserving the pure-Arrhenius behavior.
      */
     private double erosionFactor = 0.0;
 
@@ -131,7 +131,7 @@ public class AblativeNozzleModel {
      * <p>In solid-rocket motors the exhaust is laden with alumina (Al₂O₃)
      * particles that mechanically erode the char layer in addition to the
      * thermal pyrolysis captured by the Arrhenius expression.  The erosion
-     * supplement is modelled as:
+     * supplement is modeled as:
      *
      * <pre>  ṙ_mech = k_e · (P_c / P_ref)^0.8</pre>
      *
@@ -244,15 +244,7 @@ public class AblativeNozzleModel {
         double charDepth = 0.0;
 
         // Arrhenius pyrolysis term — constant because T_surface is held fixed.
-        double arrheniusRate = material.preExponentialFactor()
-                * Math.exp(-material.activationEnergy() / (R_UNIVERSAL * T_surface));
-
-        // Mechanical erosion supplement from particle impingement (§ setErosionFactor).
-        // Scales as (P_c / P_ref)^0.8, consistent with Bartz heat-flux pressure exponent.
-        double mechanicalRate = erosionFactor
-                * Math.pow(parameters.chamberPressure() / P_REF, 0.8);
-
-        double totalCharRate = arrheniusRate + mechanicalRate;
+        double totalCharRate = getTotalCharRate(T_surface);
 
         // Both rate terms are constant for this station (T_surface is held fixed,
         // erosionFactor and Pc are global constants).  The Euler loop is retained
@@ -269,6 +261,47 @@ public class AblativeNozzleModel {
 
         return new AblativePoint(x, y, T_surface, totalCharRate,
                 charDepth, remaining, initialLinerThickness, perforated);
+    }
+
+    /**
+     * Computes the total surface recession rate at a single axial station by
+     * combining the Arrhenius pyrolysis rate with the mechanical erosion supplement.
+     *
+     * <p>The total rate is:
+     * <pre>  ṙ_total = A · exp(−Ea / (R · T_surface)) + k_e · (P_c / P_ref)^0.8</pre>
+     *
+     * <p>The first term is the Arrhenius (thermal pyrolysis) contribution, where
+     * {@code A} and {@code Ea} are the pre-exponential factor and activation energy
+     * of the current {@link AblativeMaterial}, and {@code R} is the universal gas
+     * constant (8.314462 J/(mol·K)).
+     *
+     * <p>The second term is the mechanical erosion supplement from particle
+     * impingement (see {@link #setErosionFactor(double)}).  It scales as
+     * {@code (P_c / P_ref)^0.8}, consistent with the Bartz pressure exponent for
+     * convective heat flux, where {@code P_ref = 1 MPa}.  When
+     * {@link #erosionFactor} is zero (the default), this term vanishes and the
+     * result is the pure Arrhenius rate.
+     *
+     * <p>Both terms are evaluated at the station-level surface temperature
+     * {@code T_surface} (held constant over the burn in the zero-order-hold
+     * assumption) and the global chamber pressure {@code P_c}.  Because neither
+     * value changes during the integration loop in {@link #integrateRecession},
+     * this method is called once per station outside the time-step loop.
+     *
+     * @param T_surface Gas-side liner surface temperature in K at this station;
+     *                  must be &gt; 0 to avoid a singularity in the Arrhenius exponent
+     * @return Total instantaneous recession rate in m/s
+     */
+    private double getTotalCharRate(double T_surface) {
+        double arrheniusRate = material.preExponentialFactor()
+                * Math.exp(-material.activationEnergy() / (R_UNIVERSAL * T_surface));
+
+        // Mechanical erosion supplement from particle impingement (§ setErosionFactor).
+        // Scales as (P_c / P_ref)^0.8, consistent with Bartz heat-flux pressure exponent.
+        double mechanicalRate = erosionFactor
+                * Math.pow(parameters.chamberPressure() / P_REF, 0.8);
+
+       return arrheniusRate + mechanicalRate;
     }
 
     // -----------------------------------------------------------------------
@@ -538,7 +571,7 @@ public class AblativeNozzleModel {
          * Carbon–carbon (C/C) composite — the preferred material for
          * high-performance SRM nozzle throat inserts and exit-cone liners
          * operating above ≈ 2 500 K.  The woven carbon–carbon structure
-         * oxidises extremely slowly via the Arrhenius mechanism; the dominant
+         * oxidizes extremely slowly via the Arrhenius mechanism; the dominant
          * failure mode is sublimation and particle-impingement erosion rather
          * than classic pyrolysis.
          *

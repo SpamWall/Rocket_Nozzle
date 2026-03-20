@@ -5,9 +5,6 @@ Here's an organized assessment of the most impactful additions, grouped by value
   ---
   Medium Impact — Code Quality & Professionalism
 
-  Serialization / Design Database
-  There is no way to save a design to disk and reload it. Adding Jackson-based JSON serialization to NozzleDesignParameters, CharacteristicNet, and results would make the library usable as part of a persistent workflow.
-
   Proper Logging
   Main.java uses System.out throughout. ChemistryModel uses SLF4J but nothing else does. Consistent SLF4J usage across all classes would make the library production-grade.
 
