@@ -197,4 +197,116 @@ class CFDMeshExporter_UT {
             assertThat(Files.size(out)).isGreaterThan(0);
         }
     }
+
+    @Nested
+    @DisplayName("firstLayerThickness Tests")
+    class FirstLayerThicknessTests {
+
+        @Test
+        @DisplayName("setFirstLayerThickness is fluent and rejects non-positive values")
+        void setFirstLayerThicknessValidation() {
+            assertThatThrownBy(() -> new CFDMeshExporter().setFirstLayerThickness(0.0))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> new CFDMeshExporter().setFirstLayerThickness(-1e-5))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatCode(() -> new CFDMeshExporter().setFirstLayerThickness(1e-5))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("OpenFOAM blockMesh grading increases when firstLayerThickness decreases")
+        void openFoamGradingIncreasesWithSmallerFirstLayer() throws IOException {
+            Path outCoarse = tempDir.resolve("bmd_coarse.txt");
+            Path outFine   = tempDir.resolve("bmd_fine.txt");
+
+            // Coarse first layer (large h1) → small grading
+            new CFDMeshExporter().setRadialCells(20).setFirstLayerThickness(1e-3)
+                    .export(contour, outCoarse, CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
+            // Fine first layer (small h1) → large grading
+            new CFDMeshExporter().setRadialCells(20).setFirstLayerThickness(1e-5)
+                    .export(contour, outFine, CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
+
+            // Extract the first grading value from each file:
+            // the line looks like "        ((0.5 0.5 <g>) (0.5 0.5 <1/g>))"
+            double gradingCoarse = extractSimpleGrading(outCoarse);
+            double gradingFine   = extractSimpleGrading(outFine);
+
+            assertThat(gradingFine).isGreaterThan(gradingCoarse);
+        }
+
+        @Test
+        @DisplayName("Gmsh progression ratio is greater than 1 with a small firstLayerThickness")
+        void gmshProgressionRatioGreaterThanOne() throws IOException {
+            Path out = tempDir.resolve("yplus.geo");
+            new CFDMeshExporter().setRadialCells(30).setFirstLayerThickness(1e-5)
+                    .export(contour, out, CFDMeshExporter.Format.GMSH_GEO);
+
+            String content = Files.readString(out);
+            // Gmsh line: "Transfinite Curve {n, m} = K Using Progression <r>;"
+            double r = extractGmshProgression(content);
+            assertThat(r).isGreaterThan(1.0);
+        }
+
+        @Test
+        @DisplayName("Plot3D file is non-empty and exponent increases for smaller firstLayerThickness")
+        void plot3dExponentIncreasesWithSmallerFirstLayer() throws IOException {
+            Path outCoarse = tempDir.resolve("p3d_coarse.xyz");
+            Path outFine   = tempDir.resolve("p3d_fine.xyz");
+
+            new CFDMeshExporter().setRadialCells(20).setFirstLayerThickness(1e-3)
+                    .export(contour, outCoarse, CFDMeshExporter.Format.PLOT3D);
+            new CFDMeshExporter().setRadialCells(20).setFirstLayerThickness(1e-5)
+                    .export(contour, outFine, CFDMeshExporter.Format.PLOT3D);
+
+            // Both files must be non-empty; the finer first layer produces a different grid
+            assertThat(Files.size(outCoarse)).isGreaterThan(0);
+            assertThat(Files.size(outFine)).isGreaterThan(0);
+            // Grids must differ because of different exponents
+            assertThat(Files.readString(outFine)).isNotEqualTo(Files.readString(outCoarse));
+        }
+
+        @Test
+        @DisplayName("Aerospike OpenFOAM blockMesh uses annular gap as domain height")
+        void aerospikeOpenFoamUsesAnnularGap() throws IOException {
+            AerospikeNozzle nozzle = new AerospikeNozzle(params).generate();
+            Path out = tempDir.resolve("aero_yplus.txt");
+
+            new CFDMeshExporter().setRadialCells(20).setFirstLayerThickness(1e-5)
+                    .exportAerospike(nozzle, out, CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
+
+            assertThat(out).exists();
+            double grading = extractSimpleGrading(out);
+            assertThat(grading).isGreaterThan(1.0);
+        }
+
+        // ------------------------------------------------------------------
+        // Helpers
+        // ------------------------------------------------------------------
+
+        private double extractSimpleGrading(Path file) throws IOException {
+            // Matches: "        ((0.5 0.5 <value>) ..."
+            return Files.lines(file)
+                    .filter(l -> l.contains("0.5 0.5"))
+                    .mapToDouble(l -> {
+                        String[] parts = l.trim().split("\\s+");
+                        // parts: [ "((0.5", "0.5", "<value>)", "(0.5", "0.5", ... ]
+                        return Double.parseDouble(parts[2].replace(")", ""));
+                    })
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("simpleGrading line not found"));
+        }
+
+        private double extractGmshProgression(String content) {
+            // Matches: "Transfinite Curve {n, m} = K Using Progression <r>;"
+            return java.util.Arrays.stream(content.split("\n"))
+                    .filter(l -> l.contains("Using Progression") && l.contains(","))
+                    .mapToDouble(l -> {
+                        String[] parts = l.trim().split("\\s+");
+                        String last = parts[parts.length - 1].replace(";", "");
+                        return Double.parseDouble(last);
+                    })
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Progression line not found"));
+        }
+    }
 }

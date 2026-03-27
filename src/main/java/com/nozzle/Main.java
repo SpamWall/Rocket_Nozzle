@@ -69,6 +69,7 @@ import java.util.List;
  * - Aerospike export: CSV spike contour, altitude performance, DXF, STEP, STL, CFD mesh
  * - Ablative liner analysis: Arrhenius char rate, mechanical erosion supplement, ablated mass budget
  * - Radiation-cooled extension analysis: equilibrium wall temperature, material comparison, overtemperature detection
+ * - y⁺-controlled first-cell-height grading: CFDMeshExporter and OpenFOAMExporter firstLayerThickness
  */
 public class Main {
 
@@ -102,6 +103,7 @@ public class Main {
             demonstrateAblativeLiner();
             demonstrateRadiationCooledExtension();
             demonstrateSerialization(outputDir);
+            demonstrateYPlusGrading(outputDir);
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -1279,5 +1281,121 @@ public class Main {
                 Math.abs(rp.chamberTemperature() - params.chamberTemperature()) < 1e-12 &&
                 rp.numberOfCharLines() == params.numberOfCharLines();
         System.out.printf("%n    Parameter round-trip exact: %b%n", paramsMatch);
+    }
+
+    /**
+     * Demonstrates y⁺-controlled first-cell-height grading for CFD meshes.
+     *
+     * <p>Shows how to use {@link CFDMeshExporter#setFirstLayerThickness(double)}
+     * and {@link OpenFOAMExporter#setFirstLayerThickness(double)} to drive mesh
+     * grading from a target first-cell height y₁ rather than a fixed expansion
+     * ratio.  Grading is computed per format:
+     * <ul>
+     *   <li>OpenFOAM blockMesh: g = H / y₁  (strong-grading approximation)</li>
+     *   <li>Gmsh "Using Progression": r = (H/y₁)^(1/N)</li>
+     *   <li>Plot3D power-law exponent: p = ln(H/y₁) / ln(N)</li>
+     * </ul>
+     */
+    private static void demonstrateYPlusGrading(Path outputDir) throws Exception {
+        System.out.println("\n--- y⁺-CONTROLLED FIRST-CELL-HEIGHT GRADING ---\n");
+
+        NozzleDesignParameters params = NozzleDesignParameters.builder()
+                .throatRadius(0.05)
+                .exitMach(3.0)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500)
+                .ambientPressure(101325)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(30)
+                .lengthFraction(0.8)
+                .axisymmetric(true)
+                .build();
+
+        CharacteristicNet net = new CharacteristicNet(params).generate();
+        NozzleContour contour = NozzleContour.fromMOCWallPoints(params, net.getWallPoints());
+        contour.generate(100);
+
+        // ---- 1. Derive a first-cell height from throat flow conditions ----
+        // Rough y+ target: y+ = 1  (wall-resolved LES / viscous sublayer)
+        // Using Re_throat from Sutherland viscosity:
+        //   μ ≈ μ_ref * (T/T_ref)^(3/2) * (T_ref + S)/(T + S)
+        // For simplicity we estimate μ at throat temperature T* = 0.833*T_c.
+        double gamma   = params.gasProperties().gamma();
+        double Tc      = params.chamberTemperature();
+        double Pc      = params.chamberPressure();
+        double R       = params.gasProperties().gasConstant();
+        double Tt      = Tc * 2.0 / (gamma + 1.0);  // throat static temperature
+        double Pt      = Pc * Math.pow(2.0 / (gamma + 1.0), gamma / (gamma - 1.0));
+        double rhoT    = Pt / (R * Tt);
+        double aT      = Math.sqrt(gamma * R * Tt);  // throat speed of sound = flow speed
+        double muRef   = 1.716e-5;                   // kg/(m·s) at T_ref = 273.15 K
+        double Tref    = 273.15;
+        double S       = 110.4;                      // Sutherland constant for air-like mixture
+        double muT     = muRef * Math.pow(Tt / Tref, 1.5) * (Tref + S) / (Tt + S);
+        double ReThroat = rhoT * aT * (2.0 * params.throatRadius()) / muT;
+
+        // Friction velocity u_tau ~ U∞ * sqrt(Cf/2),  Cf ≈ 0.026 * Re^-0.2
+        double Cf      = 0.026 * Math.pow(ReThroat, -0.2);
+        double uTau    = aT * Math.sqrt(Cf / 2.0);
+        double nu      = muT / rhoT;                 // kinematic viscosity
+        double yPlus1  = 1.0;
+        double y1      = yPlus1 * nu / uTau;         // first-cell height for y⁺ = 1
+
+        System.out.printf("Throat flow conditions:%n");
+        System.out.printf("  Throat temperature:   %.0f K%n",   Tt);
+        System.out.printf("  Throat density:       %.3f kg/m³%n", rhoT);
+        System.out.printf("  Throat Mach speed:    %.1f m/s%n",  aT);
+        System.out.printf("  Dynamic viscosity:    %.3e Pa·s%n", muT);
+        System.out.printf("  Throat Re (diameter): %.3e%n",      ReThroat);
+        System.out.printf("  Skin-friction coeff:  %.4f%n",      Cf);
+        System.out.printf("  y⁺ = 1 cell height:  %.3e m  (%.4f mm)%n",
+                y1, y1 * 1000);
+
+        // ---- 2. CFDMeshExporter — OpenFOAM blockMesh, Gmsh, Plot3D ----
+        System.out.println("\nCFDMeshExporter (y⁺-graded, N_r = 80):");
+
+        Path bmdYPlus  = outputDir.resolve("blockMeshDict_yplus");
+        Path geoYPlus  = outputDir.resolve("nozzle_yplus.geo");
+        Path xyzYPlus  = outputDir.resolve("nozzle_yplus.xyz");
+
+        CFDMeshExporter yPlusExporter = new CFDMeshExporter()
+                .setAxialCells(200)
+                .setRadialCells(80)
+                .setFirstLayerThickness(y1);
+
+        yPlusExporter.export(contour, bmdYPlus,  CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
+        yPlusExporter.export(contour, geoYPlus,  CFDMeshExporter.Format.GMSH_GEO);
+        yPlusExporter.export(contour, xyzYPlus,  CFDMeshExporter.Format.PLOT3D);
+
+        System.out.printf("  Exported blockMeshDict → %s%n", bmdYPlus.getFileName());
+        System.out.printf("  Exported Gmsh .geo     → %s%n", geoYPlus.getFileName());
+        System.out.printf("  Exported Plot3D .xyz   → %s%n", xyzYPlus.getFileName());
+
+        // ---- 3. OpenFOAMExporter — full rhoCentralFoam case, y⁺ grading ----
+        System.out.println("\nOpenFOAMExporter (y⁺-graded complete case):");
+
+        Path yPlusCase = outputDir.resolve("openfoam_case_yplus");
+        new OpenFOAMExporter()
+                .setAxialCells(300)
+                .setRadialCells(100)
+                .setFirstLayerThickness(y1)
+                .setTurbulenceEnabled(true)
+                .setTurbulenceIntensity(0.05)
+                .exportCase(params, contour, yPlusCase);
+
+        System.out.printf("  Exported full case     → %s%n", yPlusCase.toAbsolutePath());
+        System.out.println("  Run with: blockMesh && rhoCentralFoam");
+
+        // ---- 4. Grading ratio comparison: fixed vs y⁺-derived ----
+        double exitRadius = contour.getContourPoints().getLast().y();
+        double fixedGrading  = 4.0;   // OpenFOAMExporter default
+        double derivedGrading = Math.max(1.0, exitRadius / y1);
+
+        System.out.printf("%nGrading ratio comparison (domain height = exit radius = %.4f m):%n",
+                exitRadius);
+        System.out.printf("  Fixed radialGrading (default):  %.1f%n",      fixedGrading);
+        System.out.printf("  y⁺-derived grading (y1=%.2e m): %.1f%n",      y1, derivedGrading);
+        System.out.printf("  First-cell / domain ratio:       %.2e%n",      y1 / exitRadius);
     }
 }

@@ -64,6 +64,12 @@ public class CFDMeshExporter {
     private int radialCells = 50;
     /** Cell-size expansion ratio from wall to interior (default: 1.2). */
     private double expansionRatio = 1.2;
+    /**
+     * First cell height y₁ in metres for y⁺-controlled grading.
+     * When positive, overrides {@link #expansionRatio} in all export methods.
+     * Zero means disabled (use {@link #expansionRatio} directly).
+     */
+    private double firstLayerThickness = 0.0;
 
     /**
      * Sets the number of cells in the axial (flow) direction.
@@ -90,6 +96,7 @@ public class CFDMeshExporter {
     /**
      * Sets the cell-size expansion ratio from the wall to the interior, used for
      * radial grading in all exported mesh formats.
+     * Has no effect when {@link #setFirstLayerThickness(double)} is also set.
      *
      * @param expansion Cell-size expansion ratio (e.g. 1.2 clusters cells toward the wall)
      * @return This instance for method chaining
@@ -98,7 +105,69 @@ public class CFDMeshExporter {
         this.expansionRatio = expansion;
         return this;
     }
+
+    /**
+     * Sets the first cell height y₁ (metres) for y⁺-controlled radial grading,
+     * overriding the fixed {@link #setExpansionRatio(double) expansionRatio}.
+     * The domain height H used is the exit radius for bell nozzles and the
+     * annular gap (r_cowl − r_spike_root) for aerospike nozzles.
+     * The grading derived per format is:
+     * <ul>
+     *   <li><b>OpenFOAM blockMesh</b>: expansion ratio g = H / y₁</li>
+     *   <li><b>Gmsh transfinite progression</b>: r = (H / y₁)<sup>1/N</sup>,
+     *       where N = {@link #setRadialCells(int) radialCells}</li>
+     *   <li><b>Plot3D power-law exponent</b>: p = ln(H / y₁) / ln(N)</li>
+     * </ul>
+     *
+     * @param t First cell height in metres (must be positive)
+     * @return This instance for method chaining
+     * @throws IllegalArgumentException if {@code t} is not positive
+     */
+    public CFDMeshExporter setFirstLayerThickness(double t) {
+        if (t <= 0) throw new IllegalArgumentException(
+                "firstLayerThickness must be positive, got: " + t);
+        this.firstLayerThickness = t;
+        return this;
+    }
     
+    // -------------------------------------------------------------------------
+    // y⁺-grading helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns the OpenFOAM blockMesh expansion ratio for a given domain height.
+     * When {@link #firstLayerThickness} is set: g = H / y₁ (strong-grading approximation
+     * where the last-to-first cell ratio equals the domain-to-first-cell ratio).
+     * Falls back to {@link #expansionRatio} otherwise.
+     */
+    private double blockMeshGrading(double domainHeight) {
+        if (firstLayerThickness <= 0) return expansionRatio;
+        return Math.max(1.0, domainHeight / firstLayerThickness);
+    }
+
+    /**
+     * Returns the Gmsh {@code Using Progression} cell-to-cell ratio r for a given
+     * domain height.  r = (H / y₁)<sup>1/N</sup> where N = {@link #radialCells}.
+     * Falls back to {@link #expansionRatio} otherwise.
+     */
+    private double gmshProgression(double domainHeight) {
+        if (firstLayerThickness <= 0) return expansionRatio;
+        double ratio = Math.max(1.0, domainHeight / firstLayerThickness);
+        return Math.pow(ratio, 1.0 / radialCells);
+    }
+
+    /**
+     * Returns the Plot3D power-law stretching exponent p for a given domain height.
+     * The exponent satisfies y₁ = H · (1/N)<sup>p</sup>, giving
+     * p = ln(H / y₁) / ln(N) where N = {@link #radialCells}.
+     * Falls back to {@link #expansionRatio} otherwise.
+     */
+    private double plot3dExponent(double domainHeight) {
+        if (firstLayerThickness <= 0) return expansionRatio;
+        double ratio = Math.max(1.0, domainHeight / firstLayerThickness);
+        return Math.log(ratio) / Math.log(radialCells);
+    }
+
     /**
      * Dispatches the mesh export to the appropriate format-specific method.
      *
@@ -172,14 +241,15 @@ public class CFDMeshExporter {
             writer.write(String.format("    hex (0 2 3 1 %d %d %d %d) (%d %d 1)\n",
                     vertexId - 2, vertexId - 1, vertexId - 1, vertexId - 2,
                     axialCells, radialCells));
+            double g = blockMeshGrading(points.getLast().y());
             writer.write("    simpleGrading (\n");
             writer.write("        1\n");
             writer.write(String.format("        ((0.5 0.5 %.2f) (0.5 0.5 %.2f))\n",
-                    expansionRatio, 1.0 / expansionRatio));
+                    g, 1.0 / g));
             writer.write("        1\n");
             writer.write("    )\n");
             writer.write(");\n\n");
-            
+
             // Edges (use spline for wall)
             writer.write("edges\n(\n");
             writer.write("    spline 0 2 (\n");
@@ -326,18 +396,20 @@ public class CFDMeshExporter {
                     axisLine, axialCells + 1));
             writer.write(String.format("Transfinite Curve {%d} = %d Using Progression 1;\n",
                     wallLine, axialCells + 1));
-            writer.write(String.format("Transfinite Curve {%d, %d} = %d Using Progression %.2f;\n",
-                    inletLine, outletLine, radialCells + 1, expansionRatio));
+            double r = gmshProgression(points.getLast().y());
+            writer.write(String.format("Transfinite Curve {%d, %d} = %d Using Progression %.4f;\n",
+                    inletLine, outletLine, radialCells + 1, r));
             writer.write("Transfinite Surface {1};\n");
             writer.write("Recombine Surface {1};\n");
         }
     }
-    
+
     /**
      * Exports a 2-D structured grid in ASCII Plot3D format (single block, z = 0).
      * The grid is generated by linearly mapping each axial station from the axis
      * to the wall with a power-law radial stretching controlled by
-     * {@link #expansionRatio}.  Coordinates are written in Fortran row-major order
+     * {@link #expansionRatio} or, when {@link #firstLayerThickness} is set, by a
+     * y⁺-derived exponent.  Coordinates are written in Fortran row-major order
      * (j-loop outer, i-loop inner, 5 values per line).
      *
      * @param contour  Nozzle contour used to evaluate the wall radius at each axial station
@@ -357,21 +429,23 @@ public class CFDMeshExporter {
         // Interpolate contour to uniform spacing
         double xMin = points.getFirst().x();
         double xMax = points.getLast().x();
-        
+        double exitRadius = points.getLast().y();
+        double p = plot3dExponent(exitRadius);
+
         for (int i = 0; i < ni; i++) {
             double xi = xMin + (double) i / (ni - 1) * (xMax - xMin);
             double rWall = contour.getRadiusAt(xi);
-            
+
             for (int j = 0; j < nj; j++) {
                 double eta = (double) j / (nj - 1);
-                // Apply stretching
-                eta = 1.0 - Math.pow(1.0 - eta, expansionRatio);
-                
+                // Apply wall-clustering power-law stretch: η' = 1 − (1−η)^p
+                eta = 1.0 - Math.pow(1.0 - eta, p);
+
                 x[i][j] = xi;
                 y[i][j] = eta * rWall;
             }
         }
-        
+
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("1\n"); // Number of blocks
             writer.write(String.format("%d %d 1\n", ni, nj)); // Grid dimensions
@@ -495,11 +569,12 @@ public class CFDMeshExporter {
             writer.write("blocks\n(\n");
             writer.write(String.format(
                     "    hex (0 1 3 2 0 1 3 2) (%d %d 1)\n", axialCells, radialCells));
+            double gAero = blockMeshGrading(rt - ri);
             writer.write("    simpleGrading (\n");
             writer.write("        1\n");
             writer.write(String.format(
                     "        ((0.5 0.5 %.2f) (0.5 0.5 %.2f))\n",
-                    expansionRatio, 1.0 / expansionRatio));
+                    gAero, 1.0 / gAero));
             writer.write("        1\n");
             writer.write("    )\n");
             writer.write(");\n\n");
@@ -617,8 +692,9 @@ public class CFDMeshExporter {
 
             writer.write(String.format("Transfinite Curve {%d, %d} = %d Using Progression 1;\n",
                     spikeSpline, cowlLine, axialCells + 1));
-            writer.write(String.format("Transfinite Curve {%d, %d} = %d Using Progression %.2f;\n",
-                    inletLine, outletLine, radialCells + 1, expansionRatio));
+            double rAero = gmshProgression(rt - spike.getFirst().y());
+            writer.write(String.format("Transfinite Curve {%d, %d} = %d Using Progression %.4f;\n",
+                    inletLine, outletLine, radialCells + 1, rAero));
             writer.write("Transfinite Surface {1};\n");
             writer.write("Recombine Surface {1};\n");
         }
@@ -644,13 +720,14 @@ public class CFDMeshExporter {
         double[][] x = new double[ni][nj];
         double[][] y = new double[ni][nj];
 
+        double pAero = plot3dExponent(rt - spike.getFirst().y());
         for (int i = 0; i < ni; i++) {
             double xi    = (double) i / (ni - 1) * L;
             double rInner = spikeRadiusAt(spike, xi);
 
             for (int j = 0; j < nj; j++) {
                 double eta = (double) j / (nj - 1);
-                eta = 1.0 - Math.pow(1.0 - eta, expansionRatio);
+                eta = 1.0 - Math.pow(1.0 - eta, pAero);
                 x[i][j] = xi;
                 y[i][j] = rInner + eta * (rt - rInner);
             }

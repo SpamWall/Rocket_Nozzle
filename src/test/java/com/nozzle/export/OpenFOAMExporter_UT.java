@@ -217,4 +217,63 @@ class OpenFOAMExporter_UT {
         // intensity is written as %.3f at the turbulence initialisation line
         assertThat(Files.readString(caseDir.resolve("0/k"))).contains("0.100");
     }
+
+    @Test
+    @DisplayName("setFirstLayerThickness rejects non-positive values")
+    void setFirstLayerThicknessRejectsNonPositive() {
+        assertThatThrownBy(() -> new OpenFOAMExporter().setFirstLayerThickness(0.0))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new OpenFOAMExporter().setFirstLayerThickness(-1e-5))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("firstLayerThickness overrides radialGrading in blockMeshDict")
+    void firstLayerThicknessOverridesRadialGrading() throws IOException {
+        Path defaultCase = tempDir.resolve("grading_default");
+        Path yPlusCase   = tempDir.resolve("grading_yplus");
+
+        // Default grading (radialGrading = 4.0)
+        new OpenFOAMExporter().exportCase(params, contour, defaultCase);
+        // y⁺-driven grading with a very thin first layer → much larger grading ratio
+        new OpenFOAMExporter().setFirstLayerThickness(1e-5)
+                .exportCase(params, contour, yPlusCase);
+
+        String defaultBmd = Files.readString(defaultCase.resolve("system/blockMeshDict"));
+        String yPlusBmd   = Files.readString(yPlusCase.resolve("system/blockMeshDict"));
+
+        // Both must contain the grading spec
+        assertThat(defaultBmd).contains("simpleGrading");
+        assertThat(yPlusBmd).contains("simpleGrading");
+        // The two grading strings must differ
+        assertThat(yPlusBmd).isNotEqualTo(defaultBmd);
+    }
+
+    @Test
+    @DisplayName("larger firstLayerThickness produces smaller grading ratio")
+    void largerFirstLayerThicknessProducesSmallerGrading() throws IOException {
+        Path caseCoarse = tempDir.resolve("grading_coarse");
+        Path caseFine   = tempDir.resolve("grading_fine");
+
+        new OpenFOAMExporter().setFirstLayerThickness(1e-3)
+                .exportCase(params, contour, caseCoarse);
+        new OpenFOAMExporter().setFirstLayerThickness(1e-5)
+                .exportCase(params, contour, caseFine);
+
+        double gradingCoarse = extractRadialGrading(
+                Files.readString(caseCoarse.resolve("system/blockMeshDict")));
+        double gradingFine   = extractRadialGrading(
+                Files.readString(caseFine.resolve("system/blockMeshDict")));
+
+        assertThat(gradingFine).isGreaterThan(gradingCoarse);
+    }
+
+    /** Extracts the first grading value from a {@code simpleGrading (1 ((0.2 0.2 <ratio>)(...)) 1)} line. */
+    private static double extractRadialGrading(String blockMeshDict) {
+        var matcher = java.util.regex.Pattern
+                .compile("0\\.2 0\\.2 ([0-9.]+)")
+                .matcher(blockMeshDict);
+        if (!matcher.find()) throw new AssertionError("simpleGrading 0.2-sub-block not found");
+        return Double.parseDouble(matcher.group(1));
+    }
 }

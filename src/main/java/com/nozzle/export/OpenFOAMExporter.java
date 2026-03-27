@@ -100,6 +100,12 @@ public class OpenFOAMExporter {
     private boolean turbulenceEnabled = true;
     /** Turbulent intensity fraction used to initialise k and ω fields (default 5 %). */
     private double turbulenceIntensity = 0.05;
+    /**
+     * First cell height y₁ in metres for y⁺-controlled radial grading.
+     * When positive, overrides {@link #radialGrading} in {@code blockMeshDict}:
+     * effective grading = r_exit / y₁.  Zero means disabled.
+     */
+    private double firstLayerThickness = 0.0;
 
     // -------------------------------------------------------------------------
     // Fluent configuration
@@ -159,6 +165,23 @@ public class OpenFOAMExporter {
      * @return This instance for method chaining
      */
     public OpenFOAMExporter setTurbulenceIntensity(double i) { this.turbulenceIntensity = i; return this; }
+
+    /**
+     * Sets the first cell height y₁ (metres) for y⁺-controlled radial grading,
+     * overriding the fixed {@link #setRadialGrading(double) radialGrading}.
+     * The effective grading written to {@code blockMeshDict} is
+     * {@code r_exit / y₁}, where {@code r_exit} is the nozzle exit radius.
+     *
+     * @param t First cell height in metres (must be positive)
+     * @return This instance for method chaining
+     * @throws IllegalArgumentException if {@code t} is not positive
+     */
+    public OpenFOAMExporter setFirstLayerThickness(double t) {
+        if (t <= 0) throw new IllegalArgumentException(
+                "firstLayerThickness must be positive, got: " + t);
+        this.firstLayerThickness = t;
+        return this;
+    }
 
     // -------------------------------------------------------------------------
     // Main export entry point
@@ -265,8 +288,11 @@ public class OpenFOAMExporter {
             // i-direction: v0→v1 (axial), j-direction: v0→v3 (radial), k-direction: wedge
             w.println("blocks");
             w.println("(");
+            double effectiveGrading = (firstLayerThickness > 0)
+                    ? Math.max(1.0, rOut / firstLayerThickness)
+                    : radialGrading;
             w.printf("    hex (0 1 2 3 4 5 6 7) (%d %d 1)%n", axialCells, radialCells);
-            w.printf("    simpleGrading (1 %s 1)%n", gradingSpec(radialGrading));
+            w.printf("    simpleGrading (1 %s 1)%n", gradingSpec(effectiveGrading));
             w.println(");");
             w.println();
 
