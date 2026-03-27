@@ -249,8 +249,6 @@ class FullPipeline_IT {
         void contourExitRadiusMatchesDesign() {
             NozzleDesignParameters params = loxRp1Params();
             CharacteristicNet net = new CharacteristicNet(params).generate();
-            NozzleContour contour =
-                    NozzleContour.fromMOCWallPoints(params, net.getWallPoints());
 
             double designExitRadius = params.exitRadius();
             double lastY = net.getWallPoints().getLast().y();

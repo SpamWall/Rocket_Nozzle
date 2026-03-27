@@ -40,10 +40,8 @@
     </parent>
 
     <properties>
-        <mokito.version>5.10.0</mokito.version>
         <hibernate-validator.version>8.0.1.Final</hibernate-validator.version>
         <expressly.version>5.0.0</expressly.version>
-        <commons-csv.version>1.10.0</commons-csv.version>
         <assertj-core.version>4.0.0-M1</assertj-core.version>
         <jackson.version>2.21.2</jackson.version>
     </properties>
@@ -116,19 +114,6 @@
             <version>${expressly.version}</version>
         </dependency>
 
-        <!-- Apache Commons Math for numerical methods -->
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-math3</artifactId>
-        </dependency>
-
-        <!-- Apache Commons CSV -->
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-csv</artifactId>
-            <version>${commons-csv.version}</version>
-        </dependency>
-
         <!-- Jackson JSON serialization -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -151,21 +136,6 @@
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
             <version>${assertj-core.version}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- Mockito -->
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>${mokito.version}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-junit-jupiter</artifactId>
-            <version>${mokito.version}</version>
             <scope>test</scope>
         </dependency>
 
