@@ -1,3 +1,23 @@
+/*
+ * Copyright (C) 2026  Craig Walters
+ *
+ * This program is free software: you can redistribute it and/or modify it under
+ *  the terms of the GNU General Public License as published by the Free
+ *  Software Foundation, either version 3 of the License, or (at your option) any
+ *  later version.
+ *
+ *  This program is distributed in the hope that it will be useful, but WITHOUT ANY
+ *  WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ *  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ *  more details.
+ *
+ *  You should have received a copy of the GNU General Public License along with this
+ *  program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ *  Contact the owner via the github repository if you would like to license this software for
+ *  commercial purposes outside the restrictions imposed by this copyright.
+ */
+
 package com.nozzle.core;
 
 /**
@@ -138,7 +158,7 @@ public class FlowSeparationPredictor {
         // Axial fraction: approximate radial scaling (r ∝ sqrt(A/A*)).
         double radSep = Math.sqrt(arSep);
         double radExit = Math.sqrt(arExit);
-        double axialFraction = Math.max(0.0, Math.min(1.0, (radSep - 1.0) / (radExit - 1.0)));
+        double axialFraction = Math.clamp((radSep - 1.0) / (radExit - 1.0), 0.0, 1.0);
 
         SeparationMode mode = (mSep / mExit >= RSS_MACH_FRACTION) ? SeparationMode.RSS : SeparationMode.FSS;
 
