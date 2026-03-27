@@ -92,7 +92,7 @@ class PhysicsValidation_ShockExpansion_UT {
 
         /**
          * Schilling (1962): p_sep = 0.667 × p_a × (p_e/p_a)^0.6.
-         * Expected value computed independently from the closed-form expression
+         * Expected value computed independently of the closed-form expression
          * and compared to the predictor to floating-point precision (< 1e-7 %).
          *
          * <p>Setup: AIR, M_e=2, P_c=7 MPa, P_a=3 MPa.
@@ -116,7 +116,7 @@ class PhysicsValidation_ShockExpansion_UT {
         /**
          * Romine (1998): p_sep = p_a / (1 + 0.6·γ·k_R),
          * where k_R = max(0, 0.5·(p_a/p_e − 1)).
-         * Expected value computed independently from the closed-form expression.
+         * Expected value computed independently of the closed-form expression.
          *
          * <p>Setup: AIR (γ=1.4), M_e=2, P_c=7 MPa, P_a=3 MPa.
          */
@@ -379,7 +379,7 @@ class PhysicsValidation_ShockExpansion_UT {
             assertThat(result.regime())
                     .isEqualTo(ShockExpansionModel.FlowRegime.OVEREXPANDED_OBLIQUE);
 
-            // Re-derive β from the pressure ratio and verify the normal-shock PR at Mn1=Me·sinβ
+            // Re-derive β from the pressure ratio and verify the normal-shock PR at Mn1=Me·sin β
             // equals pa/pe — this is the algebraic identity proven in Anderson §4.9.
             double pr = pa / pe;
             double gp1 = gamma + 1.0, gm1 = gamma - 1.0;

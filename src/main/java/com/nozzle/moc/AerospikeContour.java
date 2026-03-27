@@ -9,7 +9,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Computes and holds the spike (plug) contour for an aerospike nozzle using the
+ * Computes and holds the spike (plug) contour for an Aerospike nozzle using the
  * Method of Characteristics kernel-flow algorithm.
  *
  * <p>The spike contour is the inner streamline of the centered Prandtl-Meyer
@@ -48,7 +48,7 @@ class AerospikeContour {
     // -------------------------------------------------------------------------
 
     /**
-     * Creates an aerospike contour generator.  All parameter validation is
+     * Creates an Aerospike contour generator.  All parameter validation is
      * performed by the enclosing {@link AerospikeNozzle} constructor.
      *
      * @param parameters         Nozzle design parameters
@@ -221,7 +221,7 @@ class AerospikeContour {
     }
 
     /**
-     * Returns the annular exit area of the full ideal aerospike.
+     * Returns the annular exit area of the full ideal Aerospike.
      *
      * <p>The exit area is computed from mass-flow conservation:
      * {@code Ae = At × (Ae/At)} where {@code Ae/At} is the isentropic area ratio at

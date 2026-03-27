@@ -701,7 +701,7 @@ public class Main {
         CFDMeshExporter cfdExporter = new CFDMeshExporter()
                 .setAxialCells(100)
                 .setRadialCells(50)
-                .setBoundaryLayerParams(1e-6, 1.2);
+                .setExpansionRatio(1.2);
         
         cfdExporter.export(contour, outputDir.resolve("blockMeshDict"), CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
         cfdExporter.export(contour, outputDir.resolve("nozzle.geo"), CFDMeshExporter.Format.GMSH_GEO);
@@ -1154,21 +1154,12 @@ public class Main {
                 groundTest.getMaxWallTemperature() - baseModel.getMaxWallTemperature());
     }
 
-    /**
-     * Demonstrates JSON serialization and deserialization of a complete nozzle design.
-     *
-     * <ul>
-     *   <li>Saves design parameters alone (pre-computation snapshot).</li>
-     *   <li>Runs the MOC solver and saves the full design including wall points and contour.</li>
-     *   <li>Loads the full design back and verifies parameter round-trip fidelity.</li>
-     * </ul>
-     */
-    /**
+   /**
      * Demonstrates a three-stage persistent workflow using {@link NozzleSerializer}.
      *
      * <p>Each stage represents a separate program invocation that loads from the
      * file written by the previous stage, mirroring how a real design tool would
-     * separate initial parameterisation, expensive computation, and downstream
+     * separate initial parameterization, expensive computation, and downstream
      * analysis into independent sessions.
      *
      * <ul>
@@ -1177,7 +1168,7 @@ public class Main {
      *   <li><b>Stage 2 – Solve and checkpoint:</b> load the intent document, run
      *       the MOC solver and contour generator, then overwrite the file with a
      *       full design document containing the computed flow field.</li>
-     *   <li><b>Stage 3 – Reload and analyse:</b> load the full document and run
+     *   <li><b>Stage 3 – Reload and analyze:</b> load the full document and run
      *       performance and validation calculations directly from the restored
      *       parameters — the MOC solver is not re-executed.</li>
      * </ul>
@@ -1232,7 +1223,7 @@ public class Main {
         System.out.printf("    Full design saved to:   %s%n", checkpoint.getFileName());
 
         // ----------------------------------------------------------------
-        // Stage 3 — Reload full design, analyse without re-running solver
+        // Stage 3 — Reload full design, analyze without re-running solver
         // ----------------------------------------------------------------
         System.out.println("\n  Stage 3: Reload checkpoint and run downstream analysis");
 

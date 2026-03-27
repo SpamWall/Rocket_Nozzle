@@ -116,7 +116,7 @@ class ThermalStressAnalysis_UT {
          * For Inconel 718: α=13e-6/K, E=207 GPa, ν=0.29.
          *   ΔT = q·t/k = q × 0.003 / 20 = q × 1.5×10⁻⁴
          *   σ = 13e-6 × 207e9 × ΔT / (2×0.71) = 1895.85e3 × ΔT  Pa
-         *
+         * <p>
          *   q=500 000 W/m²  → ΔT=75 K    → σ=142.2 MPa
          *   q=1 000 000      → ΔT=150 K   → σ=284.4 MPa
          *   q=2 000 000      → ΔT=300 K   → σ=568.8 MPa

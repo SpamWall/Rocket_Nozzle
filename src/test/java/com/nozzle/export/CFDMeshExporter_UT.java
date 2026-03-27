@@ -94,12 +94,11 @@ class CFDMeshExporter_UT {
         }
 
         @Test
-        @DisplayName("setCircumferentialCells and setBoundaryLayerParams should be fluent")
-        void settersAreFluent() throws IOException {
-            Path out = tempDir.resolve("bl.xyz");
+        @DisplayName("setExpansionRatio should be fluent and affect Plot3D grading")
+        void setExpansionRatioIsFluent() throws IOException {
+            Path out = tempDir.resolve("expansion.xyz");
             new CFDMeshExporter()
-                    .setCircumferentialCells(12)
-                    .setBoundaryLayerParams(1e-5, 1.2)
+                    .setExpansionRatio(1.5)
                     .export(contour, out, CFDMeshExporter.Format.PLOT3D);
 
             assertThat(out).exists();
@@ -129,7 +128,7 @@ class CFDMeshExporter_UT {
         @Test
         @DisplayName("exportAerospike OpenFOAM should contain spike spline and wedge patches")
         void exportAerospikeOpenFOAM() throws IOException {
-            Path out = tempDir.resolve("aerospike_blockMeshDict");
+            Path out = tempDir.resolve("Aerospike_blockMeshDict");
             new CFDMeshExporter().setAxialCells(20).setRadialCells(10)
                     .exportAerospike(nozzle, out, CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
 

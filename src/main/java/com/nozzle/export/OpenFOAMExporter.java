@@ -166,7 +166,7 @@ public class OpenFOAMExporter {
         Files.createDirectories(constant);
         Files.createDirectories(zero);
 
-        writeBlockMeshDict(params, pts, system.resolve("blockMeshDict"));
+        writeBlockMeshDict(pts, system.resolve("blockMeshDict"));
         writeControlDict(system.resolve("controlDict"));
         writeFvSchemes(system.resolve("fvSchemes"));
         writeFvSolution(system.resolve("fvSolution"));
@@ -192,13 +192,11 @@ public class OpenFOAMExporter {
      * Eight vertices form a single hex block; the wall profile is embedded as two
      * {@code spline} edges (front and back wedge faces).
      *
-     * @param params Nozzle design parameters (not used directly — geometry comes from {@code pts})
-     * @param pts    Ordered contour points defining the wall profile (at least 2 required)
-     * @param file   Destination file path
+     * @param pts  Ordered contour points defining the wall profile (at least 2 required)
+     * @param file Destination file path
      * @throws IOException if the file cannot be written
      */
-    private void writeBlockMeshDict(NozzleDesignParameters params,
-                                    List<Point2D> pts,
+    private void writeBlockMeshDict(List<Point2D> pts,
                                     Path file) throws IOException {
         double psi = Math.toRadians(wedgeAngleDeg);
         double cosP = Math.cos(psi);
@@ -554,7 +552,7 @@ public class OpenFOAMExporter {
             w.println("        value           uniform " + pa + ";");
             w.println("    }");
             zeroGradientPatch(w, "wall");
-            emptyPatch(w, "axis");
+            emptyPatch(w);
             wedgePatch(w, "front");
             wedgePatch(w, "back");
             w.println("}");
@@ -577,8 +575,6 @@ public class OpenFOAMExporter {
      */
     private void writeTemperatureField(NozzleDesignParameters params, Path file) throws IOException {
         double t0 = params.chamberTemperature();
-        double ta = params.exitTemperature();
-
         try (PrintWriter w = printer(file)) {
             foamHeader(w, "volScalarField", "0", "T");
             w.println("dimensions      [0 0 0 1 0 0 0];");
@@ -596,7 +592,7 @@ public class OpenFOAMExporter {
             w.println("    {");
             w.println("        type            zeroGradient;  // adiabatic wall");
             w.println("    }");
-            emptyPatch(w, "axis");
+            emptyPatch(w);
             wedgePatch(w, "front");
             wedgePatch(w, "back");
             w.println("}");
@@ -632,7 +628,7 @@ public class OpenFOAMExporter {
             w.println("    }");
             zeroGradientPatch(w, "outlet");
             w.println("    wall    { type noSlip; }");
-            emptyPatch(w, "axis");
+            emptyPatch(w);
             wedgePatch(w, "front");
             wedgePatch(w, "back");
             w.println("}");
@@ -673,7 +669,7 @@ public class OpenFOAMExporter {
             w.println("    }");
             zeroGradientPatch(w, "outlet");
             w.println("    wall    { type kqRWallFunction; value uniform " + k0 + "; }");
-            emptyPatch(w, "axis");
+            emptyPatch(w);
             wedgePatch(w, "front");
             wedgePatch(w, "back");
             w.println("}");
@@ -722,7 +718,7 @@ public class OpenFOAMExporter {
             w.println("    }");
             zeroGradientPatch(w, "outlet");
             w.println("    wall    { type omegaWallFunction; value uniform " + omega0 + "; }");
-            emptyPatch(w, "axis");
+            emptyPatch(w);
             wedgePatch(w, "front");
             wedgePatch(w, "back");
             w.println("}");
@@ -737,7 +733,7 @@ public class OpenFOAMExporter {
     /**
      * Returns a {@code blockMeshDict} grading specification string for wall-normal
      * boundary-layer stretching.  For {@code ratio} ≤ 1 a plain {@code "1"} (uniform)
-     * is returned.  Otherwise a two-sub-layer specification is produced: the inner
+     * is returned.  Otherwise, a two-sub-layer specification is produced: the inner
      * 20% of cells are stretched toward the wall at the given ratio; the outer 80%
      * relax back at the inverse ratio.
      *
@@ -775,14 +771,13 @@ public class OpenFOAMExporter {
     }
 
     /**
-     * Writes a one-line {@code empty} boundary condition entry for the named patch
+     * Writes a one-line {@code empty} boundary condition entry for the {@code axis} patch
      * (used for the symmetry axis in axisymmetric cases).
      *
-     * @param w    Writer to append to
-     * @param name Patch name
+     * @param w Writer to append to
      */
-    private static void emptyPatch(PrintWriter w, String name) {
-        w.printf("    %s    { type empty; }%n", name);
+    private static void emptyPatch(PrintWriter w) {
+        w.printf("    axis    { type empty; }%n");
     }
 
     /**
@@ -816,7 +811,7 @@ public class OpenFOAMExporter {
         w.println("FoamFile");
         w.println("{");
         w.println("    version     2.0;");
-        w.println("    format      ascii;");
+        w.println("    format      ASCII;");
         w.printf( "    class       %s;%n", cls);
         w.printf( "    location    \"%s\";%n", location);
         w.printf( "    object      %s;%n", object);

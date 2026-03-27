@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.within;
 
 /**
  * Validates isentropic flow relations against published tabulated values.
- *
+ * <p>
  * Reference tables: NACA TR 1135 (Ames Research Staff, 1953),
  * Anderson "Modern Compressible Flow" Table A.1 & A.5.
  * All γ = 1.4 (air) values are exact to the precision shown.

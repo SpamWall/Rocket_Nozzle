@@ -111,7 +111,7 @@ class STEPExporter_UT {
             new STEPExporter().exportRevolvedSolid(contour, outDefault);
             new STEPExporter().setScaleFactor(1.0).exportRevolvedSolid(contour, outScaled);
 
-            // With scale=1000 (default) coords are ~1000× larger than scale=1.0
+            // With scale=1000 (default) coordinates are ~1000× larger than scale=1.0
             assertThat(Files.readString(outDefault)).isNotEqualTo(Files.readString(outScaled));
         }
     }

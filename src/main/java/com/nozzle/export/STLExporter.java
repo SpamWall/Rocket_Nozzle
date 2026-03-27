@@ -258,7 +258,8 @@ public class STLExporter {
             // 80-byte header
             byte[] header = new byte[80];
             String headerText = "Supersonic Nozzle MOC - Binary STL";
-            System.arraycopy(headerText.getBytes(), 0, header, 0, 
+           //noinspection DataFlowIssue
+           System.arraycopy(headerText.getBytes(), 0, header, 0,
                     Math.min(headerText.length(), 80));
             dos.write(header);
             

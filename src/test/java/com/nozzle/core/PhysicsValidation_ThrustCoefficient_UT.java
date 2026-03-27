@@ -35,7 +35,7 @@ class PhysicsValidation_ThrustCoefficient_UT {
         /**
          * For γ=1.4, R=287.05 J/(kg·K), Tc=1000 K the formula gives:
          *   c* = √(287.05·1000/1.4) / (2/2.4)^3 = 452.81/0.5787 ≈ 782.4 m/s
-         *
+         * <p>
          * Same result appears in Sutton & Biblarz Table 3-2 (and many reference texts)
          * as c*(air, Tc=1000 K) ≈ 783 m/s.
          */
@@ -147,9 +147,9 @@ class PhysicsValidation_ThrustCoefficient_UT {
          * Near-vacuum (Pa → 0) simplifies to:
          *   Cf_vac = cfMomentum + (Pe/Pc)·(Ae/At)
          * where cfMomentum = √(2γ²/(γ-1) · (2/(γ+1))^((γ+1)/(γ-1)) · (1 − (T/T0)(M)))
-         *
+         * <p>
          * Note: (Pe/Pc)^((γ-1)/γ) = T/T0 (isentropic identity), so term2 = 1 − T/T0.
-         *
+         * <p>
          * For γ=1.4: 2γ²/(γ-1) × (2/(γ+1))^((γ+1)/(γ-1))
          *          = 9.8 × (2/2.4)^6 = 9.8 × 0.33490 = 3.2820
          * Pre-computed from the analytic formula:
@@ -184,7 +184,7 @@ class PhysicsValidation_ThrustCoefficient_UT {
 
         @Test
         @DisplayName("Cf at optimum expansion (Pe=Pa) has no pressure term → Cf = cfMomentum only")
-        void cfAtOptimumExpansionEqualsMotmentumTerm() {
+        void cfAtOptimumExpansionEqualsMomentumTerm() {
             // Arrange: choose Pc and exit Mach so that Pe = Pa exactly.
             // Pe = Pc · P/P0(M), Pa must equal that.
             double exitMach = 2.5;

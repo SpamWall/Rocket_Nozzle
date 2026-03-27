@@ -265,7 +265,7 @@ class AltitudeAdaptiveOptimizer_UT {
         /**
          * Exercises the  perf.separated ? " (SEPARATED)" : ""  branch inside
          * OptimizationResult.toString().
-         *
+         * <p>
          * A Me=6 vacuum bell at sea level (pa ≈ 101 325 Pa) is strongly overexpanded;
          * the Summerfield criterion predicts flow separation → AltitudePerformance.separated = true.
          */
@@ -303,7 +303,7 @@ class AltitudeAdaptiveOptimizer_UT {
 
         /**
          * Exercises the  catch (Exception e)  block in optimize().
-         *
+         * <p>
          * Chamber pressure is set just below sea-level atmospheric (101 325 Pa) but still
          * above the base ambient pressure, so the base params are valid.  When a condition
          * at altitude = 0 is evaluated, the internal altParams builder tries to set

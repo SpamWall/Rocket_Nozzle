@@ -159,8 +159,8 @@ class NozzleSerializer_UT {
             DesignDocument doc = NozzleSerializer.fromJson(json);
 
             assertThat(doc.wallPoints()).hasSize(net.getWallPoints().size());
-            CharacteristicPoint orig = net.getWallPoints().get(0);
-            CharacteristicPoint rest = doc.wallPoints().get(0);
+            CharacteristicPoint orig = net.getWallPoints().getFirst();
+            CharacteristicPoint rest = doc.wallPoints().getFirst();
             assertThat(rest.x())    .isCloseTo(orig.x(),    within(DELTA));
             assertThat(rest.y())    .isCloseTo(orig.y(),    within(DELTA));
             assertThat(rest.mach()) .isCloseTo(orig.mach(), within(DELTA));
@@ -212,9 +212,9 @@ class NozzleSerializer_UT {
             List<Point2D> restored = NozzleSerializer.fromJson(json).contourPoints();
 
             assertThat(restored).hasSize(contour.getContourPoints().size());
-            Point2D first = contour.getContourPoints().get(0);
-            assertThat(restored.get(0).x()).isCloseTo(first.x(), within(DELTA));
-            assertThat(restored.get(0).y()).isCloseTo(first.y(), within(DELTA));
+            Point2D first = contour.getContourPoints().getFirst();
+            assertThat(restored.getFirst().x()).isCloseTo(first.x(), within(DELTA));
+            assertThat(restored.getFirst().y()).isCloseTo(first.y(), within(DELTA));
         }
     }
 

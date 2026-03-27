@@ -159,27 +159,15 @@ public class HeatTransferModel {
         
         return this;
     }
-    
+
     /**
-     * 2-D k-d tree for O(log n) nearest-neighbour queries over a set of
+     * 2-D k-d tree for O(log n) nearest-neighbor queries over a set of
      * {@link CharacteristicPoint}s in the (x, y) plane.
      *
      * <p>Build cost is O(n log n); each query cost is O(log n) expected.
      * Axis alternates between x (depth even) and y (depth odd).
      */
-    private static final class KdTree {
-
-        private final CharacteristicPoint point;
-        private final KdTree left;
-        private final KdTree right;
-        private final int axis;
-
-        private KdTree(CharacteristicPoint point, KdTree left, KdTree right, int axis) {
-            this.point = point;
-            this.left  = left;
-            this.right = right;
-            this.axis  = axis;
-        }
+        private record KdTree(CharacteristicPoint point, KdTree left, KdTree right, int axis) {
 
         /**
          * Builds a balanced k-d tree from {@code pts} by recursively
@@ -189,65 +177,65 @@ public class HeatTransferModel {
          * @param depth current recursion depth (0 for the root)
          * @return root node of the built tree, or {@code null} if {@code pts} is empty
          */
-        static KdTree build(List<CharacteristicPoint> pts, int depth) {
-            if (pts.isEmpty()) return null;
-            int axis = depth % 2;
-            List<CharacteristicPoint> sorted = new ArrayList<>(pts);
-            sorted.sort(axis == 0
-                    ? Comparator.comparingDouble(CharacteristicPoint::x)
-                    : Comparator.comparingDouble(CharacteristicPoint::y));
-            int mid = sorted.size() / 2;
-            return new KdTree(
-                    sorted.get(mid),
-                    build(sorted.subList(0, mid), depth + 1),
-                    build(sorted.subList(mid + 1, sorted.size()), depth + 1),
-                    axis);
-        }
-
-        /**
-         * Returns the point in this tree closest to {@code (qx, qy)}.
-         *
-         * @param qx query x-coordinate
-         * @param qy query y-coordinate
-         * @return nearest {@link CharacteristicPoint}
-         */
-        CharacteristicPoint nearest(double qx, double qy) {
-            return search(qx, qy, this, null, Double.MAX_VALUE);
-        }
-
-        private static CharacteristicPoint search(double qx, double qy, KdTree node,
-                                                   CharacteristicPoint best, double bestDistSq) {
-            if (node == null) return best;
-
-            double dx = node.point.x() - qx;
-            double dy = node.point.y() - qy;
-            double distSq = dx * dx + dy * dy;
-            if (distSq < bestDistSq) {
-                best       = node.point;
-                bestDistSq = distSq;
+            static KdTree build(List<CharacteristicPoint> pts, int depth) {
+                if (pts.isEmpty()) return null;
+                int axis = depth % 2;
+                List<CharacteristicPoint> sorted = new ArrayList<>(pts);
+                sorted.sort(axis == 0
+                      ? Comparator.comparingDouble(CharacteristicPoint::x)
+                      : Comparator.comparingDouble(CharacteristicPoint::y));
+                int mid = sorted.size() / 2;
+                return new KdTree(
+                      sorted.get(mid),
+                      build(sorted.subList(0, mid), depth + 1),
+                      build(sorted.subList(mid + 1, sorted.size()), depth + 1),
+                      axis);
             }
 
-            double axisDiff = node.axis == 0 ? qx - node.point.x() : qy - node.point.y();
-            KdTree near = axisDiff <= 0 ? node.left  : node.right;
-            KdTree far  = axisDiff <= 0 ? node.right : node.left;
-
-            best = search(qx, qy, near, best, bestDistSq);
-            bestDistSq = dist2(best, qx, qy);
-
-            if (axisDiff * axisDiff < bestDistSq) {
-                best = search(qx, qy, far, best, bestDistSq);
+            /**
+             * Returns the point in this tree closest to {@code (qx, qy)}.
+             *
+             * @param qx query x-coordinate
+             * @param qy query y-coordinate
+             * @return nearest {@link CharacteristicPoint}
+             */
+            CharacteristicPoint nearest(double qx, double qy) {
+                return search(qx, qy, this, null, Double.MAX_VALUE);
             }
 
-            return best;
-        }
+            private static CharacteristicPoint search(double qx, double qy, KdTree node,
+                                                      CharacteristicPoint best, double bestDistSq) {
+                if (node == null) return best;
 
-        private static double dist2(CharacteristicPoint p, double qx, double qy) {
-            if (p == null) return Double.MAX_VALUE;
-            double dx = p.x() - qx;
-            double dy = p.y() - qy;
-            return dx * dx + dy * dy;
+                double dx = node.point.x() - qx;
+                double dy = node.point.y() - qy;
+                double distSq = dx * dx + dy * dy;
+                if (distSq < bestDistSq) {
+                    best = node.point;
+                    bestDistSq = distSq;
+                }
+
+                double axisDiff = node.axis == 0 ? qx - node.point.x() : qy - node.point.y();
+                KdTree near = axisDiff <= 0 ? node.left : node.right;
+                KdTree far = axisDiff <= 0 ? node.right : node.left;
+
+                best = search(qx, qy, near, best, bestDistSq);
+                bestDistSq = dist2(best, qx, qy);
+
+                if (axisDiff * axisDiff < bestDistSq) {
+                    best = search(qx, qy, far, best, bestDistSq);
+                }
+
+                return best;
+            }
+
+            private static double dist2(CharacteristicPoint p, double qx, double qy) {
+                if (p == null) return Double.MAX_VALUE;
+                double dx = p.x() - qx;
+                double dy = p.y() - qy;
+                return dx * dx + dy * dy;
+            }
         }
-    }
     
     /**
      * Calculates convective heat transfer coefficient using the Bartz correlation

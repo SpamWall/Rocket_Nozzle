@@ -43,7 +43,7 @@ public record AltitudePerformance(
      * all provided altitudes.
      *
      * @return Mean {@code (aerospikeCf − bellNozzleCf)}, always ≥ 0 for a
-     *         properly designed aerospike
+     *         properly designed Aerospike
      */
     public double averageAltitudeAdvantage() {
         double sum = 0.0;

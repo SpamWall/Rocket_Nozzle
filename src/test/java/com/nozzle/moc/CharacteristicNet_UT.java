@@ -536,22 +536,12 @@ class CharacteristicNet_UT {
             CharacteristicNet net = new CharacteristicNet(params); // axisymmetric=true
             GasProperties gas = params.gasProperties();
 
-            double mach = 1.5;
-            double nu = gas.prandtlMeyerFunction(mach);
-            double mu = gas.machAngle(mach);
-            double T  = 3500 * gas.isentropicTemperatureRatio(mach);
-            double P  = 7e6  * gas.isentropicPressureRatio(mach);
-            double rho = P / (gas.gasConstant() * T);
-            double V   = mach * gas.speedOfSound(T);
-
             // theta_L=0.10, nu_L=nu → Qplus = 0.10 - nu
             // theta_R=0.15, nu_R=nu → Qminus = 0.15 + nu
             // nu_interior = (0.15 + nu - (0.10 - nu))/2 = (0.05 + 2*nu)/2 > 0 ✓
-            CharacteristicPoint left = CharacteristicPoint.create(
-                    0.001, 1e-15, mach, 0.10, nu, mu, P, T, rho, V,
+            CharacteristicPoint left  = makePoint(0.001, 1e-15, 1.5, 0.10, gas,
                     CharacteristicPoint.PointType.INITIAL);
-            CharacteristicPoint right = CharacteristicPoint.create(
-                    0.001, 2e-15, mach, 0.15, nu, mu, P, T, rho, V,
+            CharacteristicPoint right = makePoint(0.001, 2e-15, 1.5, 0.15, gas,
                     CharacteristicPoint.PointType.INITIAL);
 
             CharacteristicPoint interior = net.computeInteriorPoint(left, right);
@@ -566,20 +556,10 @@ class CharacteristicNet_UT {
             CharacteristicNet net = new CharacteristicNet(params, 1.0, 100);
             GasProperties gas = params.gasProperties();
 
-            double mach = 1.2;
-            double nu   = gas.prandtlMeyerFunction(mach);
-            double mu   = gas.machAngle(mach);
-            double T    = 3500 * gas.isentropicTemperatureRatio(mach);
-            double P    = 7e6  * gas.isentropicPressureRatio(mach);
-            double rho  = P / (gas.gasConstant() * T);
-            double V    = mach * gas.speedOfSound(T);
-
             // Qplus = 0.05 - nu_L, Qminus = 0.08 + nu_R  → nu_interior = (0.08+nu+0.05-0.05+nu)/2 > 0
-            CharacteristicPoint left = CharacteristicPoint.create(
-                    0.01, 0.04, mach, 0.05, nu, mu, P, T, rho, V,
+            CharacteristicPoint left  = makePoint(0.01, 0.04, 1.2, 0.05, gas,
                     CharacteristicPoint.PointType.INITIAL);
-            CharacteristicPoint right = CharacteristicPoint.create(
-                    0.01, 0.05, mach, 0.08, nu, mu, P, T, rho, V,
+            CharacteristicPoint right = makePoint(0.01, 0.05, 1.2, 0.08, gas,
                     CharacteristicPoint.PointType.INITIAL);
 
             CharacteristicPoint interior = net.computeInteriorPoint(left, right);

@@ -148,7 +148,7 @@ public final class PropellantComposition {
     private void normalize() {
         double sum = massFractions.values().stream().mapToDouble(Double::doubleValue).sum();
         if (sum > 0) {
-            massFractions.replaceAll((k, v) -> v / sum);
+            massFractions.replaceAll((_, v) -> v / sum);
         }
     }
 }

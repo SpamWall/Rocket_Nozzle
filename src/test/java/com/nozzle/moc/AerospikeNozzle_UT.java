@@ -175,7 +175,7 @@ class AerospikeNozzle_UT {
         @Timeout(value = 30, unit = TimeUnit.SECONDS)
         @DisplayName("Aerospike Cf at high ambient (low altitude) >= bell nozzle Cf")
         void aeroSpikeCfAtLowAltitudeNotWorseThanBell() {
-            // At pa > pe_design: aerospike adapts, bell has over-expansion loss.
+            // At pa > pe_design: Aerospike adapts, bell has over-expansion loss.
             double pa = params.chamberPressure() * 0.05;  // high ambient, M_pa < M_design
             AerospikeNozzle nozzle = new AerospikeNozzle(params).generate();
 

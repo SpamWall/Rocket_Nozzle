@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.within;
  *   <li>h ∝ Dt^{−0.8}  (combines the Dt^{−0.2} prefactor and G*^0.8 ∝ Dt^0 ∝ const,
  *       but the (At/A_local)^0.9 area-ratio factor makes at-throat h ∝ At^{0.9−1} → Dt^{−0.2+...}.
  *       Net effect: for a throat point where At/A=1 and rc ∝ Dt, h ∝ Dt^{−0.2} × Dt^{0.1} = Dt^{−0.1}.
- *       However the dominant Pc^0.8 and Dt scaling are tested independently.</li>
+ *       However, the dominant Pc^0.8 and Dt scaling are tested independently.</li>
  *   <li>h_throat / h_exit ≈ (A_exit/A_throat)^0.9  (area-ratio dependence)</li>
  *   <li>h peaks at the throat, not at the exit</li>
  * </ul>
@@ -100,7 +100,7 @@ class PhysicsValidation_Bartz_UT {
             double pc2 = PC_BASE * 2;
             NozzleDesignParameters params2 =
                     buildParams(RT, pc2, TC, EXIT_MACH, GasProperties.LOX_RP1_PRODUCTS);
-            NozzleContour contour2 = buildContour(params2, 50);
+            NozzleContour contour2 = buildContour(params2, 49);
 
             double hBase = peakH(profile(baseParams, baseContour));
             double hHigh = peakH(profile(params2, contour2));
@@ -146,7 +146,7 @@ class PhysicsValidation_Bartz_UT {
          * For two positions along the nozzle with area ratios AR1 and AR2
          * (where AR = A/At), the Bartz equation predicts:
          *   h(1) / h(2) ≈ (AR2/AR1)^0.9   (ignoring μ* and rc variation)
-         *
+         * <p>
          * We verify this approximately between the throat region (AR≈1) and the
          * exit (AR = A_e/At).  We allow ±20% because μ* varies with temperature
          * and the curvature term also changes, but the dominant (At/A)^0.9 must
@@ -234,7 +234,7 @@ class PhysicsValidation_Bartz_UT {
          * the iterative T* loop, numerical rc estimation from finite differences,
          * and the discrete contour grid all contribute.  What we are validating is
          * that the model is in the right order of magnitude and direction — not that
-         * it has been incorrectly normalised or has a unit error.
+         * it has been incorrectly normalized or has a unit error.
          */
         @Test
         @DisplayName("Throat h within ±30% of analytically computed Bartz value")
@@ -245,9 +245,9 @@ class PhysicsValidation_Bartz_UT {
             double Pr    = 4.0 * gamma / (9.0 * gamma - 5); // Eucken relation
             double Cp    = gas.specificHeatCp();
             double Dt    = 2 * RT;                           // 0.10 m
-            double Pc    = PC_BASE;                          // 7e6 Pa
-            double cStar = baseParams.characteristicVelocity();
-            double GStar = Pc / cStar;                       // mass flux
+           // 7e6 Pa
+           double cStar = baseParams.characteristicVelocity();
+            double GStar = PC_BASE / cStar;                       // mass flux
 
             // Reference temperature T* at throat — assume Tw ≈ 0.5 T_aw, T_aw ≈ 0.9·Tc
             double Tc    = TC;
@@ -393,6 +393,237 @@ class PhysicsValidation_Bartz_UT {
                         .isLessThan(prevMaxWall);
                 prevMaxWall = maxWall;
             }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Gas type variation
+    // -----------------------------------------------------------------------
+    @Nested
+    @DisplayName("Gas type variation")
+    class GasTypeVariationTests {
+
+        /**
+         * LOX/LH2 has dramatically higher Cp (≈3360 vs ≈1870 J/kg·K for LOX/RP-1)
+         * and a lower Prandtl number. Despite lower G* due to higher c*, the Cp term
+         * in the Bartz numerator (μ*^0.2 · Cp / Pr^0.6) dominates and LOX/LH2
+         * produces higher h at the same Pc, Tc, and nozzle geometry.
+         */
+        @Test
+        @DisplayName("LOX/LH2 produces higher peak h than LOX/RP-1 at same Pc, Tc, geometry")
+        void loxLh2GivesHigherPeakHThanRp1() {
+            NozzleDesignParameters paramsLH2 =
+                    buildParams(RT, PC_BASE, TC, EXIT_MACH, GasProperties.LOX_LH2_PRODUCTS);
+            NozzleContour contourLH2 = buildContour(paramsLH2, 50);
+
+            double hRp1 = peakH(profile(baseParams, baseContour));
+            double hLh2 = peakH(profile(paramsLH2, contourLH2));
+
+            assertThat(hLh2)
+                    .as("LOX/LH2 peak h (%.2f) should exceed LOX/RP-1 (%.2f) due to higher Cp",
+                            hLh2, hRp1)
+                    .isGreaterThan(hRp1);
+        }
+
+        @Test
+        @DisplayName("LOX/LH2 vs LOX/RP-1 peak h ratio is in the physically expected range (1.1–3.0)")
+        void loxLh2ToRp1HRatioInPhysicalRange() {
+            NozzleDesignParameters paramsLH2 =
+                    buildParams(RT, PC_BASE, TC, EXIT_MACH, GasProperties.LOX_LH2_PRODUCTS);
+            NozzleContour contourLH2 = buildContour(paramsLH2, 50);
+
+            double hRp1 = peakH(profile(baseParams, baseContour));
+            double hLh2 = peakH(profile(paramsLH2, contourLH2));
+
+            assertThat(hLh2 / hRp1)
+                    .as("h(LH2) / h(RP-1) should reflect the Cp and G* difference")
+                    .isBetween(1.1, 3.0);
+        }
+
+        @Test
+        @DisplayName("All three propellant gas types produce peak h in the engineering range (1e4–1e7 W/m²K)")
+        void allGasTypesProducePhysicallyPlausibleH() {
+            List<GasProperties> gases = List.of(
+                    GasProperties.LOX_RP1_PRODUCTS,
+                    GasProperties.LOX_LH2_PRODUCTS,
+                    GasProperties.LOX_CH4_PRODUCTS);
+            for (GasProperties gas : gases) {
+                NozzleDesignParameters params = buildParams(RT, PC_BASE, TC, EXIT_MACH, gas);
+                NozzleContour contour = buildContour(params, 50);
+                double h = peakH(profile(params, contour));
+                assertThat(h)
+                        .as("Peak h for %s must be in the engineering range", gas)
+                        .isBetween(1e4, 1e7);
+            }
+        }
+
+        private double peakH(List<HeatTransferModel.WallThermalPoint> pts) {
+            return pts.stream()
+                    .mapToDouble(HeatTransferModel.WallThermalPoint::heatTransferCoeff)
+                    .max().orElseThrow();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Throat radius scaling: h ∝ Dt^{-0.2}
+    // -----------------------------------------------------------------------
+    @Nested
+    @DisplayName("Throat radius scaling: h ∝ Dt^{-0.2}")
+    class ThroatRadiusScalingTests {
+
+        /**
+         * The Bartz prefactor is 0.026 / Dt^0.2. Under uniform geometric scaling
+         * (same Pc, Tc, exit Mach), G* = Pc/c* is unchanged and the area ratios
+         * At/A and curvature ratio Dt/rc are also invariant, so the net change in
+         * peak h is exactly the 1/Dt^0.2 prefactor: doubling Dt → h × 2^{−0.2} ≈ 0.870.
+         */
+        @Test
+        @DisplayName("Doubling throat radius reduces peak h by factor 2^0.2 = 0.870 (±10%)")
+        void doublingThroatRadiusReducesPeakHByCorrectFactor() {
+            NozzleDesignParameters paramsLarge =
+                    buildParams(RT * 2.0, PC_BASE, TC, EXIT_MACH, GasProperties.LOX_RP1_PRODUCTS);
+            NozzleContour contourLarge = buildContour(paramsLarge, 50);
+
+            double hBase  = peakH(profile(baseParams, baseContour));
+            double hLarge = peakH(profile(paramsLarge, contourLarge));
+
+            double expected = Math.pow(2.0, -0.2);   // 0.8706
+            assertThat(hLarge / hBase)
+                    .as("h(2×Dt) / h(Dt) should be ≈ 2^{−0.2} = %.4f", expected)
+                    .isCloseTo(expected, within(expected * 0.10));  // ±10%
+        }
+
+        @Test
+        @DisplayName("Smaller throat radius gives higher peak h (inverse Dt^0.2 dependence)")
+        void smallerThroatRadiusGivesHigherPeakH() {
+            NozzleDesignParameters paramsSmall =
+                    buildParams(RT * 0.5, PC_BASE, TC, EXIT_MACH, GasProperties.LOX_RP1_PRODUCTS);
+            NozzleContour contourSmall = buildContour(paramsSmall, 50);
+
+            double hBase  = peakH(profile(baseParams, baseContour));
+            double hSmall = peakH(profile(paramsSmall, contourSmall));
+
+            assertThat(hSmall)
+                    .as("Smaller throat (0.5×Dt) should give higher peak h")
+                    .isGreaterThan(hBase);
+        }
+
+        private double peakH(List<HeatTransferModel.WallThermalPoint> pts) {
+            return pts.stream()
+                    .mapToDouble(HeatTransferModel.WallThermalPoint::heatTransferCoeff)
+                    .max().orElseThrow();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Chamber temperature effect on h
+    // -----------------------------------------------------------------------
+    @Nested
+    @DisplayName("Chamber temperature effect on peak h")
+    class ChamberTemperatureTests {
+
+        /**
+         * Higher Tc increases c* (∝ √Tc), reducing the throat mass flux G* = Pc/c*.
+         * The dominant G*^0.8 term scales as Tc^{−0.4}, while the weak μ*^0.2 term
+         * rises as Tc^{+0.1} (Sutherland at high T). Net: h ∝ Tc^{−0.3}, so peak h
+         * falls as Tc increases at constant Pc.
+         */
+        @Test
+        @DisplayName("Higher chamber temperature gives lower peak h at constant Pc")
+        void higherTcReducesPeakH() {
+            NozzleDesignParameters paramsHot =
+                    buildParams(RT, PC_BASE, TC * 2.0, EXIT_MACH, GasProperties.LOX_RP1_PRODUCTS);
+            NozzleContour contourHot = buildContour(paramsHot, 50);
+
+            double hBase = peakH(profile(baseParams, baseContour));
+            double hHot  = peakH(profile(paramsHot, contourHot));
+
+            assertThat(hHot)
+                    .as("Peak h should decrease when Tc doubles (G* = Pc/c* ∝ Tc^{−0.5})")
+                    .isLessThan(hBase);
+        }
+
+        @Test
+        @DisplayName("Peak h decreases monotonically as Tc rises from 2000 K to 5000 K")
+        void hDecreasesMonotonicallyWithRisingTc() {
+            double[] tcValues = {2000.0, 3000.0, 4000.0, 5000.0};
+            double prevH = Double.MAX_VALUE;
+            for (double tc : tcValues) {
+                NozzleDesignParameters params =
+                        buildParams(RT, PC_BASE, tc, EXIT_MACH, GasProperties.LOX_RP1_PRODUCTS);
+                NozzleContour contour = buildContour(params, 50);
+                double h = peakH(profile(params, contour));
+                assertThat(h)
+                        .as("Peak h at Tc=%.0f K should be less than at previous (lower) Tc", tc)
+                        .isLessThan(prevH);
+                prevH = h;
+            }
+        }
+
+        private double peakH(List<HeatTransferModel.WallThermalPoint> pts) {
+            return pts.stream()
+                    .mapToDouble(HeatTransferModel.WallThermalPoint::heatTransferCoeff)
+                    .max().orElseThrow();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Warm coolant temperature variation
+    // -----------------------------------------------------------------------
+    @Nested
+    @DisplayName("Warm coolant temperature variation")
+    class WarmCoolantTests {
+
+        @Test
+        @DisplayName("T_wall > T_coolant at every point for warm (500 K) coolant")
+        void wallTempExceedsWarmCoolantTemp() {
+            double warmCoolant = 500.0;
+            List<HeatTransferModel.WallThermalPoint> pts =
+                    new HeatTransferModel(baseParams, baseContour)
+                            .setCoolantProperties(warmCoolant, 10_000.0)
+                            .calculate(List.of())
+                            .getWallThermalProfile();
+
+            for (HeatTransferModel.WallThermalPoint p : pts) {
+                assertThat(p.wallTemperature())
+                        .as("T_w > T_coolant (500 K) at x=%.4f", p.x())
+                        .isGreaterThan(warmCoolant);
+            }
+        }
+
+        @Test
+        @DisplayName("T_aw > T_wall at every point for warm (500 K) coolant (wall remains cooled)")
+        void recoveryTempExceedsWallTempWithWarmCoolant() {
+            List<HeatTransferModel.WallThermalPoint> pts =
+                    new HeatTransferModel(baseParams, baseContour)
+                            .setCoolantProperties(500.0, 10_000.0)
+                            .calculate(List.of())
+                            .getWallThermalProfile();
+
+            for (HeatTransferModel.WallThermalPoint p : pts) {
+                assertThat(p.recoveryTemperature())
+                        .as("T_aw > T_w at x=%.4f (wall still cooled despite warm coolant)", p.x())
+                        .isGreaterThan(p.wallTemperature());
+            }
+        }
+
+        @Test
+        @DisplayName("Warmer coolant gives higher max wall temperature (reduced thermal driving force)")
+        void warmerCoolantIncreasesMaxWallTemp() {
+            double hc = 10_000.0;
+            double maxWall300 = new HeatTransferModel(baseParams, baseContour)
+                    .setCoolantProperties(300.0, hc).calculate(List.of()).getMaxWallTemperature();
+            double maxWall500 = new HeatTransferModel(baseParams, baseContour)
+                    .setCoolantProperties(500.0, hc).calculate(List.of()).getMaxWallTemperature();
+            double maxWall800 = new HeatTransferModel(baseParams, baseContour)
+                    .setCoolantProperties(800.0, hc).calculate(List.of()).getMaxWallTemperature();
+
+            assertThat(maxWall500)
+                    .as("500 K coolant → higher wall temp than 300 K coolant")
+                    .isGreaterThan(maxWall300);
+            assertThat(maxWall800)
+                    .as("800 K coolant → higher wall temp than 500 K coolant")
+                    .isGreaterThan(maxWall500);
         }
     }
 }

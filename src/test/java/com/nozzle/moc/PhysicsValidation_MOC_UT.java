@@ -47,27 +47,6 @@ class PhysicsValidation_MOC_UT {
     @DisplayName("Riemann invariant conservation (planar MOC)")
     class RiemannInvariantTests {
 
-        /**
-         * Creates a planar MOC test domain: avoids the axisymmetric correction
-         * loop, so the algorithm is pure Riemann invariant algebra and the
-         * result must be exact to floating-point precision.
-         */
-        private CharacteristicNet planarNet() {
-            NozzleDesignParameters params = NozzleDesignParameters.builder()
-                    .throatRadius(0.05)
-                    .exitMach(3.0)
-                    .chamberPressure(7e6)
-                    .chamberTemperature(3500.0)
-                    .ambientPressure(101325.0)
-                    .gasProperties(GasProperties.AIR)
-                    .numberOfCharLines(15)
-                    .wallAngleInitialDegrees(25)
-                    .lengthFraction(0.8)
-                    .axisymmetric(false)   // planar: no axisymmetric correction
-                    .build();
-            return new CharacteristicNet(params).generate();
-        }
-
         @Test
         @Timeout(value = 30, unit = TimeUnit.SECONDS)
         @DisplayName("Q+ = θ − ν is preserved by computeInteriorPoint to < 1e-10 rad")

@@ -81,9 +81,9 @@ public class DXFExporter {
         
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(DXF_HEADER);
-            writePolyline(writer, points, "0");
+            writePolyline(writer, points, "WALL");
             writeLine(writer, new Point2D(points.getFirst().x(), 0),
-                    new Point2D(points.getLast().x(), 0), "0");
+                    new Point2D(points.getLast().x(), 0), "AXIS");
             writer.write(DXF_FOOTER);
         }
     }
@@ -102,11 +102,11 @@ public class DXFExporter {
             
             List<CharacteristicPoint> wallPoints = net.getWallPoints();
             if (!wallPoints.isEmpty()) {
-                writeCharacteristicPolyline(writer, wallPoints, "0");
+                writeCharacteristicPolyline(writer, wallPoints);
             }
-            
+
             double xMax = wallPoints.isEmpty() ? 1.0 : wallPoints.getLast().x();
-            writeLine(writer, new Point2D(0, 0), new Point2D(xMax, 0), "0");
+            writeLine(writer, new Point2D(0, 0), new Point2D(xMax, 0), "AXIS");
             
             writer.write(DXF_FOOTER);
         }
@@ -131,16 +131,16 @@ public class DXFExporter {
         
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(DXF_HEADER);
-            writePolyline(writer, points, "0");
-            
+            writePolyline(writer, points, "WALL");
+
             Point2D exitTop = points.getLast();
             Point2D exitBottom = new Point2D(exitTop.x(), 0);
             Point2D throatBottom = new Point2D(points.getFirst().x(), 0);
             Point2D throatTop = points.getFirst();
-            
-            writeLine(writer, exitTop, exitBottom, "0");
-            writeLine(writer, exitBottom, throatBottom, "0");
-            writeLine(writer, throatBottom, throatTop, "0");
+
+            writeLine(writer, exitTop, exitBottom, "AXIS");
+            writeLine(writer, exitBottom, throatBottom, "AXIS");
+            writeLine(writer, throatBottom, throatTop, "AXIS");
             
             writer.write(DXF_FOOTER);
         }
@@ -164,20 +164,19 @@ public class DXFExporter {
     }
     
     /**
-     * Writes an open DXF POLYLINE entity from a list of {@link CharacteristicPoint}s,
-     * using only their (x, y) coordinates.
+     * Writes an open DXF POLYLINE entity from a list of {@link CharacteristicPoint}s
+     * on the {@code WALL} layer, using only their (x, y) coordinates.
      *
      * @param writer Writer receiving the DXF entities section content
      * @param points Ordered list of characteristic points
-     * @param layer  DXF layer name string
      * @throws IOException If the writer throws
      */
     private void writeCharacteristicPolyline(BufferedWriter writer,
-                                              List<CharacteristicPoint> points, String layer)
+                                              List<CharacteristicPoint> points)
             throws IOException {
-        writer.write("0\nPOLYLINE\n8\n" + layer + "\n66\n1\n70\n0\n");
+        writer.write("0\nPOLYLINE\n8\nWALL\n66\n1\n70\n0\n");
         for (CharacteristicPoint point : points) {
-            writeVertex(writer, new Point2D(point.x(), point.y()), layer);
+            writeVertex(writer, new Point2D(point.x(), point.y()), "WALL");
         }
         writer.write("0\nSEQEND\n");
     }

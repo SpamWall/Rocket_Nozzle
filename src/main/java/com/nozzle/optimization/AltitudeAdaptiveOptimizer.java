@@ -224,7 +224,7 @@ public class AltitudeAdaptiveOptimizer {
     /**
      * Calculates ambient static pressure at the given geometric altitude using a
      * simplified International Standard Atmosphere (ISA) model.
-     * Four altitude layers are modelled:
+     * Four altitude layers are modeled:
      * <ul>
      *   <li>Troposphere (0–11 000 m): temperature lapse rate 6.5 K/km.</li>
      *   <li>Lower stratosphere (11 000–25 000 m): isothermal, exponential decay.</li>
@@ -296,7 +296,7 @@ public class AltitudeAdaptiveOptimizer {
      * @param pressure  Ambient static pressure at this altitude in Pa
      * @param weight    Relative weighting of this altitude in the mission-average
      *                  (dimensionless; weights across all conditions need not sum to 1
-     *                  as they are normalised internally)
+     *                  as they are normalized internally)
      * @param dwellTime Fraction of total burn time spent at this altitude (0–1);
      *                  used together with {@code weight} to form the objective contribution
      */
@@ -331,7 +331,7 @@ public class AltitudeAdaptiveOptimizer {
      *
      * @param parameters    Full nozzle design parameters for this candidate
      * @param objectiveValue Mission-averaged specific impulse in seconds — the scalar
-     *                       value maximised by the optimizer (higher is better)
+     *                       value maximized by the optimizer (higher is better)
      * @param performances  Per-altitude breakdown of thrust coefficient, Isp, thrust,
      *                       and separation state, one entry per {@link AltitudeCondition}
      */

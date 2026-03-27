@@ -140,4 +140,61 @@ class OpenFOAMExporter_UT {
         assertThatThrownBy(() -> new OpenFOAMExporter().exportCase(params, emptyContour, caseDir))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("setAxialCells controls the axial cell count in the blockMeshDict hex block")
+    void setAxialCellsWritesCellCountToBlockMeshDict() throws IOException {
+        Path caseDir = tempDir.resolve("axial_cells");
+        new OpenFOAMExporter().setAxialCells(42).exportCase(params, contour, caseDir);
+
+        String content = Files.readString(caseDir.resolve("system/blockMeshDict"));
+        // hex block line: hex (0 1 2 3 4 5 6 7) (axialCells radialCells 1)
+        assertThat(content).contains("(42 80 1)");
+    }
+
+    @Test
+    @DisplayName("setRadialCells controls the radial cell count in the blockMeshDict hex block")
+    void setRadialCellsWritesCellCountToBlockMeshDict() throws IOException {
+        Path caseDir = tempDir.resolve("radial_cells");
+        new OpenFOAMExporter().setRadialCells(77).exportCase(params, contour, caseDir);
+
+        String content = Files.readString(caseDir.resolve("system/blockMeshDict"));
+        assertThat(content).contains("(200 77 1)");
+    }
+
+    @Test
+    @DisplayName("setWedgeAngleDeg changes vertex z-coordinates in blockMeshDict")
+    void setWedgeAngleDegChangesVertexCoordinates() throws IOException {
+        Path defaultCase = tempDir.resolve("wedge_default");
+        Path wideCase    = tempDir.resolve("wedge_wide");
+        new OpenFOAMExporter()                       .exportCase(params, contour, defaultCase);
+        new OpenFOAMExporter().setWedgeAngleDeg(5.0) .exportCase(params, contour, wideCase);
+
+        String defaultBmd = Files.readString(defaultCase.resolve("system/blockMeshDict"));
+        String wideBmd    = Files.readString(wideCase.resolve("system/blockMeshDict"));
+        assertThat(wideBmd)
+                .as("vertex z-coordinates must change when wedge angle changes from 2.5° to 5.0°")
+                .isNotEqualTo(defaultBmd);
+    }
+
+    @Test
+    @DisplayName("setRadialGrading writes the grading ratio to the simpleGrading directive")
+    void setRadialGradingWritesRatioToBlockMeshDict() throws IOException {
+        Path caseDir = tempDir.resolve("grading");
+        new OpenFOAMExporter().setRadialGrading(10.0).exportCase(params, contour, caseDir);
+
+        String content = Files.readString(caseDir.resolve("system/blockMeshDict"));
+        // gradingSpec(10.0) → "((0.2 0.2 10.00)(0.8 0.8 0.1000))"
+        assertThat(content).contains("10.00");
+    }
+
+    @Test
+    @DisplayName("setTurbulenceIntensity writes the intensity fraction to the k field")
+    void setTurbulenceIntensityWritesToKField() throws IOException {
+        Path caseDir = tempDir.resolve("intensity");
+        new OpenFOAMExporter().setTurbulenceIntensity(0.10).exportCase(params, contour, caseDir);
+
+        // intensity is written as %.3f at the turbulence initialisation line
+        assertThat(Files.readString(caseDir.resolve("0/k"))).contains("0.100");
+    }
 }

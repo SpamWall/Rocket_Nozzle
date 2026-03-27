@@ -67,7 +67,7 @@ class AltitudePerformance_UT {
     class IndexOfMaxAltitudeAdvantageTests {
 
         @Test
-        @DisplayName("Returns index of the entry with the greatest aerospike advantage")
+        @DisplayName("Returns index of the entry with the greatest Aerospike advantage")
         void returnsIndexOfMaxAdvantage() {
             // advantage = aerospikeCf - bellNozzleCf: [0.1, 0.3, 0.2] → max at index 1
             AltitudePerformance perf = new AltitudePerformance(
@@ -126,7 +126,7 @@ class AltitudePerformance_UT {
         }
 
         @Test
-        @DisplayName("Zero advantage when aerospike Cf equals bell Cf at all altitudes")
+        @DisplayName("Zero advantage when Aerospike Cf equals bell Cf at all altitudes")
         void zeroAdvantageWhenCfsAreEqual() {
             AltitudePerformance perf = new AltitudePerformance(
                     new double[]{101325, 50000},
@@ -203,7 +203,7 @@ class AltitudePerformance_UT {
 
         @Test
         @Timeout(value = 30, unit = TimeUnit.SECONDS)
-        @DisplayName("averageAltitudeAdvantage is non-negative for aerospike vs bell")
+        @DisplayName("averageAltitudeAdvantage is non-negative for Aerospike vs bell")
         void averageAltitudeAdvantageNonNegative() {
             AerospikeNozzle nozzle = new AerospikeNozzle(params).generate();
             double[] pressures = {101325, 80000, 50000, 20000, 5000, 1000};

@@ -18,14 +18,14 @@ class FlowSeparationPredictor_UT {
     private NozzleDesignParameters seaLevelParams;
 
     /**
-     * Vacuum-optimised bell nozzle operated at sea level: strongly overexpanded,
+     * Vacuum-optimized bell nozzle operated at sea level: strongly overexpanded,
      * pe << pa → separation expected.
      */
     private NozzleDesignParameters vacuumNozzleAtSeaLevel;
 
     @BeforeEach
     void setUp() {
-        // LOX/RP-1, Pc = 7 MPa, Tc = 3500 K, sea-level optimised (Me = 3)
+        // LOX/RP-1, Pc = 7 MPa, Tc = 3500 K, sea-level optimized (Me = 3)
         // pe ≈ 160 kPa > pa = 101 kPa → slightly underexpanded, no separation.
         seaLevelParams = NozzleDesignParameters.builder()
                 .throatRadius(0.05)

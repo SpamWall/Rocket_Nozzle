@@ -68,7 +68,7 @@ public final class GibbsMinimizer {
      * @param massFractions Initial species mass fractions
      * @param temperature   Temperature in K
      * @param pressure      Pressure in Pa
-     * @return Equilibrium species mass fractions, normalised to sum to 1.0
+     * @return Equilibrium species mass fractions, normalized to sum to 1.0
      */
     public Map<String, Double> minimize(Map<String, Double> massFractions,
                                         double temperature, double pressure) {
@@ -293,10 +293,10 @@ public final class GibbsMinimizer {
             }
         }
 
-        // Normalise output so fractions sum exactly to 1.0
+        // Normalize output so fractions sum exactly to 1.0
         double sum = result.values().stream().mapToDouble(Double::doubleValue).sum();
         if (sum > 0) {
-            result.replaceAll((k, v) -> v / sum);
+            result.replaceAll((_, v) -> v / sum);
         }
 
         return result;
