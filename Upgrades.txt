@@ -15,9 +15,6 @@ Here's an organized assessment of the most impactful additions, grouped by value
   ---
   Medium Impact — Validation & Testing
 
-  Integration Test: Full Design Flow
-  No test exercises the full pipeline: NozzleDesignParameters → CharacteristicNet → NozzleContour → HeatTransferModel → NASASP8120Validator. A single end-to-end integration test would catch cross-component regressions.
-
   ---
   Lower Impact — Nice to Have
 
