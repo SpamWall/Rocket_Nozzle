@@ -1,13 +1,9 @@
-Continue to write all code using the jakarta coding guidelines and accepted object-oriented design principles
+Continue to write all code using the Jakarta coding guidelines and accepted object-oriented design principles
 
 Here's an organized assessment of the most impactful additions, grouped by value:
 
   ---
   Medium Impact — Code Quality & Professionalism
-
-  In CFDMeshExporter:
-    - Add firstLayerThickness to drive a y⁺-controlled first-cell-height calculation (e.g. for OpenFOAM's snappyHexMesh or Gmsh's BoundaryLayer field), to replace the current fixed expansionRatio grading.
-    - Add a full 3-D revolved mesh exporter.
 
   Proper Logging
   Main.java uses System.out throughout. ChemistryModel uses SLF4J but nothing else does. Consistent SLF4J usage across all classes would make the library production-grade.

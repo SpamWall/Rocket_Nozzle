@@ -183,7 +183,7 @@ public class NASASP8120Validator {
      * @param gamma Ratio of specific heats γ
      * @return Isentropic area ratio {@code A/A*}
      */
-    private double calculateAreaRatio(double mach, double gamma) {
+    double calculateAreaRatio(double mach, double gamma) {
         double gp1 = gamma + 1;
         double gm1 = gamma - 1;
         double term = 2.0 / gp1 * (1 + gm1 / 2 * mach * mach);
@@ -199,7 +199,7 @@ public class NASASP8120Validator {
      * @param pressureRatio Ambient-to-chamber pressure ratio {@code pa / pc}
      * @return Ideal thrust coefficient Cf (dimensionless)
      */
-    private double calculateIdealThrustCoefficient(double mach, double gamma, double pressureRatio) {
+    double calculateIdealThrustCoefficient(double mach, double gamma, double pressureRatio) {
         double gp1 = gamma + 1;
         double gm1 = gamma - 1;
         

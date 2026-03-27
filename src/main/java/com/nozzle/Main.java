@@ -70,6 +70,7 @@ import java.util.List;
  * - Ablative liner analysis: Arrhenius char rate, mechanical erosion supplement, ablated mass budget
  * - Radiation-cooled extension analysis: equilibrium wall temperature, material comparison, overtemperature detection
  * - y⁺-controlled first-cell-height grading: CFDMeshExporter and OpenFOAMExporter firstLayerThickness
+ * - Full 3-D revolved mesh export: RevolvedMeshExporter (OpenFOAM blockMesh, Gmsh, Plot3D)
  */
 public class Main {
 
@@ -104,6 +105,7 @@ public class Main {
             demonstrateRadiationCooledExtension();
             demonstrateSerialization(outputDir);
             demonstrateYPlusGrading(outputDir);
+            demonstrateRevolvedMesh(outputDir);
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -1397,5 +1399,114 @@ public class Main {
         System.out.printf("  Fixed radialGrading (default):  %.1f%n",      fixedGrading);
         System.out.printf("  y⁺-derived grading (y1=%.2e m): %.1f%n",      y1, derivedGrading);
         System.out.printf("  First-cell / domain ratio:       %.2e%n",      y1 / exitRadius);
+    }
+
+    /**
+     * Demonstrates the full 3-D revolved mesh exporter ({@link RevolvedMeshExporter}).
+     *
+     * <p>Exports the same bell nozzle contour in three formats:
+     * OpenFOAM {@code blockMeshDict}, Gmsh {@code .geo}, and Plot3D {@code .xyz}.
+     * Prints mesh statistics (vertex count, block count, grid dimensions) for
+     * each format and compares default vs y⁺-derived radial grading.
+     */
+    private static void demonstrateRevolvedMesh(Path outputDir) throws Exception {
+        System.out.println("\n--- FULL 3-D REVOLVED MESH EXPORT ---\n");
+
+        NozzleDesignParameters params = NozzleDesignParameters.builder()
+                .throatRadius(0.05)
+                .exitMach(3.0)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500)
+                .ambientPressure(101325)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(30)
+                .lengthFraction(0.8)
+                .axisymmetric(true)
+                .build();
+
+        CharacteristicNet net = new CharacteristicNet(params).generate();
+        NozzleContour contour = NozzleContour.fromMOCWallPoints(params, net.getWallPoints());
+        contour.generate(100);
+
+        int axial     = 100;
+        int radial    = 40;
+        int azimuthal = 16;   // 22.5° per sector
+
+        System.out.printf("Mesh parameters:%n");
+        System.out.printf("  Axial cells:      %d%n", axial);
+        System.out.printf("  Radial cells:     %d%n", radial);
+        System.out.printf("  Azimuthal sectors:%d  (%.1f° each)%n",
+                azimuthal, 360.0 / azimuthal);
+
+        // ---- OpenFOAM blockMeshDict (default grading) ----
+        Path bmd3d = outputDir.resolve("blockMeshDict_3d");
+        new RevolvedMeshExporter()
+                .setAxialCells(axial)
+                .setRadialCells(radial)
+                .setAzimuthalCells(azimuthal)
+                .setExpansionRatio(4.0)
+                .export(contour, bmd3d, RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
+
+        long bmdVertices = axial + 1 + (long)(axial + 1) * azimuthal;  // axis + wall
+        long bmdBlocks   = (long) axial * azimuthal;
+        System.out.printf("%nOpenFOAM blockMeshDict_3d:%n");
+        System.out.printf("  Vertices:  %d  (axis: %d, wall: %d)%n",
+                bmdVertices, axial + 1, (axial + 1) * azimuthal);
+        System.out.printf("  Hex blocks:%d  (%d axial × %d azimuthal)%n",
+                bmdBlocks, axial, azimuthal);
+        System.out.printf("  Total cells: %,d%n", bmdBlocks * radial);
+        System.out.printf("  File size: %.1f kB%n",
+                java.nio.file.Files.size(bmd3d) / 1024.0);
+
+        // ---- Gmsh .geo ----
+        Path geo3d = outputDir.resolve("nozzle_3d.geo");
+        new RevolvedMeshExporter()
+                .setAxialCells(axial)
+                .setRadialCells(radial)
+                .setAzimuthalCells(azimuthal)
+                .export(contour, geo3d, RevolvedMeshExporter.Format.GMSH_GEO);
+
+        System.out.printf("%nGmsh nozzle_3d.geo:%n");
+        System.out.printf("  2-D surface extruded via Extrude { Rotate { {1,0,0}, ... 2π } }%n");
+        System.out.printf("  Layers: %d  (one hex layer per azimuthal sector)%n", azimuthal);
+        System.out.printf("  File size: %.1f kB%n",
+                java.nio.file.Files.size(geo3d) / 1024.0);
+
+        // ---- Plot3D .xyz ----
+        Path xyz3d = outputDir.resolve("nozzle_3d.xyz");
+        new RevolvedMeshExporter()
+                .setAxialCells(axial)
+                .setRadialCells(radial)
+                .setAzimuthalCells(azimuthal)
+                .export(contour, xyz3d, RevolvedMeshExporter.Format.PLOT3D);
+
+        int ni = axial + 1, nj = radial + 1, nk = azimuthal + 1;
+        System.out.printf("%nPlot3D nozzle_3d.xyz:%n");
+        System.out.printf("  Grid: %d × %d × %d  (ni × nj × nk)%n", ni, nj, nk);
+        System.out.printf("  Total points: %,d%n", (long) ni * nj * nk);
+        System.out.printf("  File size: %.1f kB%n",
+                java.nio.file.Files.size(xyz3d) / 1024.0);
+
+        // ---- Compare default vs y⁺-derived grading ----
+        double exitRadius    = contour.getContourPoints().getLast().y();
+        double defaultGrading = 4.0;
+        double y1            = 2e-5;   // representative y1 ≈ 20 μm for y+ ≈ 1
+        double yPlusGrading  = Math.max(1.0, exitRadius / y1);
+
+        System.out.printf("%nRadial grading comparison (domain H = exit radius = %.4f m):%n",
+                exitRadius);
+        System.out.printf("  Default expansionRatio:   %.1f%n", defaultGrading);
+        System.out.printf("  y⁺-derived (y1 = %.0f μm): %.0f   (first cell / H = %.2e)%n",
+                y1 * 1e6, yPlusGrading, y1 / exitRadius);
+
+        Path bmd3dYPlus = outputDir.resolve("blockMeshDict_3d_yplus");
+        new RevolvedMeshExporter()
+                .setAxialCells(axial)
+                .setRadialCells(radial)
+                .setAzimuthalCells(azimuthal)
+                .setFirstLayerThickness(y1)
+                .export(contour, bmd3dYPlus, RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
+        System.out.printf("  y⁺-graded mesh written → %s%n", bmd3dYPlus.getFileName());
     }
 }

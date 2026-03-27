@@ -23,6 +23,7 @@ package com.nozzle.validation;
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.moc.CharacteristicNet;
+import com.nozzle.moc.CharacteristicPoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -317,6 +318,128 @@ class NASASP8120Validator_UT {
 
             assertThat(result.metrics().get("estimated_divergence_efficiency"))
                     .isCloseTo(0.99, within(1e-9));
+        }
+    }
+
+    @Nested
+    @DisplayName("Area Ratio and Thrust Coefficient Dead Branch Tests")
+    class DeadCodeBranchTests {
+
+        /** Subclass that replaces the two package-private calculation methods with fixed returns. */
+        private class TestableValidator extends NASASP8120Validator {
+            private final double arOverride;
+            private final double cfOverride;
+
+            TestableValidator(double arOverride, double cfOverride) {
+                this.arOverride = arOverride;
+                this.cfOverride = cfOverride;
+            }
+
+            @Override
+            double calculateAreaRatio(double mach, double gamma) {
+                return arOverride >= 0 ? arOverride : super.calculateAreaRatio(mach, gamma);
+            }
+
+            @Override
+            double calculateIdealThrustCoefficient(double mach, double gamma, double pressureRatio) {
+                return cfOverride >= 0 ? cfOverride : super.calculateIdealThrustCoefficient(mach, gamma, pressureRatio);
+            }
+        }
+
+        @Test
+        @DisplayName("arError > 1% (L62 TRUE) and > 5% (L65 TRUE) — warning and hard error added")
+        void areaRatioErrorAbove5PercentAddsErrorAndWarning() {
+            // Return near-zero AR so arError >> 5% compared to the real isentropic value
+            NASASP8120Validator.ValidationResult result =
+                    new TestableValidator(0.001, -1).validate(params);
+
+            assertThat(result.warnings()).anyMatch(w -> w.contains("Area ratio deviation"));
+            assertThat(result.errors()).anyMatch(e -> e.contains("Area ratio error"));
+            assertThat(result.isValid()).isFalse();
+        }
+
+        @Test
+        @DisplayName("cfError > 1% (L77 TRUE) — thrust coefficient warning added")
+        void thrustCoefficientErrorAbove1PercentAddsWarning() {
+            // Return near-zero Cf so cfError >> 1% compared to the design value
+            NASASP8120Validator.ValidationResult result =
+                    new TestableValidator(-1, 0.001).validate(params);
+
+            assertThat(result.warnings()).anyMatch(w -> w.contains("Thrust coefficient deviation"));
+        }
+    }
+
+    @Nested
+    @DisplayName("Net Exit Condition Branch Tests")
+    class NetBranchTests {
+
+        /** CharacteristicNet subclass that injects custom wall points, AR, and validity. */
+        private class TestableNet extends CharacteristicNet {
+            private final List<CharacteristicPoint> injectedWallPoints;
+            private final double injectedAR;
+
+            TestableNet(NozzleDesignParameters p,
+                        List<CharacteristicPoint> wallPoints,
+                        double ar) {
+                super(p);
+                this.injectedWallPoints = wallPoints;
+                this.injectedAR = ar;
+            }
+
+            @Override
+            public List<CharacteristicPoint> getWallPoints() {
+                return injectedWallPoints;
+            }
+
+            @Override
+            public double calculateExitAreaRatio() {
+                return injectedAR;
+            }
+
+            @Override
+            public boolean validate() {
+                return true;
+            }
+        }
+
+        @Test
+        @DisplayName("machError > 2% (L148 TRUE) and > 5% (L151 TRUE) — Mach warning and error added")
+        void machErrorAbove5PercentAddsWarningAndError() {
+            double designMach = params.exitMach();
+            // 10% higher → machError ≈ 10%
+            CharacteristicPoint exitPt = CharacteristicPoint.of(1.0, 0.05, designMach * 1.10, 0.0, 0, 0);
+            TestableNet net = new TestableNet(params, List.of(exitPt), params.exitAreaRatio());
+
+            NASASP8120Validator.ValidationResult result = validator.validate(net);
+
+            assertThat(result.warnings()).anyMatch(w -> w.contains("Exit Mach deviation"));
+            assertThat(result.errors()).anyMatch(e -> e.contains("Exit Mach error"));
+        }
+
+        @Test
+        @DisplayName("exitAngleDeg > 10° (L159 TRUE) — exit flow angle warning added")
+        void exitFlowAngleAbove10DegreesAddsWarning() {
+            double designMach = params.exitMach();
+            double theta = Math.toRadians(15.0); // 15° > 10°
+            CharacteristicPoint exitPt = CharacteristicPoint.of(1.0, 0.05, designMach, theta, 0, 0);
+            TestableNet net = new TestableNet(params, List.of(exitPt), params.exitAreaRatio());
+
+            NASASP8120Validator.ValidationResult result = validator.validate(net);
+
+            assertThat(result.warnings()).anyMatch(w -> w.contains("Exit flow angle"));
+        }
+
+        @Test
+        @DisplayName("arDiff > 3% (L170 TRUE) — computed vs design area ratio warning added")
+        void computedAreaRatioDifferenceAbove3PercentAddsWarning() {
+            double designMach = params.exitMach();
+            CharacteristicPoint exitPt = CharacteristicPoint.of(1.0, 0.05, designMach, 0.0, 0, 0);
+            double wrongAR = params.exitAreaRatio() * 1.10; // 10% off → arDiff > 3%
+            TestableNet net = new TestableNet(params, List.of(exitPt), wrongAR);
+
+            NASASP8120Validator.ValidationResult result = validator.validate(net);
+
+            assertThat(result.warnings()).anyMatch(w -> w.contains("Computed area ratio differs"));
         }
     }
 
