@@ -21,6 +21,8 @@
 package com.nozzle.core;
 
 import jakarta.validation.constraints.Positive;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Immutable record representing thermodynamic gas properties.
@@ -42,6 +44,8 @@ public record GasProperties(
         @Positive double sutherlandConst
 ) {
     
+    private static final Logger LOG = LoggerFactory.getLogger(GasProperties.class);
+
     /**
      * Universal gas constant in J/(kmol·K).
      */
@@ -248,6 +252,7 @@ public record GasProperties(
         double mach = 1.0 + Math.sqrt(6.0 * (gamma - 1) / (gamma + 1)) * Math.pow(nu, 0.5);
         
         // Newton-Raphson iteration
+        boolean converged = false;
         for (int i = 0; i < 50; i++) {
             double f = prandtlMeyerFunction(mach) - nu;
             double mach2 = mach * mach;
@@ -255,8 +260,12 @@ public record GasProperties(
             double deltaMach = f / df;
             mach -= deltaMach;
             if (Math.abs(deltaMach) < 1e-10) {
+                converged = true;
                 break;
             }
+        }
+        if (!converged) {
+            LOG.warn("machFromPrandtlMeyer: did not converge in 50 iterations for nu={}", nu);
         }
         return mach;
     }
@@ -307,6 +316,7 @@ public record GasProperties(
         double mach = 1.0 + Math.sqrt(areaRatio - 1.0);
         
         // Newton-Raphson iteration
+        boolean converged = false;
         for (int i = 0; i < 50; i++) {
             double f = areaRatio(mach) - areaRatio;
             // Closed-form derivative: d(A/A*)/dM = A/A*(M) × (M²−1) / (M × (1 + (γ−1)/2 × M²))
@@ -318,8 +328,12 @@ public record GasProperties(
             double deltaMach = f / df;
             mach -= deltaMach;
             if (Math.abs(deltaMach) < 1e-10) {
+                converged = true;
                 break;
             }
+        }
+        if (!converged) {
+            LOG.warn("machFromAreaRatio: did not converge in 50 iterations for areaRatio={}", areaRatio);
         }
         return mach;
     }

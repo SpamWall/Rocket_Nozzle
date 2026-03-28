@@ -20,6 +20,9 @@
 
 package com.nozzle.core;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Predicts flow separation in overexpanded rocket nozzles.
  *
@@ -73,6 +76,8 @@ package com.nozzle.core;
  * hot-fire tests.
  */
 public class FlowSeparationPredictor {
+
+    private static final Logger LOG = LoggerFactory.getLogger(FlowSeparationPredictor.class);
 
     /** Available empirical separation criteria. */
     public enum Criterion {
@@ -147,6 +152,8 @@ public class FlowSeparationPredictor {
 
         if (pe >= pSep) {
             // Nozzle is not overexpanded enough to cause separation.
+            LOG.debug("Flow separation [{}]: no separation (p_threshold={} Pa, pe={} Pa)",
+                    criterion, pSep, pe);
             return SeparationResult.noSeparation(criterion, pSep);
         }
 
@@ -164,6 +171,8 @@ public class FlowSeparationPredictor {
 
         double sideLoad = estimateSideLoad(pSep, pa, arSep);
 
+        LOG.warn("Flow separation [{}]: {} at M={} A/A*={} axial={} side_load={} N",
+                criterion, mode, mSep, arSep, axialFraction, sideLoad);
         return new SeparationResult(true, criterion, pSep, mSep, arSep, axialFraction, mode, sideLoad);
     }
 

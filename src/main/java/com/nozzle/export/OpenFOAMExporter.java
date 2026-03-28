@@ -25,6 +25,9 @@ import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Files;
@@ -81,6 +84,8 @@ import java.util.List;
  * Then run: {@code blockMesh && rhoCentralFoam}
  */
 public class OpenFOAMExporter {
+
+    private static final Logger LOG = LoggerFactory.getLogger(OpenFOAMExporter.class);
 
     /** Creates an {@code OpenFOAMExporter} with default mesh and solver settings. */
     public OpenFOAMExporter() {}
@@ -202,6 +207,9 @@ public class OpenFOAMExporter {
             throw new IllegalArgumentException("Contour must be generated before export");
         }
 
+        LOG.debug("Exporting OpenFOAM case: {} contour points, axial={} radial={} turbulence={} → {}",
+                pts.size(), axialCells, radialCells, turbulenceEnabled, caseDir);
+
         Path system   = caseDir.resolve("system");
         Path constant = caseDir.resolve("constant");
         Path zero     = caseDir.resolve("0");
@@ -224,6 +232,8 @@ public class OpenFOAMExporter {
             writeKField(params, zero.resolve("k"));
             writeOmegaField(params, pts, zero.resolve("omega"));
         }
+
+        LOG.debug("OpenFOAM case export complete → {}", caseDir);
     }
 
     // -------------------------------------------------------------------------

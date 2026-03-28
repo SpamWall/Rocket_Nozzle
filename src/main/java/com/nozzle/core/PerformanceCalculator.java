@@ -28,6 +28,9 @@ import com.nozzle.thermal.BoundaryLayerCorrection;
 
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Calculates nozzle performance metrics including the ideal and actual thrust
  * coefficient, specific impulse, efficiency, thrust, and mass flow rate.
@@ -53,7 +56,9 @@ import java.util.List;
  * @see PerformanceSummary
  */
 public class PerformanceCalculator {
-    
+
+    private static final Logger LOG = LoggerFactory.getLogger(PerformanceCalculator.class);
+
     private final NozzleDesignParameters parameters;
     private final CharacteristicNet characteristicNet;
     private final NozzleContour contour;
@@ -238,7 +243,7 @@ public class PerformanceCalculator {
             double lf        = parameters.lengthFraction();
             double lnAr      = Math.log(ar);
             double thetaEDeg = (20.0 - 15.0 * lf) - (1.3 - lf) * lnAr;
-            double thetaE    = Math.toRadians(Math.max(1.0, Math.min(15.0, thetaEDeg)));
+            double thetaE    = Math.toRadians(Math.clamp(thetaEDeg, 1.0, 15.0));
             // RMS effective angle: throat inflection region (~10% of effective nozzle
             // length) operates near wallAngleInitial; the downstream bell (~90%) near θ_E.
             double wallAngle = parameters.wallAngleInitial();
@@ -340,6 +345,8 @@ public class PerformanceCalculator {
         specificImpulse = cStar * actualThrustCoeff / g0;
         
         thrust = actualThrustCoeff * parameters.chamberPressure() * parameters.throatArea();
+        LOG.debug("Performance: Cf_ideal={} Cf_actual={} efficiency={}% Isp={} s thrust={} N",
+                idealThrustCoeff, actualThrustCoeff, efficiency * 100, specificImpulse, thrust);
     }
     
     // -------------------------------------------------------------------------

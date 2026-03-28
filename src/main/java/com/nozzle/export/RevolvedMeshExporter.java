@@ -23,6 +23,9 @@ package com.nozzle.export;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -65,6 +68,8 @@ import java.util.List;
  * </ul>
  */
 public class RevolvedMeshExporter {
+
+    private static final Logger LOG = LoggerFactory.getLogger(RevolvedMeshExporter.class);
 
     /** Creates a {@code RevolvedMeshExporter} with default settings. */
     public RevolvedMeshExporter() {}
@@ -183,11 +188,15 @@ public class RevolvedMeshExporter {
      */
     public void export(NozzleContour contour, Path filePath, Format format)
             throws IOException {
+        List<Point2D> pts = contour.getContourPoints();
+        LOG.debug("Exporting 3D revolved mesh: format={} axial={} radial={} azimuthal={} {} points → {}",
+                format, axialCells, radialCells, azimuthalCells, pts.size(), filePath);
         switch (format) {
             case OPENFOAM_BLOCKMESH -> exportOpenFOAM3D(contour, filePath);
             case GMSH_GEO          -> exportGmsh3D(contour, filePath);
             case PLOT3D            -> exportPlot3D3D(contour, filePath);
         }
+        LOG.debug("3D revolved mesh export complete → {}", filePath);
     }
 
     // -------------------------------------------------------------------------
@@ -376,7 +385,7 @@ public class RevolvedMeshExporter {
      * into a full 3-D hex volume using {@code Extrude { Rotate { ... } }}.
      *
      * <p>The 2-D profile is defined in the x-y plane (y = radial direction).
-     * The rotation axis is the x-axis (nozzle centreline).  A full 2π
+     * The rotation axis is the x-axis (nozzle centerline).  A full 2π
      * revolution is performed in {@link #azimuthalCells} layers with hex
      * recombination enabled.
      *

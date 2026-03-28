@@ -23,6 +23,8 @@ package com.nozzle.optimization;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.core.PerformanceCalculator;
 import com.nozzle.core.ShockExpansionModel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -36,7 +38,9 @@ import java.util.concurrent.Future;
  * Considers performance across a range of operating altitudes.
  */
 public class AltitudeAdaptiveOptimizer {
-    
+
+    private static final Logger LOG = LoggerFactory.getLogger(AltitudeAdaptiveOptimizer.class);
+
     private final NozzleDesignParameters baseParameters;
     private final List<AltitudeCondition> altitudeProfile;
     private final OptimizationConfig config;
@@ -103,9 +107,11 @@ public class AltitudeAdaptiveOptimizer {
      */
     public AltitudeAdaptiveOptimizer optimize() {
         results.clear();
-        
+
         // Generate parameter combinations
         List<NozzleDesignParameters> candidates = generateCandidates();
+        LOG.debug("Starting optimization: {} candidates, {} altitude conditions",
+                candidates.size(), altitudeProfile.size());
         
         // Evaluate in parallel using virtual threads
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -122,7 +128,7 @@ public class AltitudeAdaptiveOptimizer {
                         results.add(result);
                     }
                 } catch (Exception e) {
-                    System.err.println("Optimization evaluation failed: " + e.getMessage());
+                    LOG.warn("Optimization candidate evaluation failed: {}", e.getMessage(), e);
                 }
             }
         }
@@ -131,7 +137,15 @@ public class AltitudeAdaptiveOptimizer {
         bestResult = results.stream()
                 .max(Comparator.comparingDouble(OptimizationResult::objectiveValue))
                 .orElse(null);
-        
+
+        if (bestResult != null) {
+            LOG.debug("Optimization complete: {} results evaluated, best Isp = {} s",
+                    results.size(), String.format("%.2f", bestResult.objectiveValue()));
+        } else {
+            LOG.warn("Optimization complete: no valid results produced from {} candidates",
+                    candidates.size());
+        }
+
         return this;
     }
     

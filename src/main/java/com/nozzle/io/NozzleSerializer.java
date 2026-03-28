@@ -25,6 +25,8 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.moc.CharacteristicNet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -61,6 +63,8 @@ import java.time.Instant;
  * }</pre>
  */
 public final class NozzleSerializer {
+
+    private static final Logger LOG = LoggerFactory.getLogger(NozzleSerializer.class);
 
     /** Current document schema version. Increment when the {@link DesignDocument} structure changes. */
     public static final String SCHEMA_VERSION = "1.0";
@@ -115,14 +119,16 @@ public final class NozzleSerializer {
      * Writes a {@link DesignDocument} to a JSON file.
      * The file is created or overwritten; parent directories must already exist.
      *
-     * @param document Document to serialise
+     * @param document Document to serialize
      * @param path     Target file path
      * @throws UncheckedIOException if the file cannot be written
      */
     public static void save(DesignDocument document, Path path) {
+        LOG.debug("Saving design document to {}", path);
         try {
             MAPPER.writeValue(path.toFile(), document);
         } catch (IOException e) {
+            LOG.error("Failed to write design document to {}", path, e);
             throw new UncheckedIOException("Failed to write design document to: " + path, e);
         }
     }
@@ -131,9 +137,9 @@ public final class NozzleSerializer {
      * Writes a {@link DesignDocument} to a JSON string for in-memory transfer
      * or logging.
      *
-     * @param document Document to serialise
+     * @param document Document to serialize
      * @return Pretty-printed JSON string
-     * @throws UncheckedIOException if serialisation fails
+     * @throws UncheckedIOException if serialization fails
      */
     public static String toJson(DesignDocument document) {
         try {
@@ -151,9 +157,11 @@ public final class NozzleSerializer {
      * @throws UncheckedIOException if the file cannot be read or parsed
      */
     public static DesignDocument load(Path path) {
+        LOG.debug("Loading design document from {}", path);
         try {
             return MAPPER.readValue(path.toFile(), DesignDocument.class);
         } catch (IOException e) {
+            LOG.error("Failed to read design document from {}", path, e);
             throw new UncheckedIOException("Failed to read design document from: " + path, e);
         }
     }

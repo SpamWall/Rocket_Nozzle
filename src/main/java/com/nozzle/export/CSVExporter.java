@@ -20,6 +20,9 @@
 
 package com.nozzle.export;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
@@ -55,6 +58,8 @@ import java.util.List;
  */
 public class CSVExporter {
 
+    private static final Logger LOG = LoggerFactory.getLogger(CSVExporter.class);
+
     /** Creates a {@code CSVExporter} with default settings. */
     public CSVExporter() {}
 
@@ -71,6 +76,7 @@ public class CSVExporter {
      * @throws IOException If write fails
      */
     public void exportCharacteristicNet(CharacteristicNet net, Path filePath) throws IOException {
+        LOG.debug("Exporting CSV characteristic net → {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             // Header
             writer.write("row,index,x,y,mach,theta_deg,nu_deg,mu_deg,pressure,temperature,density,velocity,type");
@@ -97,6 +103,7 @@ public class CSVExporter {
      * @throws IOException If write fails
      */
     public void exportWallContour(CharacteristicNet net, Path filePath) throws IOException {
+        LOG.debug("Exporting CSV wall contour → {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("x,y,mach,theta_deg,pressure,temperature,velocity");
             writer.write(NEWLINE);
@@ -123,6 +130,7 @@ public class CSVExporter {
      * @throws IOException If write fails
      */
     public void exportContour(NozzleContour contour, Path filePath) throws IOException {
+        LOG.debug("Exporting CSV contour → {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("x,y,angle_deg");
             writer.write(NEWLINE);
@@ -146,6 +154,7 @@ public class CSVExporter {
      * @throws IOException If write fails
      */
     public void exportThermalProfile(HeatTransferModel heatTransfer, Path filePath) throws IOException {
+        LOG.debug("Exporting CSV thermal profile → {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("x,y,wall_temp_K,total_heat_flux_W_m2,conv_heat_flux_W_m2,");
             writer.write("rad_heat_flux_W_m2,heat_transfer_coeff_W_m2K,recovery_temp_K");
@@ -173,8 +182,9 @@ public class CSVExporter {
      * @param filePath      Output file path
      * @throws IOException If write fails
      */
-    public void exportBoundaryLayerProfile(BoundaryLayerCorrection boundaryLayer, 
+    public void exportBoundaryLayerProfile(BoundaryLayerCorrection boundaryLayer,
                                             Path filePath) throws IOException {
+        LOG.debug("Exporting CSV boundary layer profile → {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("x,y,running_length,Reynolds,delta,delta_star,theta,cf,turbulent,mach");
             writer.write(NEWLINE);
@@ -204,6 +214,7 @@ public class CSVExporter {
      * @throws IOException If write fails
      */
     public void exportDesignParameters(NozzleDesignParameters params, Path filePath) throws IOException {
+        LOG.debug("Exporting CSV design parameters → {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("parameter,value,unit");
             writer.write(NEWLINE);
@@ -233,7 +244,7 @@ public class CSVExporter {
      * Exports complete design report to CSV files.
      *
      * @param net       Characteristic net
-     * @param contour   Nozzle contour (may be null)
+     * @param contour   Nozzle contour (it may be null)
      * @param heat      Heat transfer model (It may be null)
      * @param bl        Boundary layer model (It may be null)
      * @param outputDir Output directory
@@ -244,6 +255,7 @@ public class CSVExporter {
                                       HeatTransferModel heat,
                                       BoundaryLayerCorrection bl,
                                       Path outputDir) throws IOException {
+        LOG.debug("Exporting complete CSV report → {}", outputDir);
         Files.createDirectories(outputDir);
         
         exportDesignParameters(net.getParameters(), outputDir.resolve("design_parameters.csv"));
@@ -271,6 +283,7 @@ public class CSVExporter {
      * @throws IOException If write fails
      */
     public void exportStressProfile(ThermalStressAnalysis analysis, Path filePath) throws IOException {
+        LOG.debug("Exporting CSV stress profile → {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("x_m,y_m,wall_temp_K,delta_T_K,"
                     + "sigma_thermal_MPa,sigma_hoop_pressure_MPa,sigma_axial_pressure_MPa,"

@@ -30,12 +30,17 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Models heat transfer in rocket nozzles including convective
  * and radiative heat transfer, with wall temperature prediction.
  */
 public class HeatTransferModel {
-    
+
+    private static final Logger LOG = LoggerFactory.getLogger(HeatTransferModel.class);
+
     private final NozzleDesignParameters parameters;
     private final NozzleContour contour;
     private final List<WallThermalPoint> wallThermalProfile;
@@ -135,6 +140,9 @@ public class HeatTransferModel {
             contourPoints = contour.getContourPoints();
         }
 
+        LOG.debug("Heat transfer calculation started: {} contour points, {} flow points",
+                contourPoints.size(), flowPoints != null ? flowPoints.size() : 0);
+
         KdTree kdTree = (flowPoints != null && !flowPoints.isEmpty())
                 ? KdTree.build(flowPoints, 0) : null;
 
@@ -176,7 +184,9 @@ public class HeatTransferModel {
             );
             wallThermalProfile.add(thermalPoint);
         }
-        
+
+        LOG.debug("Heat transfer complete: {} points, max Tw={} K, max q={} W/m²",
+                wallThermalProfile.size(), getMaxWallTemperature(), getMaxHeatFlux());
         return this;
     }
 
@@ -316,7 +326,7 @@ public class HeatTransferModel {
      * Estimates the local wall radius of curvature at axial position {@code x} using
      * non-uniform second-order finite differences on the discrete contour points.
      * Falls back to the throat radius if the contour contains fewer than three
-     * points or if the neighbouring knots are too closely spaced ({@code h < 1 pm}).
+     * points or if the neighboring knots are too closely spaced ({@code h < 1 pm}).
      * The result is capped at {@code 10 × r_throat} to prevent the Bartz curvature
      * correction from vanishing on near-straight wall sections.
      *
@@ -339,7 +349,7 @@ public class HeatTransferModel {
                 idx = i;
             }
         }
-        idx = Math.max(1, Math.min(idx, pts.size() - 2));
+        idx = Math.clamp(idx, 1, pts.size() - 2);
 
         double x0 = pts.get(idx - 1).x(), y0 = pts.get(idx - 1).y();
         double x1 = pts.get(idx).x(),     y1 = pts.get(idx).y();

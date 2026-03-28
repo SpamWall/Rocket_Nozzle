@@ -24,6 +24,9 @@ import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedWriter;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -40,6 +43,8 @@ import java.util.List;
  * Generates a revolved 3D mesh from the 2D contour.
  */
 public class STLExporter {
+
+    private static final Logger LOG = LoggerFactory.getLogger(STLExporter.class);
 
     /** Creates an {@code STLExporter} with default settings (72 segments, binary format, metre-to-mm scale). */
     public STLExporter() {}
@@ -100,14 +105,17 @@ public class STLExporter {
         if (points.size() < 2) {
             throw new IllegalArgumentException("Contour needs at least 2 points");
         }
-        
+
+        LOG.debug("Exporting STL mesh: {} profile points, {} segments, {} → {}",
+                points.size(), circumferentialSegments, binaryFormat ? "binary" : "ASCII", filePath);
         List<Triangle> triangles = generateTriangles(points);
-        
+
         if (binaryFormat) {
             exportBinarySTL(triangles, filePath);
         } else {
             exportAsciiSTL(triangles, filePath);
         }
+        LOG.debug("STL export complete: {} triangles → {}", triangles.size(), filePath);
     }
     
     /**
@@ -371,12 +379,14 @@ public class STLExporter {
     public void exportAerospikeMesh(AerospikeNozzle nozzle, Path filePath) throws IOException {
         // getTruncatedSpikeContour() generates lazily and always returns >= 2 points.
         List<Point2D> spike = nozzle.getTruncatedSpikeContour();
+        LOG.debug("Exporting Aerospike STL mesh: {} spike points → {}", spike.size(), filePath);
         List<Triangle> triangles = generateTriangles(spike);
         if (binaryFormat) {
             exportBinarySTL(triangles, filePath);
         } else {
             exportAsciiSTL(triangles, filePath);
         }
+        LOG.debug("Aerospike STL export complete: {} triangles → {}", triangles.size(), filePath);
     }
 
     /**

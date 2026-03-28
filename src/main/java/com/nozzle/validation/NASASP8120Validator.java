@@ -22,6 +22,8 @@ package com.nozzle.validation;
 
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.moc.CharacteristicNet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -31,7 +33,9 @@ import java.util.*;
  * reference data for supersonic nozzle design verification.
  */
 public class NASASP8120Validator {
-    
+
+    private static final Logger LOG = LoggerFactory.getLogger(NASASP8120Validator.class);
+
     /**
      * Creates a validator with the built-in NASA SP-8120 reference correlations.
      */
@@ -113,10 +117,18 @@ public class NASASP8120Validator {
         metrics.put("estimated_divergence_efficiency", divEfficiency);
         
         boolean isValid = errors.isEmpty();
-        
+
+        if (isValid) {
+            LOG.debug("NASA SP-8120 validation passed for M={}, {} warning(s)",
+                    exitMach, warnings.size());
+        } else {
+            LOG.warn("NASA SP-8120 validation failed for M={}: {} error(s), {} warning(s)",
+                    exitMach, errors.size(), warnings.size());
+        }
+
         return new ValidationResult(isValid, errors, warnings, metrics);
     }
-    
+
     /**
      * Validates a characteristic net against NASA SP-8120.
      *

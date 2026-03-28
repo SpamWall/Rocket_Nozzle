@@ -22,6 +22,8 @@ package com.nozzle.moc;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -40,7 +42,9 @@ import java.util.List;
  * 3. Wall contour: determined by the outermost C+ characteristic
  */
 public class CharacteristicNet {
-    
+
+    private static final Logger LOG = LoggerFactory.getLogger(CharacteristicNet.class);
+
     private final NozzleDesignParameters parameters;
     private final List<List<CharacteristicPoint>> netPoints;
     private final List<CharacteristicPoint> wallPoints;
@@ -132,6 +136,7 @@ public class CharacteristicNet {
         int n = parameters.numberOfCharLines();
         double rt = parameters.throatRadius();
         double thetaMax = parameters.wallAngleInitial();
+        LOG.debug("MOC generation started: {} char lines, axisymmetric={}", n, axisymmetric);
         
         // Initial data line at throat (x ≈ 0)
         // Points go from centerline (y=0) to wall (y=rt)
@@ -221,7 +226,9 @@ public class CharacteristicNet {
                 break;
             }
         }
-        
+
+        LOG.debug("MOC net generated: {} wall points, {} total interior points",
+                wallPoints.size(), getTotalPointCount());
         return this;
     }
     
@@ -426,6 +433,7 @@ public class CharacteristicNet {
         
         // Axisymmetric correction
         if (axisymmetric) {
+            boolean corrConverged = false;
             for (int iter = 0; iter < maxIterations; iter++) {
                 double yAvg = (left.y() + right.y() + y) / 3;
                 if (yAvg < 1e-10) break;
@@ -455,6 +463,7 @@ public class CharacteristicNet {
                 
                 if (Math.abs(newTheta - theta) < convergenceTolerance &&
                     Math.abs(newNu - nu) < convergenceTolerance) {
+                    corrConverged = true;
                     break;
                 }
                 
@@ -476,6 +485,10 @@ public class CharacteristicNet {
                 denom = slopePlus - slopeMinus;
                 x = (right.y() - left.y() + slopePlus * left.x() - slopeMinus * right.x()) / denom;
                 y = left.y() + slopePlus * (x - left.x());
+            }
+            if (!corrConverged) {
+                LOG.warn("Axisymmetric correction did not converge after {} iterations near (x={}, y={})",
+                        maxIterations, String.format("%.4f", x), String.format("%.4f", y));
             }
         }
         

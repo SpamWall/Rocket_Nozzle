@@ -24,6 +24,9 @@ import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -36,6 +39,8 @@ import java.util.List;
  * Supports OpenFOAM blockMesh, CGNS, and Gmsh formats.
  */
 public class CFDMeshExporter {
+
+    private static final Logger LOG = LoggerFactory.getLogger(CFDMeshExporter.class);
 
     /** Creates a {@code CFDMeshExporter} with default settings. */
     public CFDMeshExporter() {}
@@ -110,7 +115,7 @@ public class CFDMeshExporter {
      * Sets the first cell height y₁ (metres) for y⁺-controlled radial grading,
      * overriding the fixed {@link #setExpansionRatio(double) expansionRatio}.
      * The domain height H used is the exit radius for bell nozzles and the
-     * annular gap (r_cowl − r_spike_root) for aerospike nozzles.
+     * annular gap (r_cowl − r_spike_root) for Aerospike nozzles.
      * The grading derived per format is:
      * <ul>
      *   <li><b>OpenFOAM blockMesh</b>: expansion ratio g = H / y₁</li>
@@ -177,12 +182,15 @@ public class CFDMeshExporter {
      * @throws IOException If the file cannot be written
      */
     public void export(NozzleContour contour, Path filePath, Format format) throws IOException {
+        LOG.debug("Exporting CFD mesh: format={} axial={} radial={} → {}",
+                format, axialCells, radialCells, filePath);
         switch (format) {
             case OPENFOAM_BLOCKMESH -> exportOpenFOAM(contour, filePath);
             case GMSH_GEO -> exportGmsh(contour, filePath);
             case PLOT3D -> exportPlot3D(contour, filePath);
             case CGNS -> exportCGNS(contour, filePath);
         }
+        LOG.debug("CFD mesh export complete → {}", filePath);
     }
 
     /**
@@ -519,11 +527,14 @@ public class CFDMeshExporter {
      */
     public void exportAerospike(AerospikeNozzle nozzle, Path filePath, Format format)
             throws IOException {
+        LOG.debug("Exporting Aerospike CFD mesh: format={} axial={} radial={} → {}",
+                format, axialCells, radialCells, filePath);
         switch (format) {
             case OPENFOAM_BLOCKMESH -> exportAerospikeOpenFOAM(nozzle, filePath);
             case GMSH_GEO -> exportAerospikeGmsh(nozzle, filePath);
             case PLOT3D, CGNS -> exportAerospikePlot3D(nozzle, filePath);
         }
+        LOG.debug("Aerospike CFD mesh export complete → {}", filePath);
     }
 
     /**

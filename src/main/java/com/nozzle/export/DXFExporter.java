@@ -26,6 +26,9 @@ import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.CharacteristicPoint;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -36,6 +39,8 @@ import java.util.List;
  * Exports nozzle geometry to DXF format for CAD import.
  */
 public class DXFExporter {
+
+    private static final Logger LOG = LoggerFactory.getLogger(DXFExporter.class);
 
     /** Creates a {@code DXFExporter} with default settings. */
     public DXFExporter() {}
@@ -98,7 +103,8 @@ public class DXFExporter {
         if (points.isEmpty()) {
             throw new IllegalArgumentException("Contour has no points");
         }
-        
+
+        LOG.debug("Exporting DXF contour: {} points → {}", points.size(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(DXF_HEADER);
             writePolyline(writer, points, "WALL");
@@ -106,6 +112,7 @@ public class DXFExporter {
                     new Point2D(points.getLast().x(), 0), "AXIS");
             writer.write(DXF_FOOTER);
         }
+        LOG.debug("DXF contour export complete → {}", filePath);
     }
     
     /**
@@ -117,6 +124,7 @@ public class DXFExporter {
      * @throws IOException If the file cannot be written
      */
     public void exportCharacteristicNet(CharacteristicNet net, Path filePath) throws IOException {
+        LOG.debug("Exporting DXF characteristic net → {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(DXF_HEADER);
             
@@ -127,11 +135,12 @@ public class DXFExporter {
 
             double xMax = wallPoints.isEmpty() ? 1.0 : wallPoints.getLast().x();
             writeLine(writer, new Point2D(0, 0), new Point2D(xMax, 0), "AXIS");
-            
+
             writer.write(DXF_FOOTER);
         }
+        LOG.debug("DXF characteristic net export complete → {}", filePath);
     }
-    
+
     /**
      * Exports a closed 2D revolution-profile cross-section as four DXF entities:
      * the wall POLYLINE plus three LINE segments that close the profile along the
@@ -148,7 +157,8 @@ public class DXFExporter {
         if (points.isEmpty()) {
             throw new IllegalArgumentException("Contour has no points");
         }
-        
+
+        LOG.debug("Exporting DXF revolution profile: {} points → {}", points.size(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(DXF_HEADER);
             writePolyline(writer, points, "WALL");
@@ -253,6 +263,7 @@ public class DXFExporter {
     public void exportAerospikeContour(AerospikeNozzle nozzle, Path filePath) throws IOException {
         // getFullSpikeContour() generates lazily, so the list is always non-empty after this call.
         List<Point2D> spike = nozzle.getFullSpikeContour();
+        LOG.debug("Exporting Aerospike DXF contour: {} spike points → {}", spike.size(), filePath);
 
         double rt = nozzle.getParameters().throatRadius();
         double ri = rt * nozzle.getSpikeRadiusRatio();

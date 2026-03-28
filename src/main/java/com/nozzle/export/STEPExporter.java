@@ -24,6 +24,9 @@ import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -38,6 +41,8 @@ import java.util.List;
  * Generates a 3D revolved solid from the 2D contour.
  */
 public class STEPExporter {
+
+    private static final Logger LOG = LoggerFactory.getLogger(STEPExporter.class);
 
     /** Creates a {@code STEPExporter} with default settings (metres-to-mm scale, generic author). */
     public STEPExporter() {}
@@ -95,12 +100,14 @@ public class STEPExporter {
         if (points.isEmpty()) {
             throw new IllegalArgumentException("Contour has no points");
         }
-        
+
+        LOG.debug("Exporting STEP revolved solid: {} profile points → {}", points.size(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writeHeader(writer);
             writeData(writer, points);
             writeFooter(writer);
         }
+        LOG.debug("STEP export complete → {}", filePath);
     }
     
     /**
@@ -235,7 +242,7 @@ public class STEPExporter {
                 productDefShapeId, productDefId));
         
         // Shape definition representation
-        int shapeDefRepId = entityId++;
+        int shapeDefRepId = entityId;
         writer.write(String.format("#%d=SHAPE_DEFINITION_REPRESENTATION(#%d,#%d);\n",
                 shapeDefRepId, productDefShapeId, shapeRepId));
         
@@ -267,11 +274,13 @@ public class STEPExporter {
             throws IOException {
         // getTruncatedSpikeContour() generates lazily, so the list is always non-empty after this call.
         List<Point2D> spike = nozzle.getTruncatedSpikeContour();
+        LOG.debug("Exporting Aerospike STEP solid: {} spike points → {}", spike.size(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writeHeader(writer);
             writeData(writer, spike);
             writeFooter(writer);
         }
+        LOG.debug("Aerospike STEP export complete → {}", filePath);
     }
 
     /**
@@ -286,7 +295,8 @@ public class STEPExporter {
         if (points.isEmpty()) {
             throw new IllegalArgumentException("Contour has no points");
         }
-        
+
+        LOG.debug("Exporting STEP profile curve: {} points → {}", points.size(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writeHeader(writer);
             

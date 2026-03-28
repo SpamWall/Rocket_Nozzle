@@ -20,6 +20,9 @@
 
 package com.nozzle.core;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Computes off-design nozzle performance using shock-expansion theory.
  *
@@ -62,6 +65,8 @@ package com.nozzle.core;
  * formula is used with the actual ambient pressure substituted.
  */
 public class ShockExpansionModel {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ShockExpansionModel.class);
 
     /** Fractional pressure-match tolerance used to classify a flow as ideally expanded (1 %). */
     private static final double IDEAL_EXPANSION_TOLERANCE = 0.01;
@@ -134,6 +139,8 @@ public class ShockExpansionModel {
         double Me = parameters.exitMach();
         double gamma = parameters.gasProperties().gamma();
 
+        LOG.debug("Off-design analysis: pa={} Pa (design pe={} Pa, Me={})", ambientPressure, pe, Me);
+
         // --- Separation check (highest priority) ---
         NozzleDesignParameters offDesignParams = withAmbient(ambientPressure);
         FlowSeparationPredictor.SeparationResult sep =
@@ -142,6 +149,8 @@ public class ShockExpansionModel {
         if (sep.separated()) {
             double cfSep = correctedCfSeparated(sep, p0, ambientPressure, gamma);
             double ispSep = parameters.characteristicVelocity() * cfSep / G0;
+            LOG.debug("Off-design [SEPARATED]: Cf={} Isp={} s M_sep={}",
+                    cfSep, ispSep, sep.separationMach());
             return new OffDesignResult(
                     FlowRegime.SEPARATED, ambientPressure,
                     cfSep, ispSep,
@@ -157,6 +166,7 @@ public class ShockExpansionModel {
 
         // --- Ideally expanded ---
         if (Math.abs(pe - ambientPressure) / ambientPressure < IDEAL_EXPANSION_TOLERANCE) {
+            LOG.debug("Off-design [IDEALLY_EXPANDED]: Cf={} Isp={} s", cfStd, ispStd);
             return new OffDesignResult(
                     FlowRegime.IDEALLY_EXPANDED, ambientPressure,
                     cfStd, ispStd,
@@ -171,6 +181,8 @@ public class ShockExpansionModel {
             double nu2 = parameters.gasProperties().prandtlMeyerFunction(M2);
             double expansionAngleDeg = Math.toDegrees(nu2 - nu1); // outward turning
             double mu1Deg = Math.toDegrees(Math.asin(1.0 / Me));  // first wave angle
+            LOG.debug("Off-design [UNDEREXPANDED]: expansion={} deg M_post={} Cf={} Isp={} s",
+                    expansionAngleDeg, M2, cfStd, ispStd);
             return new OffDesignResult(
                     FlowRegime.UNDEREXPANDED, ambientPressure,
                     cfStd, ispStd,
@@ -183,6 +195,8 @@ public class ShockExpansionModel {
         if (ambientPressure > pNormalShock) {
             // Normal shock (Mach disk) in plume.
             double M2 = machBehindNormalShock(Me, gamma);
+            LOG.debug("Off-design [OVEREXPANDED_MACH_DISK]: M_post={} Cf={} Isp={} s",
+                    M2, cfStd, ispStd);
             return new OffDesignResult(
                     FlowRegime.OVEREXPANDED_MACH_DISK, ambientPressure,
                     cfStd, ispStd,
@@ -194,6 +208,8 @@ public class ShockExpansionModel {
         double betaDeg = Math.toDegrees(shock[0]);
         double deltaDeg = Math.toDegrees(shock[1]);
         double M2 = shock[2];
+        LOG.debug("Off-design [OVEREXPANDED_OBLIQUE]: beta={} deg delta={} deg M_post={} Cf={} Isp={} s",
+                betaDeg, deltaDeg, M2, cfStd, ispStd);
         return new OffDesignResult(
                 FlowRegime.OVEREXPANDED_OBLIQUE, ambientPressure,
                 cfStd, ispStd,
@@ -329,7 +345,7 @@ public class ShockExpansionModel {
         // Shock angle from pressure-ratio relation.
         double sin2beta = (gp1 * pr + gm1) / (2.0 * gamma * M1 * M1);
         // Clamp to [0,1] for robustness near the normal-shock limit.
-        sin2beta = Math.min(1.0, Math.max(0.0, sin2beta));
+        sin2beta = Math.clamp(sin2beta, 0.0, 1.0);
         double beta = Math.asin(Math.sqrt(sin2beta));
 
         // Normal component of upstream Mach.

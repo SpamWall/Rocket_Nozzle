@@ -20,6 +20,9 @@
 
 package com.nozzle.chemistry;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Map;
 
 /**
@@ -29,6 +32,8 @@ import java.util.Map;
  * Supported species: H2O, CO2, H2, CO, OH, O2, N2, H, O.
  */
 public final class NasaSpeciesDatabase {
+
+    private static final Logger LOG = LoggerFactory.getLogger(NasaSpeciesDatabase.class);
 
     private final Map<String, SpeciesData> database;
 
@@ -83,6 +88,7 @@ public final class NasaSpeciesDatabase {
              "O", new SpeciesData("O", 16.0,
                    new double[]{3.168267100e+00, -3.279318840e-03, 6.643063960e-06, -6.128066240e-09, 2.112659710e-12, 2.912225920e+04, 2.051933460e+00},
                    new double[]{2.543636970e+00, -2.731624860e-05, -4.190295200e-09, 4.954818230e-12, -4.795536940e-16, 2.922601200e+04, 4.922294570e+00}));
+        LOG.debug("NASA species database initialized: {} species loaded", database.size());
     }
 
     /**

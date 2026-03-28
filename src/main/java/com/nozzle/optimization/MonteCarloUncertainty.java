@@ -25,6 +25,9 @@ import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.core.PerformanceCalculator;
 
 import java.util.*;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -58,7 +61,9 @@ import java.util.function.Function;
  * @see StatisticalSummary
  */
 public class MonteCarloUncertainty {
-    
+
+    private static final Logger LOG = LoggerFactory.getLogger(MonteCarloUncertainty.class);
+
     private final NozzleDesignParameters nominalParameters;
     private final Map<String, UncertainParameter> uncertainParameters;
     private final int numSamples;
@@ -195,7 +200,10 @@ public class MonteCarloUncertainty {
     public MonteCarloUncertainty run() {
         random = new Random(randomSeed);
         sampleResults.clear();
-        
+
+        LOG.debug("Monte Carlo started: {} samples, {} uncertain parameters, seed={}",
+                numSamples, uncertainParameters.size(), randomSeed);
+
         // Generate samples
         List<Map<String, Double>> samples = generateSamples();
         
@@ -216,14 +224,23 @@ public class MonteCarloUncertainty {
                         sampleResults.add(result);
                     }
                 } catch (Exception e) {
-                    System.err.println("Sample evaluation failed: " + e.getMessage());
+                    LOG.warn("Sample evaluation failed: {}", e.getMessage());
                 }
             }
         }
         
         // Calculate statistics
         summary = calculateStatistics();
-        
+
+        if (summary != null) {
+            LOG.debug("Monte Carlo complete: {}/{} valid samples; Isp={} ± {} s, efficiency={} ± {}",
+                    sampleResults.size(), numSamples,
+                    summary.specificImpulse().mean(), summary.specificImpulse().stdDev(),
+                    summary.efficiency().mean(), summary.efficiency().stdDev());
+        } else {
+            LOG.warn("Monte Carlo: all {} samples failed evaluation", numSamples);
+        }
+
         return this;
     }
     
@@ -305,8 +322,8 @@ public class MonteCarloUncertainty {
             rt = Math.max(rt, 0.001);
             pc = Math.max(pc, nominalParameters.ambientPressure() * 1.5);
             tc = Math.max(tc, 500);
-            gamma = Math.max(1.05, Math.min(1.67, gamma));
-            wallAngle = Math.max(Math.toRadians(5), Math.min(Math.toRadians(45), wallAngle));
+            gamma = Math.clamp(gamma, 1.05, 1.67);
+            wallAngle = Math.clamp(wallAngle, Math.toRadians(5), Math.toRadians(45));
             
             GasProperties gasProps = nominalParameters.gasProperties().withGamma(gamma);
             
