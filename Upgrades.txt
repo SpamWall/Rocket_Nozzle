@@ -18,4 +18,18 @@ Here's an organized assessment of the most impactful additions, grouped by value
   - Coolant channel sizing — HeatTransferModel takes coolantHeatTransferCoeff as a given but doesn't compute it. A simple channel sizing sub-model (pressure drop, flow velocity, nucleate boiling margin) would close the loop.
 
   ---
+  Lower temperatures
+  The solver is also called at nozzle exit conditions (~1000–2000 K). At lower temperatures the equilibrium shifts heavily toward stable products (H2O, CO2), so these cases converge differently. Worth validating that the composition is correct there too.
+
+  Lower pressures
+  At lower chamber pressures (e.g., 0.5–2 MPa — typical of upper stages or thrusters) equilibrium shifts toward dissociation products. The pressure term in µⱼ matters more, and any pressure-dependent bug would show up here.
+
+  Molecular weight and γ
+  Rather than species fractions, compute the equilibrium mean molecular weight and specific heat ratio from the returned composition and NASA-7 polynomials, and compare against CEA's reported values. These are single numbers that are easy to verify and directly feed into c* and Isp, so errors in the
+  chemistry propagate visibly.
+
+  N₂O-containing propellants
+  N₂O/ethanol or N₂O/propane tests would exercise the N-element path (N₂ species) which is currently untested. This matters because the N₂ species is in the solver but has no test coverage at all.
+
+  Of these, I'd prioritise the O/F sweep first — it's the most likely to expose edge cases in the initial composition or damping logic — and molecular weight / γ validation second, since those connect directly to the performance calculations downstream.
 

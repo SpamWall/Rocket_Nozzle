@@ -188,7 +188,7 @@ public class BoundaryLayerCorrection {
         double length = contour.getLength();
         if (length <= 0) length = (re - rt) / Math.tan(parameters.wallAngleInitial());
         
-        double fraction = Math.max(0, Math.min(1, x / length));
+        double fraction = Math.clamp(x / length, 0, 1);
         return 1.0 + fraction * (exitMach - 1.0);
     }
     

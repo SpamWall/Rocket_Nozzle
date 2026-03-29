@@ -67,7 +67,7 @@ public final class GibbsMinimizer {
     /**
      * Maximum allowed ln-step per iteration.  Corrections larger than this are
      * scaled down uniformly across all species (Gordon &amp; McBride §2.2).
-     * Uniform scaling preserves the linearised element-balance constraints.
+     * Uniform scaling preserves the linearized element-balance constraints.
      */
     private static final double MAX_STEP = 5.0;
 

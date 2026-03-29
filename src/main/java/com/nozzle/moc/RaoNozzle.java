@@ -175,7 +175,7 @@ public class RaoNozzle {
         // y = a*x^2 + b*x + c
         // With boundary conditions at start and end points
         
-        // Use cubic Bezier curve for smoother transition
+        // Use cubic Bézier curve for smoother transition
         // Control points for cubic Bezier
         double dx = xEnd - x0;
         double cx1 = x0 + dx / 3.0;
@@ -183,7 +183,7 @@ public class RaoNozzle {
         double cx2 = xEnd - dx / 3.0;
         double cy2 = yEnd - (dx / 3.0) * slopeEnd;
         
-        // Generate bell contour points using Bezier curve
+        // Generate bell contour points using Bézier curve
         int numBellPoints = numContourPoints - contourPoints.size();
         for (int i = 1; i <= numBellPoints; i++) {
             double t = (double) i / numBellPoints;
