@@ -252,7 +252,7 @@ class GibbsMinimizer_OFSweep_UT {
      * </pre>
      *
      * <p>LOX/CH4 stoichiometric O/F ≈ 4.0 (CH4 + 2O2 → CO2 + 2H2O). At O/F=2.5 the
-     * mixture is fuel-rich: less oxygen is available per carbon atom so CO is favoured
+     * mixture is fuel-rich: less oxygen is available per carbon atom so CO is favored
      * over CO2, and the excess hydrogen produces significant H2.
      */
     @Nested
@@ -341,7 +341,7 @@ class GibbsMinimizer_OFSweep_UT {
      * </pre>
      *
      * <p>At O/F=5.0 (above stoichiometric ≈ 4.0) the mixture is oxidizer-rich: all carbon
-     * is fully oxidised to CO2 with oxygen left over. O2 appears in the equilibrium
+     * is fully oxidized to CO2 with oxygen left over. O2 appears in the equilibrium
      * composition and CO is suppressed.
      */
     @Nested
@@ -405,7 +405,7 @@ class GibbsMinimizer_OFSweep_UT {
 
     // =======================================================================
     //  LOX / RP-1   —   T = 3000 K, P = 7 MPa
-    //  RP-1 modelled as C12H23.4, MW = 167.587 g/mol
+    //  RP-1 modeled as C12H23.4, MW = 167.587 g/mol
     // =======================================================================
 
     // -----------------------------------------------------------------------
@@ -427,9 +427,9 @@ class GibbsMinimizer_OFSweep_UT {
      * </pre>
      *
      * <p>RP-1 stoichiometric O/F ≈ 3.4 (C12H23.4 + 17.35 O2). At O/F=1.8 the mixture
-     * is strongly fuel-rich: insufficient oxygen to oxidise all carbon to CO2, so CO is
+     * is strongly fuel-rich: insufficient oxygen to oxidize all carbon to CO2, so CO is
      * the dominant carbon product. Water-gas shift (CO2 + H2 ⇌ CO + H2O) further
-     * favours CO at 3000 K.
+     * favors CO at 3000 K.
      *
      * <p>Note: CEA uses "C12H26" as a close RP-1 surrogate; the solver uses C12H23.4.
      * A small systematic offset in the C/H ratio is expected.
@@ -512,7 +512,7 @@ class GibbsMinimizer_OFSweep_UT {
      * </pre>
      *
      * <p>At O/F=3.5 (above stoichiometric ≈ 3.4) the mixture is slightly oxidizer-rich:
-     * essentially all carbon is oxidised to CO2 with a small O2 surplus. H2O is the
+     * essentially all carbon is oxidized to CO2 with a small O2 surplus. H2O is the
      * dominant hydrogen product and CO is suppressed relative to the fuel-rich case.
      */
     @Nested
