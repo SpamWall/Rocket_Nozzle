@@ -64,6 +64,13 @@ public final class GibbsMinimizer {
     /** Convergence tolerance on max |correction| per iteration. */
     private static final double CONVERGENCE_TOL = 1e-8;
 
+    /**
+     * Maximum allowed ln-step per iteration.  Corrections larger than this are
+     * scaled down uniformly across all species (Gordon &amp; McBride §2.2).
+     * Uniform scaling preserves the linearised element-balance constraints.
+     */
+    private static final double MAX_STEP = 5.0;
+
     /** Maximum Newton-Raphson iterations. */
     private static final int MAX_ITER = 200;
 
@@ -175,7 +182,10 @@ public final class GibbsMinimizer {
         enforceElementConstraints(n, b, speciesActive, activeElements, numActive);
 
         // Phase B: Newton-Raphson iteration (Gordon & McBride, NASA RP-1311)
-        int sysSize = numActive + 1;
+        // Reduced (numActive × numActive) element system — immune to ΔlnN cancellation.
+        // Solves Ared·λ = v where Ared_ik = Σⱼ aᵢⱼ aₖⱼ nⱼ and v_i = Σⱼ aᵢⱼ nⱼ μⱼ.
+        // Species corrections: Δln(nⱼ) = Σₖ aₖⱼ λₖ − μⱼ (KKT residual, no ΔlnN term).
+        // Element balance is maintained exactly by enforceElementConstraints after each step.
 
         for (int iter = 0; iter < MAX_ITER; iter++) {
             double nTotal = 0;
@@ -183,7 +193,6 @@ public final class GibbsMinimizer {
                 if (speciesActive[j]) nTotal += n[j];
             }
             double lnNTotal = Math.log(nTotal);
-            double majorThreshold = nTotal * 1e-8;
 
             // Chemical potentials for active species only
             double[] mu = new double[NUM_SPECIES];
@@ -194,97 +203,66 @@ public final class GibbsMinimizer {
                 }
             }
 
-            // Assemble linear system: A * x = rhs
-            // x = [pi_0, ..., pi_{numActive-1}, delta_ln_n_total]
-            double[][] A = new double[sysSize][sysSize];
-            double[] rhs = new double[sysSize];
+            // Assemble reduced element system: Ared·λ = v
+            // Ared_ik = Σⱼ aᵢⱼ aₖⱼ nⱼ;  v_i = Σⱼ aᵢⱼ nⱼ μⱼ
+            double[][] Ared = new double[numActive][numActive];
+            double[] v = new double[numActive];
 
             for (int ii = 0; ii < numActive; ii++) {
                 int i = activeElements[ii];
-                double Si = 0;
-                double sumANmu = 0;
                 for (int j = 0; j < NUM_SPECIES; j++) {
                     if (!speciesActive[j]) continue;
                     double aij_nj = ELEM_COMPOSITION[i][j] * n[j];
-                    Si += aij_nj;
-                    sumANmu += aij_nj * mu[j];
+                    v[ii] += aij_nj * mu[j];
                     for (int kk = 0; kk < numActive; kk++) {
-                        A[ii][kk] += aij_nj * ELEM_COMPOSITION[activeElements[kk]][j];
+                        Ared[ii][kk] += aij_nj * ELEM_COMPOSITION[activeElements[kk]][j];
                     }
                 }
-                A[ii][numActive] = Si;
-                A[numActive][ii] = Si;
-                rhs[ii] = b[i] - Si + sumANmu;
             }
 
-            A[numActive][numActive] = nTotal;
-            double sumNmu = 0;
-            for (int j = 0; j < NUM_SPECIES; j++) {
-                if (speciesActive[j]) {
-                    sumNmu += n[j] * mu[j];
-                }
-            }
-            rhs[numActive] = sumNmu;
-
-            // Solve linear system
-            double[] x = gaussianElimination(A, rhs);
-            if (x == null) {
-                LOG.warn("Gibbs equilibrium: singular matrix at iteration {}", iter);
+            // Solve Ared·λ = v for element Lagrange multipliers
+            double[] lambda = gaussianElimination(Ared, v);
+            if (lambda == null) {
+                LOG.warn("Gibbs equilibrium: singular element matrix at iteration {}", iter);
                 break;
             }
 
-            double[] pi = new double[NUM_ELEMENTS];
-            for (int ii = 0; ii < numActive; ii++) {
-                pi[activeElements[ii]] = x[ii];
-            }
-            double deltaLnNTotal = x[numActive];
-
-            // Species corrections (only active species)
+            // Species corrections: Δln(nⱼ) = Σₖ aₖⱼ λₖ − μⱼ  (= −KKT residual, no ΔlnN)
+            // At the true Gibbs minimum μⱼ = Σₖ aₖⱼ λₖ for all j, so corrections → 0.
             double[] deltaLnN = new double[NUM_SPECIES];
-            double maxCorrMajor = 0;
+            double maxCorr = 0;
             for (int j = 0; j < NUM_SPECIES; j++) {
                 if (!speciesActive[j]) continue;
-                double correction = -mu[j] + deltaLnNTotal;
-                for (int i = 0; i < NUM_ELEMENTS; i++) {
-                    correction += ELEM_COMPOSITION[i][j] * pi[i];
+                double correction = -mu[j];
+                for (int ii = 0; ii < numActive; ii++) {
+                    correction += ELEM_COMPOSITION[activeElements[ii]][j] * lambda[ii];
                 }
                 deltaLnN[j] = correction;
-                if (n[j] > majorThreshold) {
-                    maxCorrMajor = Math.max(maxCorrMajor, Math.abs(correction));
-                }
+                maxCorr = Math.max(maxCorr, Math.abs(correction));
             }
 
-            // Damping based on major species only
-            double dampMajor = 1.0;
-            if (maxCorrMajor > 2.0) {
-                dampMajor = 2.0 / maxCorrMajor;
-            }
-
-            // Update mole numbers (only active species)
-            for (int j = 0; j < NUM_SPECIES; j++) {
-                if (!speciesActive[j]) continue;
-                double corr;
-                if (n[j] > majorThreshold) {
-                    corr = dampMajor * deltaLnN[j];
-                } else {
-                    corr = Math.max(-5.0, Math.min(5.0, deltaLnN[j]));
-                }
-                n[j] *= Math.exp(corr);
-                n[j] = Math.max(n[j], MIN_MOLES);
-            }
-
-            // Enforce element conservation after damped step
-            enforceElementConstraints(n, b, speciesActive, activeElements, numActive);
-
-            // Convergence based on major species corrections
-            if (maxCorrMajor * dampMajor < CONVERGENCE_TOL) {
+            // Convergence: all KKT residuals small
+            if (maxCorr < CONVERGENCE_TOL) {
                 LOG.debug("Gibbs equilibrium converged in {} iterations", iter + 1);
                 break;
             }
 
+            // Uniform damping across ALL active species (Gordon & McBride §2.2).
+            double damp = (maxCorr > MAX_STEP) ? MAX_STEP / maxCorr : 1.0;
+
+            // Update mole numbers; element drift O(damp²) is corrected below.
+            for (int j = 0; j < NUM_SPECIES; j++) {
+                if (!speciesActive[j]) continue;
+                n[j] *= Math.exp(damp * deltaLnN[j]);
+                n[j] = Math.max(n[j], MIN_MOLES);
+            }
+
+            // Enforce element conservation to correct second-order drift.
+            enforceElementConstraints(n, b, speciesActive, activeElements, numActive);
+
             if (iter == MAX_ITER - 1) {
                 LOG.warn("Gibbs equilibrium did not converge after {} iterations, max correction = {}",
-                        MAX_ITER, maxCorrMajor * dampMajor);
+                        MAX_ITER, maxCorr);
             }
         }
 

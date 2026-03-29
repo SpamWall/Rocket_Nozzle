@@ -112,21 +112,21 @@ class PropellantComposition_UT {
     class LoxCh4Tests {
 
         @Test
-        @DisplayName("Near-stoichiometric (MR 3.0–4.0) contains H2O and CO2")
-        void nearStoichiometricContainsH2oAndCo2() {
+        @DisplayName("Near-stoichiometric (MR 3.0–4.0) contains H2 and CO")
+        void nearStoichiometricContainsH2AndCo() {
             comp.setLoxCh4(3.5);
-            assertThat(comp.get()).containsKey("H2O");
-            assertThat(comp.get()).containsKey("CO2");
+            assertThat(comp.get()).containsKey("H2");
+            assertThat(comp.get()).containsKey("CO");
             assertThat(comp.get().values().stream().mapToDouble(Double::doubleValue).sum())
                     .isCloseTo(1.0, within(1e-6));
         }
 
         @Test
-        @DisplayName("Fuel-rich (MR < 3.0) contains CO and H")
-        void fuelRichContainsCoAndH() {
+        @DisplayName("Fuel-rich (MR < 3.0) contains CO and H2")
+        void fuelRichContainsCoAndH2() {
             comp.setLoxCh4(2.0);
             assertThat(comp.get()).containsKey("CO");
-            assertThat(comp.get()).containsKey("H");
+            assertThat(comp.get()).containsKey("H2");
             assertThat(comp.get().values().stream().mapToDouble(Double::doubleValue).sum())
                     .isCloseTo(1.0, within(1e-6));
         }
@@ -146,10 +146,11 @@ class PropellantComposition_UT {
     class LoxLh2Tests {
 
         @Test
-        @DisplayName("Near-stoichiometric (MR 5.0–7.0) contains H2O")
-        void nearStoichiometricContainsH2o() {
+        @DisplayName("Near-stoichiometric (MR 5.0–7.0) contains H2 and O2")
+        void nearStoichiometricContainsH2AndO2() {
             comp.setLoxLh2(6.0);
-            assertThat(comp.get()).containsKey("H2O");
+            assertThat(comp.get()).containsKey("H2");
+            assertThat(comp.get()).containsKey("O2");
             assertThat(comp.get().values().stream().mapToDouble(Double::doubleValue).sum())
                     .isCloseTo(1.0, within(1e-6));
         }

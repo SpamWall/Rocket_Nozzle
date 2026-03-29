@@ -50,97 +50,133 @@ public final class PropellantComposition {
     }
 
     /**
-     * Sets LOX/RP-1 combustion products composition.
+     * Sets LOX/RP-1 initial composition for Gibbs minimization.
+     * RP-1 is modeled as C₁₂H₂₃.₄ (MW = 167.6 g/mol, matching NASA CEA).
+     * Atom counts for the O/F ratio are mapped to solver species (CO, H₂O, H₂,
+     * O₂) so that the element balance passed to the minimizer exactly matches
+     * the propellant mixture — not an approximate product guess.
      *
-     * @param mixtureRatio O/F mixture ratio
+     * @param mixtureRatio O/F mixture ratio by mass
      */
     public void setLoxRp1(double mixtureRatio) {
         massFractions.clear();
-        if (mixtureRatio < 2.0) {
-            // Fuel rich
-            massFractions.put("CO",  0.45);
-            massFractions.put("H2O", 0.25);
-            massFractions.put("CO2", 0.15);
-            massFractions.put("H2",  0.10);
-            massFractions.put("OH",  0.05);
-        } else if (mixtureRatio < 2.8) {
-            // Near stoichiometric
-            massFractions.put("CO2", 0.35);
-            massFractions.put("H2O", 0.35);
-            massFractions.put("CO",  0.20);
-            massFractions.put("OH",  0.05);
-            massFractions.put("H2",  0.05);
-        } else {
-            // Oxidizer rich
-            massFractions.put("CO2", 0.45);
-            massFractions.put("H2O", 0.30);
-            massFractions.put("O2",  0.15);
-            massFractions.put("OH",  0.10);
-        }
+        // RP-1: C12H23.4, MW = 12*12 + 23.4*1.008 = 167.587 g/mol
+        double mwRp1 = 167.587;
+        double molC = 12.0  / (mwRp1 * (mixtureRatio + 1.0));
+        double molH = 23.4  / (mwRp1 * (mixtureRatio + 1.0));
+        double molO = 2.0 * mixtureRatio / (32.0 * (mixtureRatio + 1.0));
+        massFractions.putAll(atomsToInitialComposition(molH, molC, molO));
         normalize();
     }
 
     /**
-     * Sets LOX/CH4 combustion products composition.
-     * CH4 + 2O2 → CO2 + 2H2O; stoichiometric O/F ≈ 4.0.
+     * Sets LOX/CH4 initial composition for Gibbs minimization.
+     * CH4 (MW = 16.043 g/mol) + O₂ atom counts are mapped to solver species
+     * so that the element balance exactly matches the propellant mixture.
      *
-     * @param mixtureRatio O/F mixture ratio
+     * @param mixtureRatio O/F mixture ratio by mass
      */
     public void setLoxCh4(double mixtureRatio) {
         massFractions.clear();
-        if (mixtureRatio < 3.0) {
-            // Fuel rich
-            massFractions.put("CO",  0.40);
-            massFractions.put("H2O", 0.20);
-            massFractions.put("H2",  0.20);
-            massFractions.put("CO2", 0.10);
-            massFractions.put("OH",  0.05);
-            massFractions.put("H",   0.05);
-        } else if (mixtureRatio < 4.0) {
-            // Near stoichiometric
-            massFractions.put("H2O", 0.35);
-            massFractions.put("CO2", 0.25);
-            massFractions.put("CO",  0.20);
-            massFractions.put("H2",  0.10);
-            massFractions.put("OH",  0.08);
-            massFractions.put("O2",  0.02);
-        } else {
-            // Oxidizer rich
-            massFractions.put("CO2", 0.40);
-            massFractions.put("H2O", 0.30);
-            massFractions.put("O2",  0.15);
-            massFractions.put("OH",  0.10);
-            massFractions.put("CO",  0.05);
-        }
+        double molC = 1.0 / (16.043 * (mixtureRatio + 1.0));
+        double molH = 4.0 / (16.043 * (mixtureRatio + 1.0));
+        double molO = 2.0 * mixtureRatio / (32.0 * (mixtureRatio + 1.0));
+        massFractions.putAll(atomsToInitialComposition(molH, molC, molO));
         normalize();
     }
 
     /**
-     * Sets LOX/LH2 combustion products composition.
+     * Sets LOX/LH2 initial composition for Gibbs minimization.
+     * H₂ (MW = 2.016 g/mol) + O₂ atom counts are mapped to solver species
+     * so that the element balance exactly matches the propellant mixture.
      *
-     * @param mixtureRatio O/F mixture ratio
+     * @param mixtureRatio O/F mixture ratio by mass
      */
     public void setLoxLh2(double mixtureRatio) {
         massFractions.clear();
-        if (mixtureRatio < 5.0) {
-            // Fuel rich
-            massFractions.put("H2O", 0.60);
-            massFractions.put("H2",  0.30);
-            massFractions.put("OH",  0.08);
-            massFractions.put("H",   0.02);
-        } else if (mixtureRatio < 7.0) {
-            // Near stoichiometric
-            massFractions.put("H2O", 0.85);
-            massFractions.put("OH",  0.10);
-            massFractions.put("H2",  0.03);
-            massFractions.put("O2",  0.02);
-        } else {
-            // Oxidizer rich
-            massFractions.put("H2O", 0.75);
-            massFractions.put("O2",  0.15);
-            massFractions.put("OH",  0.10);
-        }
+        double molH = 2.0 / (2.016 * (mixtureRatio + 1.0));
+        double molO = 2.0 * mixtureRatio / (32.0 * (mixtureRatio + 1.0));
+        massFractions.putAll(atomsToInitialComposition(molH, 0.0, molO));
         normalize();
+    }
+
+    /**
+     * Maps element mole-counts (per gram of mixture) to a balanced
+     * product-dissociation initial composition for the Newton–Lagrange solver.
+     *
+     * <p>Starting from a product-like state with a realistic dissociation seed
+     * gives the solver a good initial gradient.
+     *
+     * <p>Strategy:
+     * <ol>
+     *   <li>C-containing systems: assign C to CO first (1 O each), promote up
+     *       to 70 % to CO₂ where O allows (1 more O each), form H₂O from
+     *       remaining O (limited by available H) with a 10 % OH seed, and
+     *       route any leftover O to O₂ and leftover H to H₂.</li>
+     *   <li>C-free (LOX/LH₂): reserve 10 % of the O budget for O₂ so that
+     *       both radical channels are seeded regardless of mixture ratio;
+     *       form H₂O from the remaining 90 % of O (limited by H) with a
+     *       3 % OH seed, and place leftover H in H₂.</li>
+     * </ol>
+     *
+     * <p>Element balance is preserved exactly: H and O atom counts across
+     * all returned species equal {@code molH} and {@code molO}.
+     * <p>
+     * The returned map values are in grams per gram of mixture (sum ≈ 1 before
+     * the caller normalizes).
+     */
+    private static Map<String, Double> atomsToInitialComposition(
+            double molH, double molC, double molO) {
+        Map<String, Double> map = new HashMap<>();
+
+        if (molC > 1e-15) {
+            // Carbon-containing propellants (LOX/CH4, LOX/RP-1)
+            double oRem = molO;
+
+            // Assign all C to CO first (1 O per CO), then promote up to 70% to CO2
+            double nCo = Math.min(molC, oRem);
+            oRem -= nCo;
+            double nCo2 = Math.min(0.70 * molC, Math.min(nCo, oRem));
+            nCo -= nCo2;
+            oRem -= nCo2;
+
+            // Form H2O with 10% OH seed, limited by both remaining O and available H
+            double nH2Omax = molH / 2.10;
+            double nH2O = oRem > 1e-15 ? Math.min(oRem / 1.10, nH2Omax) : 0.0;
+            double nOH  = 0.10 * nH2O;
+            oRem -= nH2O + nOH;
+
+            // Excess O → O2 (oxidizer-rich case); excess H → H2
+            double nO2  = oRem > 1e-15 ? oRem / 2.0 : 0.0;
+            double hRem = molH - 2.0 * nH2O - nOH;
+            double nH2  = hRem > 1e-15 ? hRem / 2.0 : 0.0;
+
+            if (nCo2 > 1e-15) map.put("CO2", nCo2 * 44.01);
+            if (nCo  > 1e-15) map.put("CO",  nCo  * 28.01);
+            if (nH2O > 1e-15) map.put("H2O", nH2O * 18.015);
+            if (nOH  > 1e-15) map.put("OH",  nOH  * 17.007);
+            if (nH2  > 1e-15) map.put("H2",  nH2  * 2.016);
+            if (nO2  > 1e-15) map.put("O2",  nO2  * 32.0);
+        } else {
+            // C-free propellants (LOX/LH2)
+            // Reserve 10 % of O for O2 so both H2 and O2 channels are always seeded.
+            // Form H2O from the remaining 90 % of O (limited by H) with a 3 % OH seed.
+            double oForWater = 0.90 * molO;
+            double nH2Omax = molH / 2.03;
+            double nH2O = oForWater > 1e-15 ? Math.min(oForWater / 1.03, nH2Omax) : 0.0;
+            double nOH  = 0.03 * nH2O;
+            double oRem = molO - nH2O - nOH;
+            double nO2  = oRem > 1e-15 ? oRem / 2.0 : 0.0;
+            double hRem = molH - 2.0 * nH2O - nOH;
+            double nH2  = hRem > 1e-15 ? hRem / 2.0 : 0.0;
+
+            if (nH2O > 1e-15) map.put("H2O", nH2O * 18.015);
+            if (nOH  > 1e-15) map.put("OH",  nOH  * 17.007);
+            if (nH2  > 1e-15) map.put("H2",  nH2  * 2.016);
+            if (nO2  > 1e-15) map.put("O2",  nO2  * 32.0);
+        }
+
+        return map;
     }
 
     /**
