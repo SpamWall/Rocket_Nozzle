@@ -65,7 +65,7 @@ public final class PropellantComposition {
         double molC = 12.0  / (mwRp1 * (mixtureRatio + 1.0));
         double molH = 23.4  / (mwRp1 * (mixtureRatio + 1.0));
         double molO = 2.0 * mixtureRatio / (32.0 * (mixtureRatio + 1.0));
-        massFractions.putAll(atomsToInitialComposition(molH, molC, molO));
+        massFractions.putAll(atomsToInitialComposition(molH, molC, molO, 0.0));
         normalize();
     }
 
@@ -81,7 +81,7 @@ public final class PropellantComposition {
         double molC = 1.0 / (16.043 * (mixtureRatio + 1.0));
         double molH = 4.0 / (16.043 * (mixtureRatio + 1.0));
         double molO = 2.0 * mixtureRatio / (32.0 * (mixtureRatio + 1.0));
-        massFractions.putAll(atomsToInitialComposition(molH, molC, molO));
+        massFractions.putAll(atomsToInitialComposition(molH, molC, molO, 0.0));
         normalize();
     }
 
@@ -96,7 +96,56 @@ public final class PropellantComposition {
         massFractions.clear();
         double molH = 2.0 / (2.016 * (mixtureRatio + 1.0));
         double molO = 2.0 * mixtureRatio / (32.0 * (mixtureRatio + 1.0));
-        massFractions.putAll(atomsToInitialComposition(molH, 0.0, molO));
+        massFractions.putAll(atomsToInitialComposition(molH, 0.0, molO, 0.0));
+        normalize();
+    }
+
+    /**
+     * Sets N₂O/ethanol initial composition for Gibbs minimization.
+     * Ethanol is modeled as C₂H₅OH (MW = 46.069 g/mol).
+     * N₂O (MW = 44.013 g/mol) contributes 2 N and 1 O per molecule; the
+     * nitrogen atoms are seeded entirely as N₂, which is their dominant
+     * equilibrium form at combustion temperatures.
+     *
+     * <p>Stoichiometric O/F is ≈ 5.73 (C₂H₅OH + 6 N₂O → 2 CO₂ + 3 H₂O + 6 N₂).
+     *
+     * @param mixtureRatio O/F mixture ratio by mass
+     */
+    public void setN2oEthanol(double mixtureRatio) {
+        massFractions.clear();
+        // N2O: 2 N + 1 O per molecule; Ethanol (C2H5OH): 2 C + 6 H + 1 O
+        double mwN2o     = 44.013;
+        double mwEthanol = 46.069;
+        double total     = mixtureRatio + 1.0;
+        double molN = 2.0 * mixtureRatio / (mwN2o * total);
+        double molO = mixtureRatio / (mwN2o * total) + 1.0 / (mwEthanol * total);
+        double molC = 2.0 / (mwEthanol * total);
+        double molH = 6.0 / (mwEthanol * total);
+        massFractions.putAll(atomsToInitialComposition(molH, molC, molO, molN));
+        normalize();
+    }
+
+    /**
+     * Sets N₂O/propane initial composition for Gibbs minimization.
+     * Propane is modeled as C₃H₈ (MW = 44.097 g/mol).
+     * N₂O (MW = 44.013 g/mol) contributes 2 N and 1 O per molecule; the
+     * nitrogen atoms are seeded entirely as N₂.
+     *
+     * <p>Stoichiometric O/F is ≈ 9.98 (C₃H₈ + 10 N₂O → 3 CO₂ + 4 H₂O + 10 N₂).
+     *
+     * @param mixtureRatio O/F mixture ratio by mass
+     */
+    public void setN2oPropane(double mixtureRatio) {
+        massFractions.clear();
+        // N2O: 2 N + 1 O per molecule; Propane (C3H8): 3 C + 8 H, no O
+        double mwN2o    = 44.013;
+        double mwPropane = 44.097;
+        double total     = mixtureRatio + 1.0;
+        double molN = 2.0 * mixtureRatio / (mwN2o * total);
+        double molO = mixtureRatio / (mwN2o * total);
+        double molC = 3.0 / (mwPropane * total);
+        double molH = 8.0 / (mwPropane * total);
+        massFractions.putAll(atomsToInitialComposition(molH, molC, molO, molN));
         normalize();
     }
 
@@ -126,7 +175,7 @@ public final class PropellantComposition {
      * the caller normalizes).
      */
     private static Map<String, Double> atomsToInitialComposition(
-            double molH, double molC, double molO) {
+            double molH, double molC, double molO, double molN) {
         Map<String, Double> map = new HashMap<>();
 
         if (molC > 1e-15) {
@@ -175,6 +224,10 @@ public final class PropellantComposition {
             if (nH2  > 1e-15) map.put("H2",  nH2  * 2.016);
             if (nO2  > 1e-15) map.put("O2",  nO2  * 32.0);
         }
+
+        // Seed all nitrogen as N2 — the overwhelmingly dominant N-species at
+        // combustion temperatures; no other N-containing species are in the database.
+        if (molN > 1e-15) map.put("N2", (molN / 2.0) * 28.014);
 
         return map;
     }
