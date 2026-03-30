@@ -317,14 +317,14 @@ public class Main {
         // Equilibrium flow model
         ChemistryModel eqModel = ChemistryModel.equilibrium(GasProperties.LOX_LH2_PRODUCTS);
         eqModel.setLoxLh2Composition(6.0);  // O/F = 6.0
-        
-        System.out.println("\nEquilibrium Flow Model (LOX/LH2, O/F=6.0):");
-        System.out.printf("  Molecular Weight: %.2f kg/kmol%n", eqModel.calculateMolecularWeight());
-        System.out.printf("  Gamma at 3200K:   %.3f%n", eqModel.calculateGamma(3200));
-        
         eqModel.calculateEquilibrium(3200, 7e6);
-        System.out.println("  Species after equilibrium:");
-        eqModel.getSpeciesMassFractions().forEach((species, fraction) -> 
+
+        System.out.println("\nEquilibrium Flow Model (LOX/LH2, O/F=6.0, T=3200K, P=7MPa):");
+        System.out.printf("  Molecular Weight:        %.3f kg/kmol%n", eqModel.calculateMolecularWeight());
+        System.out.printf("  Frozen gamma:            %.4f%n", eqModel.calculateGamma(3200));
+        System.out.printf("  Equilibrium gamma (CEA): %.4f%n", eqModel.calculateEquilibriumGamma(3200, 7e6));
+        System.out.println("  Species mass fractions:");
+        eqModel.getSpeciesMassFractions().forEach((species, fraction) ->
                 System.out.printf("    %s: %.1f%%%n", species, fraction * 100));
     }
     

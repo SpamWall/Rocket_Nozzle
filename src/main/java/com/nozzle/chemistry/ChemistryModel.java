@@ -164,10 +164,13 @@ public class ChemistryModel {
     }
 
     /**
-     * Calculates mixture gamma (Cp/Cv).
+     * Calculates frozen specific-heat ratio γ = Cp/(Cp − R/M̄).
+     * Composition is held fixed at the values set by the most recent call to
+     * {@link #calculateEquilibrium} (or the initial propellant composition if
+     * that method has not been called).
      *
      * @param temperature Temperature in K
-     * @return Gamma
+     * @return Frozen γ
      */
     public double calculateGamma(double temperature) {
         double cp = calculateCp(temperature);
@@ -175,6 +178,82 @@ public class ChemistryModel {
         double R = GasProperties.UNIVERSAL_GAS_CONSTANT / mw;
         double cv = cp - R;
         return cv > 0 ? cp / cv : baseProperties.gamma();
+    }
+
+    /**
+     * Calculates the equilibrium isentropic exponent γ_s using central
+     * finite-difference perturbations of the Gibbs minimizer:
+     * <pre>
+     *   γ_s = Cp_eq / [(-β)·Cp_eq − (R/M̄)·α²]
+     * </pre>
+     * where
+     * <ul>
+     *   <li>α = (∂ln V/∂ln T)_P = 1 − (T/M̄)·(∂M̄/∂T)_P — captures the
+     *       increase in specific volume as dissociation lightens the mixture</li>
+     *   <li>β = (∂ln V/∂ln P)_T = −1 − (P/M̄)·(∂M̄/∂P)_T — captures the
+     *       reduction in dissociation (heavier mixture) at higher pressure</li>
+     *   <li>Cp_eq = (∂H/∂T)_P along the equilibrium path — includes the
+     *       latent-heat contribution of composition shifts</li>
+     * </ul>
+     * For frozen composition (α = 1, β = −1) the formula reduces to the
+     * standard Cp/(Cp − R/M̄).  This matches CEA's {@code GAMMAs} output for
+     * a {@code tp} problem.
+     *
+     * @param temperature Temperature in K
+     * @param pressure    Pressure in Pa
+     * @return Equilibrium isentropic exponent γ_s
+     */
+    public double calculateEquilibriumGamma(double temperature, double pressure) {
+        if (composition.isEmpty()) {
+            return baseProperties.gamma();
+        }
+
+        double dT = temperature * 0.01;
+        double dP = pressure   * 0.01;
+
+        Map<String, Double> compTPlus  = minimizer.minimize(composition.get(), temperature + dT, pressure);
+        Map<String, Double> compTMinus = minimizer.minimize(composition.get(), temperature - dT, pressure);
+
+        double hPlus  = mixtureEnthalpy(compTPlus,  temperature + dT);
+        double hMinus = mixtureEnthalpy(compTMinus, temperature - dT);
+        double cpEq   = (hPlus - hMinus) / (2.0 * dT);
+
+        double mw       = calculateMolecularWeight();
+        double mwTPlus  = calculateMolecularWeightOf(compTPlus);
+        double mwTMinus = calculateMolecularWeightOf(compTMinus);
+        double alpha    = 1.0 - (temperature / mw) * (mwTPlus - mwTMinus) / (2.0 * dT);
+
+        Map<String, Double> compPPlus  = minimizer.minimize(composition.get(), temperature, pressure + dP);
+        Map<String, Double> compPMinus = minimizer.minimize(composition.get(), temperature, pressure - dP);
+        double mwPPlus  = calculateMolecularWeightOf(compPPlus);
+        double mwPMinus = calculateMolecularWeightOf(compPMinus);
+        double beta     = -1.0 - (pressure / mw) * (mwPPlus - mwPMinus) / (2.0 * dP);
+
+        double R     = GasProperties.UNIVERSAL_GAS_CONSTANT / mw;
+        double denom = (-beta) * cpEq - R * alpha * alpha;
+        return denom > 0 ? cpEq / denom : baseProperties.gamma();
+    }
+
+    private double mixtureEnthalpy(Map<String, Double> comp, double temperature) {
+        double h = 0;
+        for (Map.Entry<String, Double> entry : comp.entrySet()) {
+            SpeciesData species = database.get(entry.getKey());
+            if (species != null) {
+                h += entry.getValue() * species.enthalpy(temperature);
+            }
+        }
+        return h;
+    }
+
+    private double calculateMolecularWeightOf(Map<String, Double> comp) {
+        double invMW = 0;
+        for (Map.Entry<String, Double> entry : comp.entrySet()) {
+            SpeciesData species = database.get(entry.getKey());
+            if (species != null) {
+                invMW += entry.getValue() / species.molecularWeight();
+            }
+        }
+        return invMW > 0 ? 1.0 / invMW : baseProperties.molecularWeight();
     }
 
     /**

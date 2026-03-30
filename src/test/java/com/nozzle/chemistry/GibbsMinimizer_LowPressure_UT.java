@@ -49,8 +49,8 @@ import static org.assertj.core.api.Assertions.within;
  *
  * <h2>Reference values</h2>
  *
- * <p>Reference values are solver-computed outputs. Verify with NASA CEA using the
- * {@code tp} input decks documented in each nested class and replace with exact values.
+ * <p>Reference values are NASA CEA outputs from the {@code tp} input decks documented
+ * in each nested class.
  * Tolerances follow the same scheme as {@link GibbsMinimizer_CEAValidation_UT}:
  * ±3 % relative for major species (mass fraction &gt; 0.10),
  * ±10 % relative for intermediate species (0.005–0.10), and ±0.002 absolute for
@@ -105,7 +105,7 @@ class GibbsMinimizer_LowPressure_UT {
     @DisplayName("LOX/LH2  O/F=6.0  T=3200 K  P=0.5 MPa")
     class LoxLh2_OF6_3200K_0p5MPa {
 
-        // Reference values from solver output. Verify with CEA tp deck above.
+        // NASA CEA reference values (tp deck above).
         private static final double REF_H2O = 0.84211;
         private static final double REF_OH  = 0.08272;
         private static final double REF_O2  = 0.02055;
@@ -191,7 +191,7 @@ class GibbsMinimizer_LowPressure_UT {
     @DisplayName("LOX/LH2  O/F=6.0  T=3200 K  P=2.0 MPa")
     class LoxLh2_OF6_3200K_2p0MPa {
 
-        // Reference values from solver output. Verify with CEA tp deck above.
+        // NASA CEA reference values (tp deck above).
         private static final double REF_H2O = 0.90678;
         private static final double REF_OH  = 0.04500;
         private static final double REF_O2  = 0.00649;
@@ -277,7 +277,7 @@ class GibbsMinimizer_LowPressure_UT {
     @DisplayName("LOX/CH4  O/F=3.5  T=3200 K  P=0.5 MPa")
     class LoxCh4_OF3p5_3200K_0p5MPa {
 
-        // Reference values from solver output. Verify with CEA tp deck above.
+        // NASA CEA reference values (tp deck above).
         private static final double REF_H2O = 0.37755;
         private static final double REF_CO2 = 0.24459;
         private static final double REF_CO  = 0.23232;
@@ -363,7 +363,7 @@ class GibbsMinimizer_LowPressure_UT {
     @DisplayName("LOX/CH4  O/F=3.5  T=3200 K  P=2.0 MPa")
     class LoxCh4_OF3p5_3200K_2p0MPa {
 
-        // Reference values from solver output. Verify with CEA tp deck above.
+        // NASA CEA reference values (tp deck above).
         private static final double REF_H2O = 0.41821;
         private static final double REF_CO2 = 0.30597;
         private static final double REF_CO  = 0.19325;
@@ -454,7 +454,7 @@ class GibbsMinimizer_LowPressure_UT {
     @DisplayName("LOX/RP-1  O/F=2.77  T=3000 K  P=0.5 MPa")
     class LoxRp1_OF2p77_3000K_0p5MPa {
 
-        // Reference values from solver output. Verify with CEA tp deck above.
+        // NASA CEA reference values (tp deck above).
         private static final double REF_CO2 = 0.38713;
         private static final double REF_CO  = 0.28520;
         private static final double REF_H2O = 0.27075;
@@ -532,7 +532,7 @@ class GibbsMinimizer_LowPressure_UT {
     @DisplayName("LOX/RP-1  O/F=2.77  T=3000 K  P=2.0 MPa")
     class LoxRp1_OF2p77_3000K_2p0MPa {
 
-        // Reference values from solver output. Verify with CEA tp deck above.
+        // NASA CEA reference values (tp deck above).
         private static final double REF_CO2 = 0.42621;
         private static final double REF_CO  = 0.26033;
         private static final double REF_H2O = 0.28564;
