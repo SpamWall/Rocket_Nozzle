@@ -124,6 +124,32 @@ public record GasProperties(
     );
 
     /**
+     * Standard gas properties for combustion products (typical N2O/ethanol).
+     * N2 dominates (≈53 % by mass); remaining products are CO2, H2O, and CO.
+     */
+    public static final GasProperties N2O_ETHANOL_PRODUCTS = new GasProperties(
+            1.22,
+            27.5,
+            302.3,
+            4.5e-5,
+            3000.0,
+            240.0
+    );
+
+    /**
+     * Standard gas properties for combustion products (typical N2O/propane).
+     * N2 dominates (≈56 % by mass); remaining products are H2O, CO2, and CO.
+     */
+    public static final GasProperties N2O_PROPANE_PRODUCTS = new GasProperties(
+            1.22,
+            27.3,
+            304.6,
+            4.5e-5,
+            3000.0,
+            240.0
+    );
+
+    /**
      * Compact constructor with validation.
      */
     public GasProperties {

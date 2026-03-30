@@ -1,25 +1,44 @@
 Continue to write all code using the Jakarta coding guidelines and accepted object-oriented design principles
 
-Here's an organized assessment of the most impactful additions, grouped by value:
+ Chemistry — natural follow-ons to this session's work
 
-  ---
-  Medium Impact — Code Quality & Professionalism
+  - ChemistryModel_N2OPropellants_UT — the N₂O GibbsMinimizer tests validate species fractions but nothing validates MW and γ through the full pipeline for N₂O propellants (analogous to
+        ChemistryModel_CEAValidation_UT). You have the CEA tp decks already documented in the Gibbs tests.
+  - CEA-hardened REF values in GibbsMinimizer_N2OPropellants_UT — the current REF values are solver outputs, not CEA. Running the two tp decks would promote them to ground truth.
+  - NO species in NasaSpeciesDatabase — at 3000+ K with N₂, small amounts of NO form; this would improve N₂O combustion accuracy.
 
+  Chemistry — capability gap
 
-  ---
-  Medium Impact — Validation & Testing
+  - O/F sweep utility in ChemistryModel (or a standalone class) — compute Isp(O/F), c*(O/F), γ(O/F) curves and find the optimum automatically. The GibbsMinimizer_OFSweep_UT test implies the
+        solver already supports this, but there is no high-level API that returns the optimum O/F.
+  - Frozen vs. equilibrium Isp comparison — the solver has both calculateGamma (frozen) and calculateEquilibriumGamma (equilibrium), but nothing computes the Isp delta between them, which is
+        a standard engineering quantity.
+
+  Testing gaps
+
+  - DesignDocument_UT — the only main class in the io package without a dedicated unit test.
+  - PhysicsValidation_N2O_UT — physics-level check that N₂O element conservation holds across a range of O/F ratios (analogous to PhysicsValidation_IsentropicRelations_UT for the chemistry side).
+
+  Geometry / design
+
+  - Dual-bell nozzle — altitude-compensating contour; natural extension of the existing NozzleContour contour families.
+  - Truncated ideal contour (TIC) as a fifth contour family in NozzleContour — simpler than Rao bell, widely used in upper stages.
+
+  Structural/thermal
+
+  - CoolantChannel already exists, but there is no test that validates pressure drop and boiling margin against a known analytical or published result — a PhysicsValidation_CoolantChannel_UT would
+        strengthen that class.
+
+  Infrastructure
+
+  - Units class  — imperial/SI conversion at system boundaries; the library is pure SI internally which is correct, but callers always need this.
+  - Unit conversion utilities — the library mixes SI throughout but users often work in imperial (lbf, inches, psia). A Units class would help at system boundaries.
 
   ---
   Lower Impact — Nice to Have
 
-  - Unit conversion utilities — the library mixes SI throughout but users often work in imperial (lbf, inches, psia). A Units class would help at system boundaries.
   - CGNS binary export — currently just delegates to Plot3D. True CGNS would be compatible with more CFD solvers.
-  - Dual-bell nozzle — altitude-compensating geometry that transitions between two contours; relevant for single-stage vehicles.
-  - Coolant channel sizing — HeatTransferModel takes coolantHeatTransferCoeff as a given but doesn't compute it. A simple channel sizing sub-model (pressure drop, flow velocity, nucleate boiling margin) would close the loop.
 
   ---
-
-  N₂O-containing propellants
-  N₂O/ethanol or N₂O/propane tests would exercise the N-element path (N₂ species) which is currently untested. This matters because the N₂ species is in the solver but has no test coverage at all.
 
 

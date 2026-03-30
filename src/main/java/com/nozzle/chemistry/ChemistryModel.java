@@ -125,6 +125,26 @@ public class ChemistryModel {
     }
 
     /**
+     * Sets N2O/ethanol combustion products composition.
+     * Ethanol (C2H5OH) + N2O → CO2, H2O, CO, N2; stoichiometric O/F ≈ 5.73.
+     *
+     * @param mixtureRatio O/F mixture ratio
+     */
+    public void setN2oEthanolComposition(double mixtureRatio) {
+        composition.setN2oEthanol(mixtureRatio);
+    }
+
+    /**
+     * Sets N2O/propane combustion products composition.
+     * Propane (C3H8) + N2O → CO2, H2O, CO, N2; stoichiometric O/F ≈ 9.98.
+     *
+     * @param mixtureRatio O/F mixture ratio
+     */
+    public void setN2oPropaneComposition(double mixtureRatio) {
+        composition.setN2oPropane(mixtureRatio);
+    }
+
+    /**
      * Calculates mixture molecular weight.
      *
      * @return Molecular weight in kg/kmol
