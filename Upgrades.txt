@@ -26,8 +26,6 @@ Continue to write all code using the Jakarta coding guidelines and accepted obje
 
   Structural/thermal
 
-  - CoolantChannel already exists, but there is no test that validates pressure drop and boiling margin against a known analytical or published result — a PhysicsValidation_CoolantChannel_UT would
-        strengthen that class.
 
   Infrastructure
 
