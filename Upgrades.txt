@@ -9,8 +9,6 @@ Continue to write all code using the Jakarta coding guidelines and accepted obje
 
   Chemistry — capability gap
 
-  - O/F sweep utility in ChemistryModel (or a standalone class) — compute Isp(O/F), c*(O/F), γ(O/F) curves and find the optimum automatically. The GibbsMinimizer_OFSweep_UT test implies the
-        solver already supports this, but there is no high-level API that returns the optimum O/F.
   - Frozen vs. equilibrium Isp comparison — the solver has both calculateGamma (frozen) and calculateEquilibriumGamma (equilibrium), but nothing computes the Isp delta between them, which is
         a standard engineering quantity.
 

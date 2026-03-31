@@ -21,6 +21,7 @@
 package com.nozzle;
 
 import com.nozzle.chemistry.ChemistryModel;
+import com.nozzle.chemistry.OFSweep;
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.core.PerformanceCalculator;
@@ -40,6 +41,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.*;
@@ -60,6 +62,7 @@ import static org.assertj.core.api.Assertions.*;
  *   <li>NASASP8120Validator (reference correlation checks)</li>
  *   <li>CSVExporter (wall contour and characteristic net output)</li>
  *   <li>NozzleSerializer (JSON save/load round-trip)</li>
+ *   <li>OFSweep → NozzleDesignParameters (optimal O/F feeds chamber temperature into nozzle design)</li>
  * </ol>
  */
 @DisplayName("Full Pipeline Tests")
@@ -357,6 +360,99 @@ class FullPipeline_IT {
 
             assertThat(Files.exists(outFile)).isTrue();
             assertThat(outFile.toFile().length()).isGreaterThan(0L);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // OFSweep → nozzle design pipeline
+    // ------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("OFSweep Integration Tests")
+    class OFSweepIntegrationTests {
+
+        /**
+         * The canonical OFSweep-to-nozzle chain:
+         *   OFSweep.optimumIsp → Tc → NozzleDesignParameters → CharacteristicNet → PerformanceCalculator
+         *
+         * Verifies that the Tc from the optimal O/F point produces a physically
+         * plausible nozzle design, and that the MOC Isp at that Tc is within 10%
+         * of the OFSweep Isp (both are frozen-at-chamber approximations but use
+         * slightly different formula paths).
+         */
+        @Test
+        @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        @DisplayName("Optimal O/F Tc from OFSweep feeds a valid nozzle design")
+        void optimalOfTcFeedsNozzleDesign() {
+            OFSweep.OFPoint opt = OFSweep.adiabatic(OFSweep.Propellant.LOX_RP1, 7e6, 3.5, 101_325.0)
+                    .optimumIsp(1.5, 5.0);
+
+            NozzleDesignParameters params = NozzleDesignParameters.builder()
+                    .throatRadius(0.05)
+                    .exitMach(3.5)
+                    .chamberPressure(7e6)
+                    .chamberTemperature(opt.chamberTemperature())
+                    .ambientPressure(101_325.0)
+                    .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                    .numberOfCharLines(20)
+                    .wallAngleInitialDegrees(30)
+                    .lengthFraction(0.8)
+                    .axisymmetric(true)
+                    .build();
+
+            CharacteristicNet net = new CharacteristicNet(params).generate();
+            assertThat(net.validate()).isTrue();
+
+            PerformanceCalculator calc =
+                    new PerformanceCalculator(params, net, null, null, null).calculate();
+            assertThat(calc.getSpecificImpulse()).isBetween(100.0, 500.0);
+            assertThat(calc.getEfficiency()).isBetween(0.80, 1.0);
+
+            // MOC Isp and OFSweep Isp should agree within 10%
+            assertThat(calc.getSpecificImpulse())
+                    .isCloseTo(opt.isp(), within(opt.isp() * 0.10));
+        }
+
+        @Test
+        @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        @DisplayName("Nozzle Isp at optimal O/F exceeds Isp at fuel-rich boundary (O/F=1.5)")
+        void optimalOfGivesHigherNozzleIspThanBoundary() {
+            final double PC = 7e6, ME = 3.5, PA = 101_325.0;
+            OFSweep sweep = OFSweep.adiabatic(OFSweep.Propellant.LOX_RP1, PC, ME, PA);
+
+            OFSweep.OFPoint opt      = sweep.optimumIsp(1.5, 5.0);
+            OFSweep.OFPoint boundary = sweep.computeAt(1.5);
+
+            assertThat(opt.isp()).isGreaterThan(boundary.isp());
+        }
+
+        @Test
+        @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        @DisplayName("All five propellants complete the OFSweep-to-performance chain")
+        void allPropellantsCompleteChain() {
+            record Entry(OFSweep.Propellant p, double ofLo, double ofHi) {}
+            List<Entry> cases = List.of(
+                    new Entry(OFSweep.Propellant.LOX_RP1,     1.5,  5.0),
+                    new Entry(OFSweep.Propellant.LOX_CH4,     2.0,  5.5),
+                    new Entry(OFSweep.Propellant.LOX_LH2,     2.0,  8.0),
+                    new Entry(OFSweep.Propellant.N2O_ETHANOL, 2.0,  8.0),
+                    new Entry(OFSweep.Propellant.N2O_PROPANE, 4.0, 14.0)
+            );
+
+            for (Entry e : cases) {
+                OFSweep.OFPoint opt = OFSweep.adiabatic(e.p(), 7e6, 3.0, 101_325.0)
+                        .optimumIsp(e.ofLo(), e.ofHi());
+
+                assertThat(opt.chamberTemperature())
+                        .as("%s: Tc must be positive", e.p())
+                        .isGreaterThan(0.0);
+                assertThat(opt.isp())
+                        .as("%s: Isp must be in plausible range", e.p())
+                        .isBetween(100.0, 500.0);
+                assertThat(opt.cStar())
+                        .as("%s: c* must be positive", e.p())
+                        .isGreaterThan(0.0);
+            }
         }
     }
 
