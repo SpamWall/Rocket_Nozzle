@@ -364,7 +364,7 @@ public class OFSweep {
      * <p>Creates a fresh {@link ChemistryModel} and, in adiabatic mode, a fresh
      * {@link NasaSpeciesDatabase} on each call so callers share no state.
      */
-    OFPoint computeAt(double of) {
+    public OFPoint computeAt(double of) {
         double Tc = Double.isNaN(fixedChamberTemperature)
                     ? adiabaticTemperature(of)
                     : fixedChamberTemperature;

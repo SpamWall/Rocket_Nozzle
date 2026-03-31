@@ -21,6 +21,7 @@
 package com.nozzle;
 
 import com.nozzle.chemistry.ChemistryModel;
+import com.nozzle.chemistry.OFSweep;
 import com.nozzle.core.FlowSeparationPredictor;
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
@@ -71,6 +72,7 @@ import java.util.List;
  * - Radiation-cooled extension analysis: equilibrium wall temperature, material comparison, overtemperature detection
  * - y⁺-controlled first-cell-height grading: CFDMeshExporter and OpenFOAMExporter firstLayerThickness
  * - Full 3-D revolved mesh export: RevolvedMeshExporter (OpenFOAM blockMesh, Gmsh, Plot3D)
+ * - O/F sweep and optimum search: OFSweep adiabatic Isp(O/F), c*(O/F), γ(O/F) curves with golden-section optimum
  */
 public class Main {
 
@@ -106,6 +108,7 @@ public class Main {
             demonstrateSerialization(outputDir);
             demonstrateYPlusGrading(outputDir);
             demonstrateRevolvedMesh(outputDir);
+            demonstrateOFSweep();
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -1508,5 +1511,79 @@ public class Main {
                 .setFirstLayerThickness(y1)
                 .export(contour, bmd3dYPlus, RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
         System.out.printf("  y⁺-graded mesh written → %s%n", bmd3dYPlus.getFileName());
+    }
+
+    /**
+     * Demonstrates the O/F sweep and optimum search API.
+     *
+     * <p>For each supported propellant combination an adiabatic sweep is run at
+     * Pc = 7 MPa, Me = 3.0 (sea level).  The Isp-optimal O/F is found via
+     * golden-section search and the full Isp(O/F) curve is printed at coarse
+     * resolution so the shape is visible in the console.
+     */
+    private static void demonstrateOFSweep() {
+        System.out.println("\n--- O/F SWEEP AND OPTIMUM SEARCH ---\n");
+
+        final double PC = 7e6;
+        final double ME = 3.0;
+        final double PA = 101_325.0;
+
+        // ------------------------------------------------------------------
+        // 1. Quick per-propellant optimum table
+        // ------------------------------------------------------------------
+        record PropEntry(OFSweep.Propellant p, double ofLo, double ofHi, String label) {}
+        List<PropEntry> propellants = List.of(
+                new PropEntry(OFSweep.Propellant.LOX_RP1,    1.5,  5.0, "LOX/RP-1  "),
+                new PropEntry(OFSweep.Propellant.LOX_CH4,    2.0,  5.5, "LOX/CH4   "),
+                new PropEntry(OFSweep.Propellant.LOX_LH2,    2.0,  8.0, "LOX/LH2   "),
+                new PropEntry(OFSweep.Propellant.N2O_ETHANOL, 2.0, 8.0, "N2O/EtOH  "),
+                new PropEntry(OFSweep.Propellant.N2O_PROPANE, 4.0,14.0, "N2O/C3H8  ")
+        );
+
+        System.out.println("Propellant       Opt O/F   Tc (K)   γ      MW    c* (m/s)  Isp (s)");
+        System.out.println("-".repeat(72));
+        for (PropEntry e : propellants) {
+            OFSweep sweep = OFSweep.adiabatic(e.p(), PC, ME, PA);
+            OFSweep.OFPoint opt = sweep.optimumIsp(e.ofLo(), e.ofHi());
+            System.out.printf("%-16s  %5.2f   %6.0f  %.3f  %5.2f  %7.0f   %6.1f%n",
+                    e.label(), opt.of(), opt.chamberTemperature(),
+                    opt.gamma(), opt.molecularWeight(), opt.cStar(), opt.isp());
+        }
+
+        // ------------------------------------------------------------------
+        // 2. LOX/RP-1 full Isp(O/F) and c*(O/F) curve at 11 points
+        // ------------------------------------------------------------------
+        System.out.println("\nLOX/RP-1 adiabatic sweep  Pc=7 MPa  Me=3.0  Pa=101325 Pa");
+        System.out.println("  O/F    Tc (K)   γ      MW    c* (m/s)  Isp (s)");
+        System.out.println("  " + "-".repeat(54));
+        OFSweep rp1Sweep = OFSweep.adiabatic(OFSweep.Propellant.LOX_RP1, PC, ME, PA);
+        for (OFSweep.OFPoint pt : rp1Sweep.sweep(1.5, 4.5, 11)) {
+            System.out.printf("  %4.2f   %6.0f  %.3f  %5.2f  %7.0f   %6.1f%n",
+                    pt.of(), pt.chamberTemperature(), pt.gamma(),
+                    pt.molecularWeight(), pt.cStar(), pt.isp());
+        }
+
+        // ------------------------------------------------------------------
+        // 3. Isp-optimal vs c*-optimal O/F comparison
+        // ------------------------------------------------------------------
+        System.out.println("\nIsp-optimal vs c*-optimal O/F (LOX/RP-1, adiabatic):");
+        OFSweep.OFPoint ispOpt   = rp1Sweep.optimumIsp(1.5, 5.0);
+        OFSweep.OFPoint cstarOpt = rp1Sweep.optimumCstar(1.5, 5.0);
+        System.out.printf("  Isp-optimal:   O/F=%.3f  Isp=%.1f s   c*=%.0f m/s%n",
+                ispOpt.of(), ispOpt.isp(), ispOpt.cStar());
+        System.out.printf("  c*-optimal:    O/F=%.3f  Isp=%.1f s   c*=%.0f m/s%n",
+                cstarOpt.of(), cstarOpt.isp(), cstarOpt.cStar());
+
+        // ------------------------------------------------------------------
+        // 4. Fixed-Tc vs adiabatic comparison at one O/F point
+        // ------------------------------------------------------------------
+        System.out.println("\nFixed-Tc (3500 K) vs adiabatic at O/F=2.7  (LOX/RP-1):");
+        OFSweep fixedSweep = new OFSweep(OFSweep.Propellant.LOX_RP1, 3500.0, PC, ME, PA);
+        OFSweep.OFPoint fixed = fixedSweep.computeAt(2.7);
+        OFSweep.OFPoint adiab = rp1Sweep.computeAt(2.7);
+        System.out.printf("  Fixed-Tc:   Tc=%5.0f K  c*=%6.0f m/s  Isp=%6.1f s%n",
+                fixed.chamberTemperature(), fixed.cStar(), fixed.isp());
+        System.out.printf("  Adiabatic:  Tc=%5.0f K  c*=%6.0f m/s  Isp=%6.1f s%n",
+                adiab.chamberTemperature(), adiab.cStar(), adiab.isp());
     }
 }
