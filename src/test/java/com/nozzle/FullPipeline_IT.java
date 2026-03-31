@@ -374,7 +374,7 @@ class FullPipeline_IT {
         /**
          * The canonical OFSweep-to-nozzle chain:
          *   OFSweep.optimumIsp → Tc → NozzleDesignParameters → CharacteristicNet → PerformanceCalculator
-         *
+         * <p>
          * Verifies that the Tc from the optimal O/F point produces a physically
          * plausible nozzle design, and that the MOC Isp at that Tc is within 10%
          * of the OFSweep Isp (both are frozen-at-chamber approximations but use

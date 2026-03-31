@@ -32,6 +32,7 @@ import com.nozzle.geometry.NozzleContour;
 import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.AltitudePerformance;
 import com.nozzle.moc.CharacteristicNet;
+import com.nozzle.moc.DualBellNozzle;
 import com.nozzle.moc.RaoNozzle;
 import com.nozzle.optimization.AltitudeAdaptiveOptimizer;
 import com.nozzle.optimization.MonteCarloUncertainty;
@@ -73,6 +74,7 @@ import java.util.List;
  * - y⁺-controlled first-cell-height grading: CFDMeshExporter and OpenFOAMExporter firstLayerThickness
  * - Full 3-D revolved mesh export: RevolvedMeshExporter (OpenFOAM blockMesh, Gmsh, Plot3D)
  * - O/F sweep and optimum search: OFSweep adiabatic Isp(O/F), c*(O/F), γ(O/F) curves with golden-section optimum
+ * - Dual-bell altitude-compensating nozzle: DualBellNozzle contour, sea-level and high-altitude Isp, transition pressure
  */
 public class Main {
 
@@ -109,6 +111,7 @@ public class Main {
             demonstrateYPlusGrading(outputDir);
             demonstrateRevolvedMesh(outputDir);
             demonstrateOFSweep();
+            demonstrateDualBellNozzle();
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -1511,6 +1514,86 @@ public class Main {
                 .setFirstLayerThickness(y1)
                 .export(contour, bmd3dYPlus, RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
         System.out.printf("  y⁺-graded mesh written → %s%n", bmd3dYPlus.getFileName());
+    }
+
+    /**
+     * Demonstrates the dual-bell altitude-compensating nozzle.
+     *
+     * <p>Compares three configurations for a LOX/RP-1 engine sized for a
+     * high-altitude stage (Me = 5.0, Pc = 7 MPa):
+     * <ol>
+     *   <li>Full Rao bell (single contour, sea-level ambient) — massively
+     *       over-expanded at sea level.</li>
+     *   <li>Dual-bell — sea-level mode (flow separated at kink, AR = 4).</li>
+     *   <li>Dual-bell — high-altitude mode (full nozzle, vacuum).</li>
+     * </ol>
+     */
+    private static void demonstrateDualBellNozzle() {
+        System.out.println("\n--- DUAL-BELL ALTITUDE-COMPENSATING NOZZLE ---\n");
+
+        NozzleDesignParameters params = NozzleDesignParameters.builder()
+                .throatRadius(0.05)
+                .exitMach(5.0)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500)
+                .ambientPressure(101_325)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(30)
+                .lengthFraction(0.8)
+                .axisymmetric(true)
+                .build();
+
+        // --- Reference: full Rao bell at sea level ---
+        RaoNozzle rao = new RaoNozzle(params).generate();
+        double raoIsp = rao.calculateThrustCoefficient()
+                        * params.characteristicVelocity() / 9.80665;
+
+        System.out.printf("Full exit area ratio: %.1f  (Me = %.1f, γ = %.2f)%n",
+                params.exitAreaRatio(), params.exitMach(), params.gasProperties().gamma());
+        System.out.printf("Rao bell length:      %.3f m%n", rao.getActualLength());
+        System.out.printf("Rao Isp (sea level, massively over-expanded): %.1f s%n", raoIsp);
+
+        // --- Dual-bell ---
+        System.out.println();
+        double[] transitionARs = {3.0, 4.0, 6.0};
+        System.out.println("transition   kink       base      full     switch");
+        System.out.println("  AR         radius     length   length   pressure    SL Isp  HA Isp  gain");
+        System.out.println("  " + "-".repeat(75));
+
+        for (double ar : transitionARs) {
+            DualBellNozzle db = new DualBellNozzle(params, ar).generate();
+            DualBellNozzle.PerformanceSummary s = db.getPerformanceSummary();
+            System.out.printf("  %4.1f  %8.1f mm  %6.3f m  %6.3f m  %7.0f Pa  %5.1f s  %5.1f s  %+.1f s%n",
+                    ar,
+                    db.getTransitionRadius() * 1000,
+                    db.getBaseLength(),
+                    db.getTotalLength(),
+                    s.transitionPressure(),
+                    s.seaLevelIsp(),
+                    s.highAltitudeIsp(),
+                    s.ispGain());
+        }
+
+        // --- Detailed breakdown for AR = 4 ---
+        System.out.println();
+        DualBellNozzle db4 = new DualBellNozzle(params, 4.0).generate();
+        System.out.printf("Dual-bell  AR_kink = 4.0  (kink at M = %.2f):%n",
+                db4.getTransitionMach());
+        System.out.printf("  Inflection angle:      %.2f°%n",
+                Math.toDegrees(db4.getInflectionAngle()));
+        System.out.printf("  Base exit angle (θ_E1):%.2f°%n",
+                Math.toDegrees(db4.getBaseExitAngle()));
+        System.out.printf("  Extension exit (θ_E2): %.2f°%n",
+                Math.toDegrees(db4.getExtensionExitAngle()));
+        System.out.printf("  Kink index / total pts:%d / %d%n",
+                db4.getKinkIndex(), db4.getContourPoints().size());
+        System.out.printf("  Transition pressure:   %.0f Pa  (%.1f%% of sea level)%n",
+                db4.getTransitionPressure(),
+                db4.getTransitionPressure() / 101_325.0 * 100);
+        System.out.printf("  Sea-level Isp:         %.1f s   (vs Rao %.1f s — %+.1f s benefit)%n",
+                db4.getSeaLevelIsp(), raoIsp, db4.getSeaLevelIsp() - raoIsp);
+        System.out.printf("  High-altitude Isp:     %.1f s%n", db4.getHighAltitudeIsp());
     }
 
     /**

@@ -19,7 +19,7 @@ Continue to write all code using the Jakarta coding guidelines and accepted obje
 
   Geometry / design
 
-  - Dual-bell nozzle — altitude-compensating contour; natural extension of the existing NozzleContour contour families.
+  - Dual-bell nozzle — altitude-compensating contour; natural extension of the existing NozzleContour contour families. (need to update main() & _IT).
   - Truncated ideal contour (TIC) as a fifth contour family in NozzleContour — simpler than Rao bell, widely used in upper stages.
 
   Structural/thermal
