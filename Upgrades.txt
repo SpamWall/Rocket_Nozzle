@@ -18,8 +18,7 @@ Continue to write all code using the Jakarta coding guidelines and accepted obje
   - PhysicsValidation_N2O_UT — physics-level check that N₂O element conservation holds across a range of O/F ratios (analogous to PhysicsValidation_IsentropicRelations_UT for the chemistry side).
 
   Geometry / design
-
-  - Dual-bell nozzle — altitude-compensating contour; natural extension of the existing NozzleContour contour families. (need to update main() & _IT).
+  - Can Dual Bell Nozzle be verified with a test using real world data?
   - Truncated ideal contour (TIC) as a fifth contour family in NozzleContour — simpler than Rao bell, widely used in upper stages.
 
   Structural/thermal
