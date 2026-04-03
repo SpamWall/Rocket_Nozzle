@@ -41,6 +41,12 @@ import static org.assertj.core.api.Assertions.*;
  * (Hagemann et al., AIAA-96-2958; Immich &amp; Caporicci, AIAA-96-3008) and
  * are intentionally wide to accommodate the parabolic Bézier approximation.
  *
+ * <p>Section 7 adds a constant-γ analytical verification that cross-checks the
+ * thrust-coefficient formula against a hand-computable isentropic result.  The
+ * geometry mirrors the DLR subscale nozzle characterized by Génin &amp; Stark
+ * (<em>Shock Waves</em> 19, 265–270, 2009): R_th = 9 mm, ε_b = 3.9, ε_e ≈ 7.1,
+ * kink angle = 15°, cold-flow N₂ (γ = 1.4).
+ *
  * <h2>Shared design conditions</h2>
  * <pre>
  *   r_throat = 50 mm,  Me = 5.0,  Pc = 7 MPa,  Tc = 3500 K,  Pa = 101 325 Pa
@@ -394,6 +400,122 @@ class DualBellNozzle_UT {
             DualBellNozzle nozzle = new DualBellNozzle(params).generate();
             assertThat(nozzle.getContourPoints()).hasSizeGreaterThan(10);
             assertThat(nozzle.getHighAltitudeIsp()).isGreaterThan(nozzle.getSeaLevelIsp());
+        }
+    }
+
+    // =========================================================================
+    //  7. Constant-γ analytical verification
+    //     Geometry: DLR subscale nozzle (Génin & Stark, Shock Waves 2009)
+    //       R_th = 9 mm  |  ε_b = 3.9  |  ε_e ≈ 7.1  |  kink 15°  |  γ = 1.4
+    //
+    //  Cross-checks DualBellNozzle.computePerformance() against a hand-derived
+    //  isentropic Cf formula using only γ and the area-ratio Mach numbers.
+    //  The formula is evaluated independently in static helper methods below
+    //  and compared against the model output to within 0.5 %.
+    // =========================================================================
+
+    @Nested
+    @DisplayName("Constant-γ Cf analytical verification (DLR subscale geometry, γ=1.4)")
+    class ConstantGammaCfVerification {
+
+        // --- DLR subscale geometry ------------------------------------------
+        // Génin & Stark, Shock Waves 19, 265–270 (2009), Table 1
+        //   R_th = 9 mm,  ε_b = 3.9,  ε_e ≈ 7.1  (M_exit ≈ 3.5504 for γ=1.4)
+        //   kink angle α = 15°,  cold-flow N₂  (γ = 1.4)
+        // --------------------------------------------------------------------
+        private static final double EPS_B  = 3.9;      // base area ratio (kink)
+        private static final double M_EXIT = 3.5504;   // gives ε_e ≈ 7.104 for γ=1.4
+        private static final double PC     = 1_000_000.0; // 1 MPa (Cf is pc-independent)
+        private static final double PA     =    10_000.0; // 0.1 atm ambient
+
+        private DualBellNozzle nozzle;
+
+        @BeforeEach
+        void buildNozzle() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .throatRadius(0.009)
+                    .exitMach(M_EXIT)
+                    .chamberPressure(PC)
+                    .chamberTemperature(293.0)
+                    .ambientPressure(PA)
+                    .gasProperties(GasProperties.NITROGEN)
+                    .numberOfCharLines(20)
+                    .wallAngleInitialDegrees(30.0)
+                    .lengthFraction(0.8)
+                    .axisymmetric(false)
+                    .build();
+
+            nozzle = new DualBellNozzle(p, EPS_B,
+                    0.8, 0.8, Math.toRadians(15.0), 200).generate();
+        }
+
+        // --- Independent formula helpers (γ = 1.4 only) ---------------------
+
+        /**
+         * Isentropic total-to-static pressure ratio p/p₀ for γ = 1.4:
+         * {@code p/p₀ = (1 + 0.2 M²)^(−3.5)}.
+         */
+        private static double pressureRatio14(double mach) {
+            return Math.pow(1.0 + 0.2 * mach * mach, -3.5);
+        }
+
+        /**
+         * Rocket momentum Cf term (before divergence factor) for γ = 1.4:
+         * {@code cfMom = sqrt(term1 × (1 − (p/p₀)^(2/7)))}
+         * where {@code term1 = 2γ²/(γ−1) × (2/(γ+1))^((γ+1)/(γ−1)) = 9.8 × (5/6)^6}.
+         */
+        private static double cfMomentum14(double pRatio) {
+            // For γ = 1.4:
+            //   2γ²/(γ−1) = 2×1.96/0.4 = 9.8
+            //   (2/(γ+1))^((γ+1)/(γ−1)) = (2/2.4)^6 = (5/6)^6
+            final double TERM1 = 9.8 * Math.pow(5.0 / 6.0, 6.0);
+            return Math.sqrt(TERM1 * (1.0 - Math.pow(pRatio, 2.0 / 7.0)));
+        }
+
+        // --- Tests ----------------------------------------------------------
+
+        @Test
+        @DisplayName("Transition Mach matches machFromAreaRatio(ε_b) for γ=1.4")
+        void transitionMachMatchesIsentropic() {
+            double expected = GasProperties.NITROGEN.machFromAreaRatio(EPS_B);
+            assertThat(nozzle.getTransitionMach()).isCloseTo(expected, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("Sea-level Cf matches constant-γ isentropic formula (< 0.5 %)")
+        void seaLevelCfMatchesFormula() {
+            double mKink   = nozzle.getTransitionMach();
+            double pKink   = pressureRatio14(mKink);
+
+            double cfMom   = cfMomentum14(pKink);
+            double lambda  = (1.0 + Math.cos(nozzle.getBaseExitAngle())) / 2.0;
+            double cfPres  = (pKink - PA / PC) * EPS_B;
+            double expected = lambda * cfMom + cfPres;
+
+            assertThat(nozzle.getSeaLevelCf())
+                    .isCloseTo(expected, within(expected * 0.005));
+        }
+
+        @Test
+        @DisplayName("High-altitude Cf matches constant-γ isentropic formula (< 0.5 %)")
+        void highAltCfMatchesFormula() {
+            double mExit  = M_EXIT;
+            double pExit  = pressureRatio14(mExit);
+            double exitAR = GasProperties.NITROGEN.areaRatio(mExit);
+
+            double cfMom  = cfMomentum14(pExit);
+            double lambda = (1.0 + Math.cos(nozzle.getExtensionExitAngle())) / 2.0;
+            double cfPres = pExit * exitAR;   // pa = 0 in altitude mode
+            double expected = lambda * cfMom + cfPres;
+
+            assertThat(nozzle.getHighAltitudeCf())
+                    .isCloseTo(expected, within(expected * 0.005));
+        }
+
+        @Test
+        @DisplayName("Sea-level Cf < high-altitude Cf for DLR subscale geometry")
+        void slCfLessThanAltCf() {
+            assertThat(nozzle.getSeaLevelCf()).isLessThan(nozzle.getHighAltitudeCf());
         }
     }
 }

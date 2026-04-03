@@ -118,7 +118,7 @@ public class DualBellNozzle {
     private double transitionMach;       // — Mach number at kink
     private int    kinkIndex;            // index in contourPoints of the kink point
 
-    private List<Point2D> contourPoints = new ArrayList<>();
+    private final List<Point2D> contourPoints = new ArrayList<>();
 
     // ------------------------------------------------------------------
     // Performance (set by generate())
