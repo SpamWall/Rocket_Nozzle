@@ -5,7 +5,6 @@ Continue to write all code using the Jakarta coding guidelines and accepted obje
   - CEA-hardened REF values in GibbsMinimizer_N2OPropellants_UT and ChemistryModel_N2OPropellants_UT — all
         N₂O REF values are solver outputs, not NASA CEA. Running the two tp decks (embedded in each test
         class) would promote them to ground truth for both species fractions and MW/γ.
-  - NO species in NasaSpeciesDatabase — at 3000+ K with N₂, small amounts of NO form; this would improve N₂O combustion accuracy.
 
   Chemistry — capability gap
 

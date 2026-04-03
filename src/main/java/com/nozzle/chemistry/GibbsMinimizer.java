@@ -41,17 +41,17 @@ public final class GibbsMinimizer {
 
     /** Species ordering for the elemental composition matrix. */
     static final String[] SPECIES_ORDER = {
-            "H2O", "CO2", "H2", "CO", "OH", "O2", "N2", "H", "O"
+            "H2O", "CO2", "H2", "CO", "OH", "O2", "N2", "H", "O", "NO"
     };
     static final int NUM_SPECIES = SPECIES_ORDER.length;
 
     /** Atoms of each element (H, C, O, N) per molecule of each species. */
     static final double[][] ELEM_COMPOSITION = {
-            //  H2O  CO2  H2   CO   OH   O2   N2   H    O
-            {   2,   0,   2,   0,   1,   0,   0,   1,   0 },  // H
-            {   0,   1,   0,   1,   0,   0,   0,   0,   0 },  // C
-            {   1,   2,   0,   1,   1,   2,   0,   0,   1 },  // O
-            {   0,   0,   0,   0,   0,   0,   2,   0,   0 },  // N
+            //  H2O  CO2  H2   CO   OH   O2   N2   H    O    NO
+            {   2,   0,   2,   0,   1,   0,   0,   1,   0,   0 },  // H
+            {   0,   1,   0,   1,   0,   0,   0,   0,   0,   0 },  // C
+            {   1,   2,   0,   1,   1,   2,   0,   0,   1,   1 },  // O
+            {   0,   0,   0,   0,   0,   0,   2,   0,   0,   1 },  // N
     };
     static final int NUM_ELEMENTS = ELEM_COMPOSITION.length;
 

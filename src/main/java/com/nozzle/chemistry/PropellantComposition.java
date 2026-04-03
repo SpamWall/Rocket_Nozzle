@@ -226,7 +226,9 @@ public final class PropellantComposition {
         }
 
         // Seed all nitrogen as N2 — the overwhelmingly dominant N-species at
-        // combustion temperatures; no other N-containing species are in the database.
+        // combustion temperatures. NO is also in the database but forms only at
+        // trace levels; the Gibbs solver will find its equilibrium amount from the
+        // N2 + O2 ⇌ 2NO equilibrium without an explicit seed.
         if (molN > 1e-15) map.put("N2", (molN / 2.0) * 28.014);
 
         return map;

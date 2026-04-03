@@ -32,9 +32,9 @@ import static org.assertj.core.api.Assertions.within;
 
 /**
  * Validates {@link GibbsMinimizer} for N₂O-based propellants, which exercise the
- * N-element path in the solver (N₂ species).  All other test suites use only
- * LOX (O₂) oxidizer, leaving the nitrogen Lagrange multiplier and N₂ species
- * fully untested.
+ * N-element path in the solver (N₂ and NO species).  All other test suites use
+ * only LOX (O₂) oxidizer, leaving the nitrogen Lagrange multiplier and N-containing
+ * species fully untested.
  *
  * <p>N₂O (nitrous oxide, MW = 44.013 g/mol) contributes 2 N atoms and 1 O atom
  * per molecule.  At combustion temperatures essentially all nitrogen ends up as N₂,
@@ -278,6 +278,73 @@ class GibbsMinimizer_N2OPropellants_UT {
             Map<String, Double> higherOF = minimizer.minimize(n2oPropane(9.5), 3000, 7e6);
             assertThat(result.getOrDefault("CO2", 0.0))
                     .isLessThan(higherOF.getOrDefault("CO2", 0.0));
+        }
+    }
+
+    // =======================================================================
+    //  NO (nitric oxide) formation from N2 + O2 equilibrium at high T
+    //  NO is the only N/O mixed species in the database; its formation is
+    //  thermodynamically favoured above ~2500 K and grows strongly with T.
+    // =======================================================================
+
+    /**
+     * Verifies that NO appears in the equilibrium products of N₂O combustion
+     * at high temperature, and that its mole fraction is absent for nitrogen-free
+     * propellants.
+     *
+     * <p>The N₂ + O₂ ⇌ 2 NO equilibrium constant K_p ≈ 0.024 at 3000 K
+     * (Kaye &amp; Laby, NIST-JANAF), so measurable NO forms wherever both N₂
+     * and sufficient O (from O₂ or atomic O) are present.  For N₂O propellants
+     * the N₂ pool is large (≈ 50–56 % by mass), making NO a non-negligible
+     * minor species even in fuel-rich conditions.
+     *
+     * <p>For LOX/LH₂ there is no nitrogen, so the N element is absent from the
+     * element balance and NO is correctly locked at the trace floor by the
+     * {@code speciesActive[]} guard in the solver.
+     */
+    @Nested
+    @DisplayName("NO formation at high temperature")
+    class NoFormationAtHighTemperature {
+
+        @Test
+        @DisplayName("NO is present at 3000 K in near-stoichiometric N2O/Ethanol")
+        void noPresent_N2oEthanol_nearStoichiometric_3000K() {
+            // O/F = 5.73 ≈ stoichiometric; more free O increases NO yield
+            Map<String, Double> result = minimizer.minimize(n2oEthanol(5.73), 3000, 7e6);
+            assertThat(result.getOrDefault("NO", 0.0))
+                    .as("NO mass fraction at near-stoichiometric N2O/Ethanol 3000 K")
+                    .isGreaterThan(1e-5);
+        }
+
+        @Test
+        @DisplayName("NO is present at 3000 K in N2O/Propane near stoichiometric")
+        void noPresent_N2oPropane_nearStoichiometric_3000K() {
+            // O/F = 9.5 ≈ close to stoichiometric (≈ 9.98)
+            Map<String, Double> result = minimizer.minimize(n2oPropane(9.5), 3000, 7e6);
+            assertThat(result.getOrDefault("NO", 0.0))
+                    .as("NO mass fraction at near-stoichiometric N2O/Propane 3000 K")
+                    .isGreaterThan(1e-5);
+        }
+
+        @Test
+        @DisplayName("NO fraction increases with temperature (thermal equilibrium)")
+        void noIncreasesWithTemperature_N2oEthanol() {
+            // K_p(NO) grows strongly with T; higher T → more NO
+            Map<String, Double> at3000 = minimizer.minimize(n2oEthanol(5.73), 3000, 7e6);
+            Map<String, Double> at3300 = minimizer.minimize(n2oEthanol(5.73), 3300, 7e6);
+            assertThat(at3300.getOrDefault("NO", 0.0))
+                    .as("NO mass fraction must increase from 3000 K to 3300 K")
+                    .isGreaterThan(at3000.getOrDefault("NO", 0.0));
+        }
+
+        @Test
+        @DisplayName("NO is absent for LOX/LH2 (no nitrogen in propellant)")
+        void noAbsent_LoxLh2() {
+            PropellantComposition lh2 = new PropellantComposition();
+            lh2.setLoxLh2(6.0);
+            Map<String, Double> result = minimizer.minimize(lh2.get(), 3000, 7e6);
+            // N element absent → speciesActive[NO] = false → NO not in output
+            assertThat(result).doesNotContainKey("NO");
         }
     }
 }
