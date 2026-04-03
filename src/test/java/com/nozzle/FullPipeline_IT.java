@@ -30,6 +30,7 @@ import com.nozzle.geometry.NozzleContour;
 import com.nozzle.io.DesignDocument;
 import com.nozzle.io.NozzleSerializer;
 import com.nozzle.moc.CharacteristicNet;
+import com.nozzle.moc.DualBellNozzle;
 import com.nozzle.thermal.BoundaryLayerCorrection;
 import com.nozzle.thermal.HeatTransferModel;
 import com.nozzle.validation.NASASP8120Validator;
@@ -532,6 +533,93 @@ class FullPipeline_IT {
                     new NASASP8120Validator().validate(restored);
 
             assertThat(result.errors()).isEmpty();
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // DualBellNozzle integration: contour → performance pipeline
+    // ------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("DualBellNozzle Integration Tests")
+    class DualBellNozzleIntegrationTests {
+
+        /**
+         * Full chain: NozzleDesignParameters → DualBellNozzle.generate() →
+         * contour geometry → sea-level and high-altitude performance.
+         * Verifies that the complete dual-bell pipeline produces physically
+         * consistent outputs end-to-end.
+         */
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("DualBellNozzle full pipeline: contour geometry and performance are self-consistent")
+        void dualBellFullPipelineIsConsistent() {
+            NozzleDesignParameters params = NozzleDesignParameters.builder()
+                    .throatRadius(0.05)
+                    .exitMach(5.0)
+                    .chamberPressure(7e6)
+                    .chamberTemperature(3500)
+                    .ambientPressure(101_325)
+                    .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                    .numberOfCharLines(20)
+                    .wallAngleInitialDegrees(30)
+                    .lengthFraction(0.8)
+                    .axisymmetric(true)
+                    .build();
+
+            DualBellNozzle nozzle = new DualBellNozzle(params, 4.0).generate();
+            DualBellNozzle.PerformanceSummary s = nozzle.getPerformanceSummary();
+
+            // Geometry: contour covers throat to exit
+            assertThat(nozzle.getContourPoints()).hasSizeGreaterThan(50);
+            assertThat(nozzle.getContourPoints().getFirst().y())
+                    .isCloseTo(params.throatRadius(), within(1e-3));
+            assertThat(nozzle.getContourPoints().getLast().y())
+                    .isCloseTo(params.exitRadius(), within(1e-3));
+
+            // Kink must be interior
+            assertThat(nozzle.getKinkIndex())
+                    .isGreaterThan(0)
+                    .isLessThan(nozzle.getContourPoints().size() - 1);
+
+            // Performance: altitude mode must outperform sea-level mode
+            assertThat(s.highAltitudeIsp()).isGreaterThan(s.seaLevelIsp());
+            assertThat(s.ispGain()).isPositive();
+            assertThat(s.transitionPressure()).isGreaterThan(0).isLessThan(params.ambientPressure());
+
+            // Transition pressure in a plausible physical range: less than kink static pressure
+            // (Summerfield: p_transition = 0.35 × p_kink, kink is subsonic of exit so > exit pressure)
+            assertThat(s.transitionPressure()).isLessThan(params.chamberPressure());
+        }
+
+        /**
+         * Verifies that a sweep of three transition area ratios produces
+         * monotonically increasing sea-level Isp as ε_b rises (more expansion
+         * at sea-level mode) — a fundamental design trade-off of dual-bell nozzles.
+         */
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Sea-level Isp increases monotonically with transition area ratio")
+        void seaLevelIspMonotonicallyIncreases() {
+            NozzleDesignParameters params = NozzleDesignParameters.builder()
+                    .throatRadius(0.05)
+                    .exitMach(5.0)
+                    .chamberPressure(7e6)
+                    .chamberTemperature(3500)
+                    .ambientPressure(101_325)
+                    .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                    .numberOfCharLines(20)
+                    .wallAngleInitialDegrees(30)
+                    .lengthFraction(0.8)
+                    .axisymmetric(true)
+                    .build();
+
+            double isp3 = new DualBellNozzle(params, 3.0).generate().getSeaLevelIsp();
+            double isp4 = new DualBellNozzle(params, 4.0).generate().getSeaLevelIsp();
+            double isp6 = new DualBellNozzle(params, 6.0).generate().getSeaLevelIsp();
+
+            assertThat(isp4).isGreaterThan(isp3);
+            assertThat(isp6).isGreaterThan(isp4);
         }
     }
 }

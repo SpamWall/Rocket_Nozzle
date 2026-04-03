@@ -1594,6 +1594,55 @@ public class Main {
         System.out.printf("  Sea-level Isp:         %.1f s   (vs Rao %.1f s — %+.1f s benefit)%n",
                 db4.getSeaLevelIsp(), raoIsp, db4.getSeaLevelIsp() - raoIsp);
         System.out.printf("  High-altitude Isp:     %.1f s%n", db4.getHighAltitudeIsp());
+
+        // --- Analytical Cf cross-check (DLR subscale cold-flow case) ---
+        // Geometry: Génin & Stark, Shock Waves 19, 265–270 (2009), Table 1
+        //   R_th = 9 mm, ε_b = 3.9, ε_e ≈ 7.1 (M ≈ 3.55), kink 15°, N₂ γ=1.4
+        // Verifies computePerformance() against the hand-derived isentropic formula.
+        System.out.println();
+        System.out.println("DLR subscale cold-flow cross-check  (N₂, γ=1.4; Génin & Stark 2009):");
+        final double EPS_B  = 3.9;
+        final double M_EXIT = 3.5504;   // → ε_e ≈ 7.10 for γ=1.4
+        final double PC_DLR = 1_000_000.0;
+        final double PA_DLR =    10_000.0;
+
+        NozzleDesignParameters dlrParams = NozzleDesignParameters.builder()
+                .throatRadius(0.009)
+                .exitMach(M_EXIT)
+                .chamberPressure(PC_DLR)
+                .chamberTemperature(293.0)
+                .ambientPressure(PA_DLR)
+                .gasProperties(GasProperties.NITROGEN)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(30.0)
+                .lengthFraction(0.8)
+                .axisymmetric(false)
+                .build();
+
+        DualBellNozzle dlr = new DualBellNozzle(dlrParams, EPS_B,
+                0.8, 0.8, Math.toRadians(15.0), 200).generate();
+
+        // Analytical Cf — same isentropic formula evaluated independently
+        double gm1      = 0.4;
+        double term1    = 9.8 * Math.pow(5.0 / 6.0, 6.0);   // 2γ²/(γ−1)×(2/(γ+1))^((γ+1)/(γ−1))
+        double pKinkR   = Math.pow(1.0 + 0.2 * dlr.getTransitionMach() * dlr.getTransitionMach(), -3.5);
+        double pExitR   = Math.pow(1.0 + 0.2 * M_EXIT * M_EXIT, -3.5);
+        double exitAR   = GasProperties.NITROGEN.areaRatio(M_EXIT);
+        double lambdaB  = (1.0 + Math.cos(dlr.getBaseExitAngle()))      / 2.0;
+        double lambdaE  = (1.0 + Math.cos(dlr.getExtensionExitAngle())) / 2.0;
+        double cfSlAnal = lambdaB * Math.sqrt(term1 * (1.0 - Math.pow(pKinkR, gm1 / 1.4)))
+                          + (pKinkR - PA_DLR / PC_DLR) * EPS_B;
+        double cfAltAnal= lambdaE * Math.sqrt(term1 * (1.0 - Math.pow(pExitR, gm1 / 1.4)))
+                          + pExitR * exitAR;
+
+        System.out.printf("  M_kink = %.4f  (ε_b = %.1f)   M_exit = %.4f  (ε_e = %.3f)%n",
+                dlr.getTransitionMach(), EPS_B, M_EXIT, exitAR);
+        System.out.printf("  Sea-level Cf:  model = %.5f   analytical = %.5f   diff = %+.4f%%%n",
+                dlr.getSeaLevelCf(), cfSlAnal,
+                (dlr.getSeaLevelCf() - cfSlAnal) / cfSlAnal * 100.0);
+        System.out.printf("  High-alt  Cf:  model = %.5f   analytical = %.5f   diff = %+.4f%%%n",
+                dlr.getHighAltitudeCf(), cfAltAnal,
+                (dlr.getHighAltitudeCf() - cfAltAnal) / cfAltAnal * 100.0);
     }
 
     /**
