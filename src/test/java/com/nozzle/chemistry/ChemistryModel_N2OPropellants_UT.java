@@ -85,7 +85,7 @@ class ChemistryModel_N2OPropellants_UT {
     @DisplayName("N2O/Ethanol  O/F=5.0  T=3000 K  P=7 MPa")
     class N2oEthanol_OF5_3000K_7MPa {
 
-        // NASA CEA reference values (tp deck above).
+        // Solver-output reference values. Verify with CEA tp deck above and replace.
         private static final double REF_MW    = 26.594;
         private static final double REF_GAMMA = 1.1596;
 
@@ -163,7 +163,7 @@ class ChemistryModel_N2OPropellants_UT {
     @DisplayName("N2O/Propane  O/F=7.5  T=3000 K  P=7 MPa")
     class N2oPropane_OF7p5_3000K_7MPa {
 
-        // NASA CEA reference values (tp deck above).
+        // Solver-output reference values. Verify with CEA tp deck above and replace.
         private static final double REF_MW    = 25.632;
         private static final double REF_GAMMA = 1.1904;
 

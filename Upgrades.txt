@@ -2,9 +2,9 @@ Continue to write all code using the Jakarta coding guidelines and accepted obje
 
  Chemistry — natural follow-ons to this session's work
 
-  - ChemistryModel_N2OPropellants_UT — the N₂O GibbsMinimizer tests validate species fractions but nothing validates MW and γ through the full pipeline for N₂O propellants (analogous to
-        ChemistryModel_CEAValidation_UT). You have the CEA tp decks already documented in the Gibbs tests.
-  - CEA-hardened REF values in GibbsMinimizer_N2OPropellants_UT — the current REF values are solver outputs, not CEA. Running the two tp decks would promote them to ground truth.
+  - CEA-hardened REF values in GibbsMinimizer_N2OPropellants_UT and ChemistryModel_N2OPropellants_UT — all
+        N₂O REF values are solver outputs, not NASA CEA. Running the two tp decks (embedded in each test
+        class) would promote them to ground truth for both species fractions and MW/γ.
   - NO species in NasaSpeciesDatabase — at 3000+ K with N₂, small amounts of NO form; this would improve N₂O combustion accuracy.
 
   Chemistry — capability gap
@@ -18,10 +18,8 @@ Continue to write all code using the Jakarta coding guidelines and accepted obje
   - PhysicsValidation_N2O_UT — physics-level check that N₂O element conservation holds across a range of O/F ratios (analogous to PhysicsValidation_IsentropicRelations_UT for the chemistry side).
 
   Geometry / design
-  - Truncated ideal contour (TIC) as a fifth contour family in NozzleContour — simpler than Rao bell, widely used in upper stages.
 
   Structural/thermal
-
 
   Infrastructure
 
