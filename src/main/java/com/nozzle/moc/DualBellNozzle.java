@@ -148,7 +148,11 @@ public class DualBellNozzle {
             double highAltitudeIsp,
             double transitionPressure
     ) {
-        /** Isp gain from sea-level to high-altitude mode (s). */
+        /**
+         * Isp gain from sea-level to high-altitude mode.
+         *
+         * @return difference {@code highAltitudeIsp − seaLevelIsp} in seconds
+         */
         public double ispGain() { return highAltitudeIsp - seaLevelIsp; }
     }
 
@@ -283,71 +287,128 @@ public class DualBellNozzle {
      * Returns an unmodifiable view of the contour; x is the axial coordinate
      * (m) from the throat, y is the wall radius (m).
      * Calls {@link #generate()} automatically if not yet generated.
+     *
+     * @return unmodifiable list of (x, y) wall points in metres, ordered from
+     *         throat to exit
      */
     public List<Point2D> getContourPoints() {
         if (contourPoints.isEmpty()) generate();
         return Collections.unmodifiableList(contourPoints);
     }
 
-    /** Returns the design parameters used to construct this nozzle. */
+    /**
+     * Returns the design parameters used to construct this nozzle.
+     *
+     * @return the {@link NozzleDesignParameters} supplied at construction time
+     */
     public NozzleDesignParameters getParameters() { return parameters; }
 
-    /** Axial length of the base-bell section (m). */
+    /**
+     * Axial length of the base-bell section.
+     *
+     * @return base-bell length in metres
+     */
     public double getBaseLength()        { return baseLength; }
 
-    /** Total axial length of the full dual-bell (m). */
+    /**
+     * Total axial length of the full dual-bell nozzle.
+     *
+     * @return total nozzle length (base bell + extension) in metres
+     */
     public double getTotalLength()       { return totalLength; }
 
-    /** Wall radius at the kink (m). */
+    /**
+     * Wall radius at the kink.
+     *
+     * @return kink wall radius in metres
+     */
     public double getTransitionRadius()  { return transitionRadius; }
 
-    /** Mach number at the kink (isentropic, from {@code transitionAreaRatio}). */
+    /**
+     * Mach number at the kink, computed isentropically from
+     * {@code transitionAreaRatio}.
+     *
+     * @return Mach number at the kink (dimensionless)
+     */
     public double getTransitionMach()    { return transitionMach; }
 
     /**
      * Index into {@link #getContourPoints()} of the kink point (last point of
      * the base bell, first of the extension).
+     *
+     * @return zero-based index of the kink point in the contour list
      */
     public int getKinkIndex()            { return kinkIndex; }
 
-    /** Throat-arc end / base-bell inflection angle (rad). */
+    /**
+     * Throat-arc end / base-bell inflection angle.
+     *
+     * @return inflection angle in radians
+     */
     public double getInflectionAngle()   { return inflectionAngle; }
 
-    /** Base-bell exit angle at the kink θ_E1 (rad). */
+    /**
+     * Base-bell exit angle at the kink θ_E1.
+     *
+     * @return base-bell exit angle in radians
+     */
     public double getBaseExitAngle()     { return baseExitAngle; }
 
-    /** Extension exit angle θ_E2 (rad). */
+    /**
+     * Extension exit angle θ_E2.
+     *
+     * @return extension exit angle in radians
+     */
     public double getExtensionExitAngle(){ return extensionExitAngle; }
 
-    /** Thrust coefficient in sea-level mode (flow separated at kink). */
+    /**
+     * Thrust coefficient in sea-level mode (flow separated at kink).
+     *
+     * @return sea-level thrust coefficient (dimensionless)
+     */
     public double getSeaLevelCf()        { return seaLevelCf; }
 
-    /** Thrust coefficient in high-altitude mode (full nozzle). */
+    /**
+     * Thrust coefficient in high-altitude mode (full nozzle).
+     *
+     * @return high-altitude thrust coefficient (dimensionless)
+     */
     public double getHighAltitudeCf()    { return highAltitudeCf; }
 
     /**
-     * Ambient pressure (Pa) at which the flow reattaches through the full
-     * extension (Summerfield criterion: 0.35 × static pressure at the kink).
+     * Ambient pressure at which the flow reattaches through the full extension
+     * (Summerfield criterion: 0.35 × static pressure at the kink).
+     *
+     * @return transition ambient pressure in Pascals
      */
     public double getTransitionPressure(){ return transitionPressure; }
 
     /**
-     * Specific impulse in sea-level mode (s).
+     * Specific impulse in sea-level mode.
      * Evaluated at {@code parameters.ambientPressure()}.
+     *
+     * @return sea-level specific impulse in seconds
      */
     public double getSeaLevelIsp() {
         return parameters.characteristicVelocity() * seaLevelCf / 9.80665;
     }
 
     /**
-     * Specific impulse in high-altitude (vacuum) mode (s).
+     * Specific impulse in high-altitude (vacuum) mode.
      * Evaluated at ambient pressure = 0.
+     *
+     * @return high-altitude specific impulse in seconds
      */
     public double getHighAltitudeIsp() {
         return parameters.characteristicVelocity() * highAltitudeCf / 9.80665;
     }
 
-    /** Returns a consolidated performance summary for both modes. */
+    /**
+     * Returns a consolidated performance summary for both operating modes.
+     *
+     * @return {@link PerformanceSummary} containing Cf, Isp, and transition
+     *         pressure for sea-level and high-altitude modes
+     */
     public PerformanceSummary getPerformanceSummary() {
         if (contourPoints.isEmpty()) generate();
         return new PerformanceSummary(

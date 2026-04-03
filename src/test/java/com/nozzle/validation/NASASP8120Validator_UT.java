@@ -326,7 +326,7 @@ class NASASP8120Validator_UT {
     class DeadCodeBranchTests {
 
         /** Subclass that replaces the two package-private calculation methods with fixed returns. */
-        private class TestableValidator extends NASASP8120Validator {
+        private static class TestableValidator extends NASASP8120Validator {
             private final double arOverride;
             private final double cfOverride;
 
@@ -374,7 +374,7 @@ class NASASP8120Validator_UT {
     class NetBranchTests {
 
         /** CharacteristicNet subclass that injects custom wall points, AR, and validity. */
-        private class TestableNet extends CharacteristicNet {
+        private static class TestableNet extends CharacteristicNet {
             private final List<CharacteristicPoint> injectedWallPoints;
             private final double injectedAR;
 

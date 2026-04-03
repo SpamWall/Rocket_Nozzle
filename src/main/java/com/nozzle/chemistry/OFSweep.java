@@ -297,7 +297,7 @@ public class OFSweep {
     }
 
     /**
-     * Finds the O/F ratio that maximises specific impulse within the supplied
+     * Finds the O/F ratio that maximizes specific impulse within the supplied
      * range using a golden-section search.
      *
      * <p>Converges to within 1×10⁻⁴ in O/F in approximately 25 Gibbs evaluations.
@@ -312,11 +312,11 @@ public class OFSweep {
     }
 
     /**
-     * Finds the O/F ratio that maximises the characteristic exhaust velocity c*
+     * Finds the O/F ratio that maximizes the characteristic exhaust velocity c*
      * within the supplied range using a golden-section search.
      *
      * <p>In adiabatic mode the c* peak lies at a lower O/F than the Isp peak
-     * because Cf increases with γ (which favours higher O/F), shifting the c*·Cf
+     * because Cf increases with γ (which favors higher O/F), shifting the c*·Cf
      * product relative to c* alone.
      *
      * @param ofMin Lower bound of the search range
@@ -363,6 +363,10 @@ public class OFSweep {
      *
      * <p>Creates a fresh {@link ChemistryModel} and, in adiabatic mode, a fresh
      * {@link NasaSpeciesDatabase} on each call so callers share no state.
+     *
+     * @param of oxidiser-to-fuel mass ratio (must be positive)
+     * @return {@link OFPoint} containing the chamber temperature, γ, molecular
+     *         weight, c★, and Isp at the given O/F ratio
      */
     public OFPoint computeAt(double of) {
         double Tc = Double.isNaN(fixedChamberTemperature)
@@ -385,6 +389,34 @@ public class OFSweep {
                        / Math.pow(2.0 / gp1, gp1 / (2.0 * gm1));
 
         // Isentropic relations at design exit Mach
+        double cf = computeThrustCoefficient(gm1, gamma, gp1);
+
+        double isp = cStar * cf / 9.80665;
+
+        return new OFPoint(of, Tc, gamma, mw, cStar, isp);
+    }
+
+    /**
+     * Computes the ideal (isentropic) thrust coefficient Cf at {@link #exitMach}.
+     *
+     * <p>Cf is the dimensionless ratio of nozzle thrust to the product of chamber
+     * pressure and throat area.  It combines the momentum-thrust term (the square-root
+     * factor) with the pressure-thrust correction for the difference between exit and
+     * ambient pressure:
+     *
+     * <pre>
+     *   Ae/At  = (1/Me) · ((2/(γ+1)) · (1 + (γ−1)/2 · Me²))^((γ+1)/(2(γ−1)))
+     *   pe/pc  = (1 + (γ−1)/2 · Me²)^(−γ/(γ−1))
+     *   Cf     = √(2γ²/(γ−1) · (2/(γ+1))^((γ+1)/(γ−1)) · (1 − (pe/pc)^((γ−1)/γ)))
+     *            + (pe − pa) / pc · Ae/At
+     * </pre>
+     *
+     * @param gm1   γ − 1
+     * @param gamma Ratio of specific heats γ
+     * @param gp1   γ + 1
+     * @return Dimensionless ideal thrust coefficient Cf
+     */
+    private double computeThrustCoefficient(double gm1, double gamma, double gp1) {
         double pePc = Math.pow(1.0 + gm1 / 2.0 * exitMach * exitMach, -gamma / gm1);
         double pe   = chamberPressure * pePc;
         double aeAt = (1.0 / exitMach)
@@ -394,12 +426,8 @@ public class OFSweep {
         // Ideal thrust coefficient (momentum + pressure thrust)
         double term1 = 2.0 * gamma * gamma / gm1 * Math.pow(2.0 / gp1, gp1 / gm1);
         double term2 = 1.0 - Math.pow(pePc, gm1 / gamma);
-        double cf    = Math.sqrt(term1 * term2)
-                       + (pe - ambientPressure) / chamberPressure * aeAt;
-
-        double isp = cStar * cf / 9.80665;
-
-        return new OFPoint(of, Tc, gamma, mw, cStar, isp);
+       return Math.sqrt(term1 * term2)
+                      + (pe - ambientPressure) / chamberPressure * aeAt;
     }
 
     /**

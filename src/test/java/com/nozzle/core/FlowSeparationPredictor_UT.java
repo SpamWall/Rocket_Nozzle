@@ -34,7 +34,7 @@ class FlowSeparationPredictor_UT {
     // Shared fixtures
     // -----------------------------------------------------------------------
 
-    /** Sea-level-optimised nozzle: moderately expanded, pe > pa → no separation. */
+    /** Sea-level-optimized nozzle: moderately expanded, pe > pa → no separation. */
     private NozzleDesignParameters seaLevelParams;
 
     /**

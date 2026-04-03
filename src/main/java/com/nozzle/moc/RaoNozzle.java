@@ -209,7 +209,11 @@ public class RaoNozzle {
         return new ArrayList<>(contourPoints);
     }
 
-    /** Returns the design parameters used to construct this nozzle. */
+    /**
+     * Returns the design parameters used to construct this nozzle.
+     *
+     * @return the {@link NozzleDesignParameters} supplied at construction time
+     */
     public NozzleDesignParameters getParameters() { return parameters; }
 
     /**

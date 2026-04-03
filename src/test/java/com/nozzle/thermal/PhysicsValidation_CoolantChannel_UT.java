@@ -270,8 +270,8 @@ class PhysicsValidation_CoolantChannel_UT {
     // =========================================================================
 
     /**
-     * The Clausius-Clapeyron equation linearises the Clausius-Clapeyron slope around
-     * the normal boiling point.  For water it agrees with NIST steam-table values
+     * The Clausius-Clapeyron equation linearizes the Clausius-Clapeyron slope around
+     * the normal boiling point.  For water, it agrees with NIST steam-table values
      * (NIST WebBook, 2025; Perry's 8th ed. Table 2-150) to within ±2 K over the
      * pressure range 1–10 atm, which is tighter than the ±5 % engineering tolerance
      * on the pressure-drop correlation.
@@ -343,7 +343,7 @@ class PhysicsValidation_CoolantChannel_UT {
         private static final double HOT_WALL_THICK = 0.001; // m, default value
         private static final double K_WALL         = 20.0;  // W/(m·K), default Inconel
 
-        /** Single-point thermal profile — nearest-neighbour applies Q_WALL everywhere. */
+        /** Single-point thermal profile — nearest-neighbor applies Q_WALL everywhere. */
         private List<HeatTransferModel.WallThermalPoint> thermalProfile() {
             return List.of(new HeatTransferModel.WallThermalPoint(
                     0.0, 0.05, 3000.0, Q_WALL, Q_WALL, 0.0, 1e4, 2000.0));

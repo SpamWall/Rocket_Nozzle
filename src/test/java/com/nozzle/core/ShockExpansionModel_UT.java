@@ -34,7 +34,7 @@ class ShockExpansionModel_UT {
     // Shared fixtures
     // -----------------------------------------------------------------------
 
-    /** LOX/RP-1, Pc = 7 MPa, Me = 3.  Sea-level-optimised: pe ≈ 160 kPa > pa = 101 kPa. */
+    /** LOX/RP-1, Pc = 7 MPa, Me = 3.  Sea-level-optimized: pe ≈ 160 kPa > pa = 101 kPa. */
     private NozzleDesignParameters seaLevelParams;
 
     /** Same engine, Me = 6 (vacuum bell) at sea level: strongly overexpanded → separation. */

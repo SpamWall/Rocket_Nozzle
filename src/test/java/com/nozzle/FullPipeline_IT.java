@@ -25,12 +25,15 @@ import com.nozzle.chemistry.OFSweep;
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.core.PerformanceCalculator;
+import com.nozzle.export.CFDMeshExporter;
 import com.nozzle.export.CSVExporter;
+import com.nozzle.export.OpenFOAMExporter;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.io.DesignDocument;
 import com.nozzle.io.NozzleSerializer;
 import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.DualBellNozzle;
+import com.nozzle.moc.RaoNozzle;
 import com.nozzle.thermal.BoundaryLayerCorrection;
 import com.nozzle.thermal.HeatTransferModel;
 import com.nozzle.validation.NASASP8120Validator;
@@ -361,6 +364,37 @@ class FullPipeline_IT {
 
             assertThat(Files.exists(outFile)).isTrue();
             assertThat(outFile.toFile().length()).isGreaterThan(0L);
+        }
+
+        @Test
+        @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        @DisplayName("RaoNozzle direct export: NozzleDesignParameters → generate() → CFDMeshExporter produces a non-empty blockMeshDict")
+        void raoNozzleCfdMeshExportProducesNonEmptyFile(@TempDir Path tempDir) throws Exception {
+            NozzleDesignParameters params = loxRp1Params();
+            RaoNozzle nozzle = new RaoNozzle(params).generate();
+
+            Path outFile = tempDir.resolve("blockMeshDict");
+            new CFDMeshExporter().export(nozzle, outFile, CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
+
+            assertThat(outFile).exists();
+            assertThat(outFile.toFile().length()).isGreaterThan(0L);
+            assertThat(Files.readString(outFile)).contains("FoamFile");
+        }
+
+        @Test
+        @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        @DisplayName("DualBellNozzle direct export: NozzleDesignParameters → generate() → OpenFOAMExporter creates complete case directory")
+        void dualBellNozzleOpenFoamExportCreatesCompleteCaseDir(@TempDir Path tempDir) throws Exception {
+            NozzleDesignParameters params = loxRp1Params();
+            DualBellNozzle nozzle = new DualBellNozzle(params).generate();
+
+            Path caseDir = tempDir.resolve("dualbell_foam");
+            new OpenFOAMExporter().exportCase(nozzle, caseDir);
+
+            assertThat(caseDir.resolve("system/blockMeshDict")).exists();
+            assertThat(caseDir.resolve("system/controlDict")).exists();
+            assertThat(caseDir.resolve("constant/thermophysicalProperties")).exists();
+            assertThat(caseDir.resolve("0/p")).exists();
         }
     }
 

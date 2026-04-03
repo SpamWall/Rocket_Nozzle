@@ -294,7 +294,7 @@ public final class GibbsMinimizer {
         // Normalize output so fractions sum exactly to 1.0
         double sum = result.values().stream().mapToDouble(Double::doubleValue).sum();
         if (sum > 0) {
-            result.replaceAll((_, v) -> v / sum);
+            result.replaceAll((unused, v) -> v / sum);
         }
 
         return result;

@@ -23,6 +23,8 @@ package com.nozzle.export;
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.NozzleContour;
+import com.nozzle.moc.DualBellNozzle;
+import com.nozzle.moc.RaoNozzle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -214,7 +216,7 @@ class OpenFOAMExporter_UT {
         Path caseDir = tempDir.resolve("intensity");
         new OpenFOAMExporter().setTurbulenceIntensity(0.10).exportCase(params, contour, caseDir);
 
-        // intensity is written as %.3f at the turbulence initialisation line
+        // intensity is written as %.3f at the turbulence initialization line
         assertThat(Files.readString(caseDir.resolve("0/k"))).contains("0.100");
     }
 
@@ -266,6 +268,34 @@ class OpenFOAMExporter_UT {
                 Files.readString(caseFine.resolve("system/blockMeshDict")));
 
         assertThat(gradingFine).isGreaterThan(gradingCoarse);
+    }
+
+    @Test
+    @DisplayName("exportCase(RaoNozzle) creates all required OpenFOAM case files")
+    void exportCaseRaoNozzleCreatesAllRequiredFiles() throws IOException {
+        Path caseDir = tempDir.resolve("rao_case");
+        new OpenFOAMExporter().exportCase(new RaoNozzle(params).generate(), caseDir);
+
+        assertThat(caseDir.resolve("system/blockMeshDict")).exists();
+        assertThat(caseDir.resolve("system/controlDict")).exists();
+        assertThat(caseDir.resolve("constant/thermophysicalProperties")).exists();
+        assertThat(caseDir.resolve("0/p")).exists();
+        assertThat(caseDir.resolve("0/T")).exists();
+        assertThat(caseDir.resolve("0/U")).exists();
+    }
+
+    @Test
+    @DisplayName("exportCase(DualBellNozzle) creates all required OpenFOAM case files")
+    void exportCaseDualBellNozzleCreatesAllRequiredFiles() throws IOException {
+        Path caseDir = tempDir.resolve("dualbell_case");
+        new OpenFOAMExporter().exportCase(new DualBellNozzle(params).generate(), caseDir);
+
+        assertThat(caseDir.resolve("system/blockMeshDict")).exists();
+        assertThat(caseDir.resolve("system/controlDict")).exists();
+        assertThat(caseDir.resolve("constant/thermophysicalProperties")).exists();
+        assertThat(caseDir.resolve("0/p")).exists();
+        assertThat(caseDir.resolve("0/T")).exists();
+        assertThat(caseDir.resolve("0/U")).exists();
     }
 
     /** Extracts the first grading value from a {@code simpleGrading (1 ((0.2 0.2 <ratio>)(...)) 1)} line. */

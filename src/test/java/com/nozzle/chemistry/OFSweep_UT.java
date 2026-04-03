@@ -303,7 +303,7 @@ class OFSweep_UT {
      * The c* optimum lies at a lower O/F than the Isp optimum for
      * oxygen-bearing propellants in adiabatic mode.  The physical reason:
      * Cf increases with γ (higher γ → better expansion), and γ tends toward
-     * the oxidiser-rich side, so c*·Cf peaks at higher O/F than c* alone.
+     * the oxidizer-rich side, so c*·Cf peaks at higher O/F than c* alone.
      */
     @Nested
     @DisplayName("optimumCstar vs optimumIsp")

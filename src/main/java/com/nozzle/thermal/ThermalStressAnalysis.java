@@ -340,7 +340,7 @@ public class ThermalStressAnalysis {
                 1.0 / material.fatigueDuctilityExp());
 
         // Return the lower (more conservative) of the two estimates
-        return Math.max(0.5, Math.min(nfElastic, nfPlastic));
+        return Math.clamp(nfElastic, 0.5, nfPlastic);
     }
 
     // -----------------------------------------------------------------------
