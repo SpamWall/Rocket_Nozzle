@@ -69,8 +69,8 @@ import static org.assertj.core.api.Assertions.within;
  * <h2>Analogous tests</h2>
  *
  * <ul>
- *   <li>{@link PhysicsValidation_MOC_UT} — mass conservation in the MOC network</li>
- *   <li>{@link com.nozzle.core.PhysicsValidation_IsentropicRelations_UT} — isentropic
+ *   <li>{@code PhysicsValidation_MOC_UT} — mass conservation in the MOC network</li>
+ *   <li>{@code PhysicsValidation_IsentropicRelations_UT} — isentropic
  *       flow-relation accuracy for γ = 1.4</li>
  * </ul>
  */
