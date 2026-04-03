@@ -16,10 +16,7 @@ Continue to write all code using the Jakarta coding guidelines and accepted obje
 
   - CGNS binary export — currently just delegates to Plot3D. True CGNS would be compatible with more CFD solvers.
 
-  ---
 
-Create documentation for publishing as an open source project on github.
-Documentation
-README.MD
-tutorials
-LICENSE.TXT
+  Lower priority:
+
+  - A nozzle-type decision guide ("when to choose Aerospike vs. dual-bell vs. bell") — partially covered in tutorial.md already.

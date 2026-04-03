@@ -50,8 +50,8 @@ import static org.assertj.core.api.Assertions.within;
  *
  * <h2>Reference values</h2>
  *
- * <p>Reference values are solver outputs. Verify with NASA CEA using the
- * {@code tp} input decks documented in each nested class and replace with CEA values.
+ * <p>Reference values are NASA CEA ground truth, obtained by running the
+ * {@code tp} input decks documented in each nested class.
  * Tolerances follow the same scheme as {@link GibbsMinimizer_CEAValidation_UT}:
  * ±3 % relative for major species (mass fraction &gt; 0.05),
  * ±10 % relative for intermediate species (0.005–0.05), and ±0.002 absolute for
@@ -111,12 +111,12 @@ class GibbsMinimizer_N2OPropellants_UT {
     @DisplayName("N2O/Ethanol  O/F=5.0  T=3000 K  P=7 MPa")
     class N2oEthanol_OF5_3000K_7MPa {
 
-        // Reference values from solver output. Verify with CEA tp deck above.
-        private static final double REF_N2  = 0.53041;
-        private static final double REF_CO2 = 0.20490;
-        private static final double REF_H2O = 0.17699;
-        private static final double REF_CO  = 0.07226;
-        private static final double REF_OH  = 0.00741;
+        // Reference values from NASA CEA (tp deck above).
+        private static final double REF_N2  = 0.52752;
+        private static final double REF_CO2 = 0.19876;
+        private static final double REF_H2O = 0.17614;
+        private static final double REF_CO  = 0.07617;
+        private static final double REF_OH  = 0.00778;
 
         private Map<String, Double> result;
 
@@ -216,11 +216,11 @@ class GibbsMinimizer_N2OPropellants_UT {
     @DisplayName("N2O/Propane  O/F=7.5  T=3000 K  P=7 MPa")
     class N2oPropane_OF7p5_3000K_7MPa {
 
-        // Reference values from solver output. Verify with CEA tp deck above.
-        private static final double REF_N2  = 0.56161;
-        private static final double REF_H2O = 0.15493;
-        private static final double REF_CO2 = 0.13793;
-        private static final double REF_CO  = 0.13640;
+        // Reference values from NASA CEA (tp deck above).
+        private static final double REF_N2  = 0.56047;
+        private static final double REF_H2O = 0.15459;
+        private static final double REF_CO2 = 0.13451;
+        private static final double REF_CO  = 0.13857;
 
         private Map<String, Double> result;
 

@@ -57,16 +57,16 @@ structural analysis, and multi-format CAD/CFD export.
   for divergence angle, throat-arc radius, and exit-area ratio bounds
 
 ### Export
-| Format | Bell/TIC/Conical | Aerospike | Dual-Bell |
-|---|---|---|---|
-| CSV (contour, thermal, stress, altitude sweep) | ✓ | ✓ | ✓ |
-| DXF (2D wall profile + axis) | ✓ | ✓ | ✓ |
-| STEP (ISO 10303-21 revolved solid) | ✓ | ✓ | ✓ |
-| STL (binary/ASCII revolved mesh) | ✓ | ✓ | ✓ |
-| OpenFOAM blockMesh (5° wedge) | ✓ | ✓ (annular) | ✓ |
-| Gmsh .geo transfinite mesh | ✓ | ✓ | ✓ |
-| Plot3D / CGNS structured grid | ✓ | ✓ | ✓ |
-| OpenFOAM rhoCentralFoam case | ✓ | — | ✓ |
+| Format                                         | Bell/TIC/Conical | Aerospike   | Dual-Bell |
+|------------------------------------------------|------------------|-------------|-----------|
+| CSV (contour, thermal, stress, altitude sweep) | ✓                | ✓           | ✓         |
+| DXF (2D wall profile + axis)                   | ✓                | ✓           | ✓         |
+| STEP (ISO 10303-21 revolved solid)             | ✓                | ✓           | ✓         |
+| STL (binary/ASCII revolved mesh)               | ✓                | ✓           | ✓         |
+| OpenFOAM blockMesh (5° wedge)                  | ✓                | ✓ (annular) | ✓         |
+| Gmsh .geo transfinite mesh                     | ✓                | ✓           | ✓         |
+| Plot3D / CGNS structured grid                  | ✓                | ✓           | ✓         |
+| OpenFOAM rhoCentralFoam case                   | ✓                | —           | ✓         |
 
 ---
 
@@ -95,7 +95,7 @@ mvn exec:java -Dexec.mainClass="com.nozzle.Main"
 
 ### 1. Define design intent
 
-```java
+```
 NozzleDesignParameters params = NozzleDesignParameters.builder()
         .throatRadius(0.05)               // 50 mm throat radius
         .exitMach(3.5)
@@ -112,7 +112,7 @@ NozzleDesignParameters params = NozzleDesignParameters.builder()
 
 ### 2. Run the MOC solver
 
-```java
+```
 CharacteristicNet net = new CharacteristicNet(params).generate();
 
 System.out.printf("Wall points : %d%n", net.getWallPoints().size());
@@ -121,7 +121,7 @@ System.out.printf("Exit A/A*  : %.4f%n", net.calculateExitAreaRatio());
 
 ### 3. Build the wall contour
 
-```java
+```
 // From MOC wall points (recommended)
 NozzleContour contour = NozzleContour.fromMOCWallPoints(params, net.getWallPoints());
 contour.generate(200);   // 200 discrete points along the wall
@@ -133,7 +133,7 @@ raoContour.generate(200);
 
 ### 4. Calculate performance
 
-```java
+```
 BoundaryLayerCorrection bl  = new BoundaryLayerCorrection(params, net).calculate();
 HeatTransferModel       htr = new HeatTransferModel(params, net, bl).calculate();
 ChemistryModel          chem = ChemistryModel.equilibrium(params.gasProperties());
@@ -150,7 +150,7 @@ System.out.printf("Efficiency : %.2f %%%n",   perf.getEfficiency() * 100);
 
 ## O/F Sweep and Optimum Search
 
-```java
+```
 OFSweep sweep = OFSweep.adiabatic(
         OFSweep.Propellant.LOX_RP1,
         7e6,    // Pc (Pa)
@@ -173,7 +173,7 @@ NozzleDesignParameters optimisedParams = NozzleDesignParameters.builder()
 
 ## Aerospike Nozzle
 
-```java
+```
 AerospikeNozzle aero = new AerospikeNozzle(
         params,
         0.4,   // spike inner-to-throat radius ratio
@@ -195,7 +195,7 @@ AltitudePerformance ap = aero.calculateAltitudePerformance(altitudes);
 
 ## Dual-Bell Nozzle
 
-```java
+```
 DualBellNozzle db = new DualBellNozzle(params, 4.0).generate();  // transition AR = 4.0
 
 DualBellNozzle.PerformanceSummary s = db.getPerformanceSummary();
@@ -209,7 +209,7 @@ System.out.printf("Transition at    : %.0f Pa%n",  s.transitionPressure());
 
 ## Thermal Analysis
 
-```java
+```
 // Boundary layer and convective heat transfer
 BoundaryLayerCorrection bl  = new BoundaryLayerCorrection(params, net).calculate();
 HeatTransferModel       htr = new HeatTransferModel(params, net, bl).calculate();
@@ -235,22 +235,22 @@ System.out.printf("Fatigue life         : %.0f cycles%n", stress.getFatigueLife(
 ## CAD and CFD Export
 
 ### DXF (2D profile)
-```java
+```
 new DXFExporter()
         .setScaleFactor(1000)        // metres → mm
         .exportContour(contour, Path.of("nozzle.dxf"));
 ```
 
 ### STEP (3D solid)
-```java
+```
 new STEPExporter()
         .setScaleFactor(1000)
-        .setAuthor("Craig Walters")
+        .setAuthor("YOUR NAME HERE")
         .exportRevolvedSolid(contour, Path.of("nozzle.step"));
 ```
 
 ### STL (3D mesh)
-```java
+```
 new STLExporter()
         .setCircumferentialSegments(72)
         .setBinaryFormat(true)
@@ -258,7 +258,7 @@ new STLExporter()
 ```
 
 ### CFD mesh files
-```java
+```
 CFDMeshExporter cfd = new CFDMeshExporter()
         .setAxialCells(200)
         .setRadialCells(80)
@@ -274,7 +274,7 @@ cfd.export(new RaoNozzle(params).generate(), Path.of("blockMeshDict"),
 ```
 
 ### Complete OpenFOAM case (rhoCentralFoam)
-```java
+```
 new OpenFOAMExporter()
         .setAxialCells(300)
         .setRadialCells(100)
@@ -296,7 +296,7 @@ blockMesh && rhoCentralFoam
 
 ## Persistent Workflows (Serialization)
 
-```java
+```
 // Stage 1 — save design intent
 DesignDocument doc = DesignDocument.parametersOnly(params);
 NozzleSerializer.save(doc, Path.of("nozzle.json"));
@@ -306,7 +306,7 @@ DesignDocument loaded = NozzleSerializer.load(Path.of("nozzle.json"));
 CharacteristicNet net = new CharacteristicNet(loaded.parameters()).generate();
 NozzleSerializer.save(loaded.withNet(net), Path.of("nozzle.json"));
 
-// Stage 3 — load and analyse
+// Stage 3 — load and analyze
 DesignDocument solved = NozzleSerializer.load(Path.of("nozzle.json"));
 // ... run performance, thermal, export ...
 ```
@@ -315,7 +315,7 @@ DesignDocument solved = NozzleSerializer.load(Path.of("nozzle.json"));
 
 ## NASA SP-8120 Validation
 
-```java
+```
 NASASP8120Validator validator = new NASASP8120Validator(params, net, contour);
 List<String> warnings = validator.validate();
 if (warnings.isEmpty()) {
@@ -329,17 +329,17 @@ if (warnings.isEmpty()) {
 
 ## Package Overview
 
-| Package | Contents |
-|---|---|
-| `com.nozzle.core` | `NozzleDesignParameters`, `GasProperties`, `PerformanceCalculator`, `FlowSeparationPredictor` |
-| `com.nozzle.moc` | `CharacteristicNet`, `RaoNozzle`, `AerospikeNozzle`, `DualBellNozzle`, `CharacteristicPoint` |
-| `com.nozzle.geometry` | `NozzleContour` (five contour families), `Point2D` |
-| `com.nozzle.chemistry` | `ChemistryModel`, `OFSweep`, `GibbsMinimizer`, `NasaSpeciesDatabase` |
-| `com.nozzle.thermal` | `HeatTransferModel`, `BoundaryLayerCorrection`, `CoolantChannel`, `ThermalStressAnalysis`, `AblativeNozzleModel`, `RadiationCooledExtension` |
-| `com.nozzle.export` | `CFDMeshExporter`, `OpenFOAMExporter`, `CSVExporter`, `DXFExporter`, `STEPExporter`, `STLExporter`, `RevolvedMeshExporter` |
-| `com.nozzle.optimization` | `AltitudeAdaptiveOptimizer`, `MonteCarloUncertainty` |
-| `com.nozzle.validation` | `NASASP8120Validator` |
-| `com.nozzle.io` | `NozzleSerializer`, `DesignDocument` |
+| Package                   | Contents                                                                                                                                     |
+|---------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| `com.nozzle.core`         | `NozzleDesignParameters`, `GasProperties`, `PerformanceCalculator`, `FlowSeparationPredictor`                                                |
+| `com.nozzle.moc`          | `CharacteristicNet`, `RaoNozzle`, `AerospikeNozzle`, `DualBellNozzle`, `CharacteristicPoint`                                                 |
+| `com.nozzle.geometry`     | `NozzleContour` (five contour families), `Point2D`                                                                                           |
+| `com.nozzle.chemistry`    | `ChemistryModel`, `OFSweep`, `GibbsMinimizer`, `NasaSpeciesDatabase`                                                                         |
+| `com.nozzle.thermal`      | `HeatTransferModel`, `BoundaryLayerCorrection`, `CoolantChannel`, `ThermalStressAnalysis`, `AblativeNozzleModel`, `RadiationCooledExtension` |
+| `com.nozzle.export`       | `CFDMeshExporter`, `OpenFOAMExporter`, `CSVExporter`, `DXFExporter`, `STEPExporter`, `STLExporter`, `RevolvedMeshExporter`                   |
+| `com.nozzle.optimization` | `AltitudeAdaptiveOptimizer`, `MonteCarloUncertainty`                                                                                         |
+| `com.nozzle.validation`   | `NASASP8120Validator`                                                                                                                        |
+| `com.nozzle.io`           | `NozzleSerializer`, `DesignDocument`                                                                                                         |
 
 ---
 
