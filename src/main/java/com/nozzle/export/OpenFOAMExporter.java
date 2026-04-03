@@ -24,6 +24,8 @@ import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
+import com.nozzle.moc.DualBellNozzle;
+import com.nozzle.moc.RaoNozzle;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -234,6 +236,33 @@ public class OpenFOAMExporter {
         }
 
         LOG.debug("OpenFOAM case export complete → {}", caseDir);
+    }
+
+    /**
+     * Convenience overload that exports a complete OpenFOAM case for a Rao bell nozzle.
+     *
+     * @param nozzle  Rao bell nozzle (must have been generated)
+     * @param caseDir Output directory (created if absent)
+     * @throws IOException on any file write failure
+     */
+    public void exportCase(RaoNozzle nozzle, Path caseDir) throws IOException {
+        exportCase(nozzle.getParameters(),
+                NozzleContour.fromPoints(nozzle.getParameters(), nozzle.getContourPoints()),
+                caseDir);
+    }
+
+    /**
+     * Convenience overload that exports a complete OpenFOAM case for a dual-bell nozzle.
+     * The full contour (base bell + extension) is exported.
+     *
+     * @param nozzle  Dual-bell nozzle (must have been generated)
+     * @param caseDir Output directory (created if absent)
+     * @throws IOException on any file write failure
+     */
+    public void exportCase(DualBellNozzle nozzle, Path caseDir) throws IOException {
+        exportCase(nozzle.getParameters(),
+                NozzleContour.fromPoints(nozzle.getParameters(), nozzle.getContourPoints()),
+                caseDir);
     }
 
     // -------------------------------------------------------------------------

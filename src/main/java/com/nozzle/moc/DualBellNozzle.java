@@ -289,6 +289,9 @@ public class DualBellNozzle {
         return Collections.unmodifiableList(contourPoints);
     }
 
+    /** Returns the design parameters used to construct this nozzle. */
+    public NozzleDesignParameters getParameters() { return parameters; }
+
     /** Axial length of the base-bell section (m). */
     public double getBaseLength()        { return baseLength; }
 

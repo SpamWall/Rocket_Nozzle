@@ -6,15 +6,6 @@ Continue to write all code using the Jakarta coding guidelines and accepted obje
         N₂O REF values are solver outputs, not NASA CEA. Running the two tp decks (embedded in each test
         class) would promote them to ground truth for both species fractions and MW/γ.
 
-  Chemistry — capability gap
-
-
-  Testing gaps
-
-  Geometry / design
-
-  Structural/thermal
-
   Infrastructure
 
   - Units class  — imperial/SI conversion at system boundaries; the library is pure SI internally which is correct, but callers always need this.
@@ -27,4 +18,8 @@ Continue to write all code using the Jakarta coding guidelines and accepted obje
 
   ---
 
-
+Create documentation for publishing as an open source project on github.
+Documentation
+README.MD
+tutorials
+LICENSE.TXT

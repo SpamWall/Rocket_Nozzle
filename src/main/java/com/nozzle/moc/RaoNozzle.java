@@ -208,7 +208,10 @@ public class RaoNozzle {
         }
         return new ArrayList<>(contourPoints);
     }
-    
+
+    /** Returns the design parameters used to construct this nozzle. */
+    public NozzleDesignParameters getParameters() { return parameters; }
+
     /**
      * Returns the actual nozzle length.
      *

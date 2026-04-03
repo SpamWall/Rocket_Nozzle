@@ -165,7 +165,37 @@ public class NozzleContour {
         contour.generateSpline();
         return contour;
     }
-    
+
+    /**
+     * Factory method that builds a {@link ContourType#MOC_GENERATED} contour directly
+     * from a pre-computed wall-point sequence (e.g. from {@link com.nozzle.moc.RaoNozzle}
+     * or {@link com.nozzle.moc.DualBellNozzle}).
+     *
+     * <p>The supplied points are stored as-is in {@code contourPoints} so that
+     * {@link #getContourPoints()} returns the original geometry without re-interpolation.
+     * Control points are filtered to a minimum spacing of {@code 0.05 × r_throat} before
+     * fitting the cubic spline, keeping {@link #getRadiusAt(double)} well-conditioned.
+     *
+     * @param parameters Design parameters for the nozzle
+     * @param points     Ordered wall points (x = axial, y = radial, both in metres)
+     * @return A fully initialised {@code NozzleContour} backed by the supplied points
+     */
+    public static NozzleContour fromPoints(NozzleDesignParameters parameters,
+                                           List<Point2D> points) {
+        NozzleContour contour = new NozzleContour(ContourType.MOC_GENERATED, parameters);
+        double minSpacing = parameters.throatRadius() * 0.05;
+        double lastX = Double.NEGATIVE_INFINITY;
+        for (Point2D point : points) {
+            if (point.x() - lastX >= minSpacing) {
+                contour.controlPoints.add(point);
+                lastX = point.x();
+            }
+        }
+        contour.generateSpline();
+        contour.contourPoints.addAll(points);
+        return contour;
+    }
+
     /**
      * Generates (or regenerates) the discrete wall-contour point list.
      * The generation algorithm is selected by the {@link ContourType} supplied
