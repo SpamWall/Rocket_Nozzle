@@ -350,4 +350,146 @@ class NozzleContour_UT {
             assertThat(contour.calculateSurfaceArea()).isEqualTo(0.0);
         }
     }
+
+    // =========================================================================
+    //  Truncated Ideal Contour (TIC) tests
+    //
+    //  Shared design: r_t = 50 mm, M_D = 2.5, θ_n = 25°, f = 0.8, γ = 1.4 (AIR)
+    //  Expected TIC exit conditions (derived from the PM parameterisation):
+    //    M_n = machFromPM(25°)  ≈ 1.79
+    //    ν_n = PM(M_n)          ≈ 25°
+    //    ν_e = PM(2.5)          ≈ 39.12°
+    //    ν_TIC = ν_n + 0.8×(ν_e−ν_n)  → M_TIC < 2.5, r_TIC < r_e_full
+    //    θ_e = 0.2 × 25° = 5°
+    // =========================================================================
+
+    @Nested
+    @DisplayName("Truncated Ideal Contour (TIC)")
+    class TruncatedIdealContourTests {
+
+        private static final int N = 100;
+
+        @Test
+        @DisplayName("ContourType is TRUNCATED_IDEAL")
+        void typeIsTruncatedIdeal() {
+            NozzleContour contour = new NozzleContour(
+                    NozzleContour.ContourType.TRUNCATED_IDEAL, params);
+            assertThat(contour.getType()).isEqualTo(NozzleContour.ContourType.TRUNCATED_IDEAL);
+        }
+
+        @Test
+        @DisplayName("generate() produces the requested number of contour points")
+        void generateProducesCorrectPointCount() {
+            NozzleContour contour = new NozzleContour(
+                    NozzleContour.ContourType.TRUNCATED_IDEAL, params);
+            contour.generate(N);
+            assertThat(contour.getContourPoints()).hasSize(N);
+        }
+
+        @Test
+        @DisplayName("First point y-coordinate is at the throat radius")
+        void firstPointAtThroatRadius() {
+            NozzleContour contour = new NozzleContour(
+                    NozzleContour.ContourType.TRUNCATED_IDEAL, params);
+            contour.generate(N);
+            assertThat(contour.getContourPoints().getFirst().y())
+                    .isCloseTo(params.throatRadius(), within(1e-4));
+        }
+
+        @Test
+        @DisplayName("All x-coordinates are monotonically non-decreasing")
+        void xCoordinatesMonotonic() {
+            NozzleContour contour = new NozzleContour(
+                    NozzleContour.ContourType.TRUNCATED_IDEAL, params);
+            contour.generate(N);
+            List<Point2D> pts = contour.getContourPoints();
+            for (int i = 1; i < pts.size(); i++) {
+                assertThat(pts.get(i).x())
+                        .as("x[%d] >= x[%d]", i, i - 1)
+                        .isGreaterThanOrEqualTo(pts.get(i - 1).x());
+            }
+        }
+
+        @Test
+        @DisplayName("All y-coordinates (radii) are positive")
+        void allRadiiPositive() {
+            NozzleContour contour = new NozzleContour(
+                    NozzleContour.ContourType.TRUNCATED_IDEAL, params);
+            contour.generate(N);
+            for (Point2D pt : contour.getContourPoints()) {
+                assertThat(pt.y()).as("radius at x=%.4f", pt.x()).isPositive();
+            }
+        }
+
+        @Test
+        @DisplayName("Last point y-coordinate matches PM-interpolated TIC exit radius")
+        void lastPointAtTicExitRadius() {
+            NozzleContour contour = new NozzleContour(
+                    NozzleContour.ContourType.TRUNCATED_IDEAL, params);
+            contour.generate(N);
+
+            GasProperties gas = params.gasProperties();
+            double thetaN  = params.wallAngleInitial();
+            double mDesign = params.exitMach();
+            double f       = params.lengthFraction();
+
+            double mN   = gas.machFromPrandtlMeyer(thetaN);
+            double nuN  = gas.prandtlMeyerFunction(mN);
+            double nuE  = gas.prandtlMeyerFunction(mDesign);
+            double nuTIC = nuN + f * (nuE - nuN);
+            double mTIC  = gas.machFromPrandtlMeyer(nuTIC);
+            double rTIC  = params.throatRadius() * Math.sqrt(gas.areaRatio(mTIC));
+
+            assertThat(contour.getContourPoints().getLast().y())
+                    .isCloseTo(rTIC, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("TIC (f=0.8) is shorter than full ideal (f=1.0) for the same design Mach")
+        void truncatedIsShorterThanFull() {
+            NozzleDesignParameters fullParams = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(2.5).chamberPressure(7e6)
+                    .chamberTemperature(3500).ambientPressure(101325)
+                    .gasProperties(GasProperties.AIR).numberOfCharLines(15)
+                    .wallAngleInitialDegrees(25).lengthFraction(1.0).axisymmetric(true)
+                    .build();
+
+            NozzleContour tic08 = new NozzleContour(
+                    NozzleContour.ContourType.TRUNCATED_IDEAL, params).generate(N);   // f=0.8
+            NozzleContour tic10 = new NozzleContour(
+                    NozzleContour.ContourType.TRUNCATED_IDEAL, fullParams).generate(N); // f=1.0
+
+            assertThat(tic08.getLength()).isLessThan(tic10.getLength());
+        }
+
+        @Test
+        @DisplayName("At f=1.0, TIC exit radius equals the full design exit radius")
+        void fullTicExitRadiusMatchesDesign() {
+            NozzleDesignParameters fullParams = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(2.5).chamberPressure(7e6)
+                    .chamberTemperature(3500).ambientPressure(101325)
+                    .gasProperties(GasProperties.AIR).numberOfCharLines(15)
+                    .wallAngleInitialDegrees(25).lengthFraction(1.0).axisymmetric(true)
+                    .build();
+
+            NozzleContour tic = new NozzleContour(
+                    NozzleContour.ContourType.TRUNCATED_IDEAL, fullParams).generate(N);
+
+            assertThat(tic.getContourPoints().getLast().y())
+                    .isCloseTo(fullParams.exitRadius(), within(1e-4));
+        }
+
+        @Test
+        @DisplayName("TIC is shorter than Rao bell for the same parameters (TIC has no bell optimization)")
+        void ticShorterThanRaoBellForSameParams() {
+            NozzleContour tic = new NozzleContour(
+                    NozzleContour.ContourType.TRUNCATED_IDEAL, params).generate(N);
+            NozzleContour rao = new NozzleContour(
+                    NozzleContour.ContourType.RAO_BELL, params).generate(N);
+            // Both use lengthFraction=0.8 but reference different exit radii:
+            // TIC exits at r_TIC < r_e_full; Rao exits at r_e_full.
+            assertThat(tic.getContourPoints().getLast().y())
+                    .isLessThan(rao.getContourPoints().getLast().y());
+        }
+    }
 }

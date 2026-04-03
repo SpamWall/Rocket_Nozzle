@@ -20,6 +20,7 @@
 
 package com.nozzle.geometry;
 
+import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.moc.CharacteristicPoint;
 
@@ -32,11 +33,16 @@ import java.util.List;
  * geometry services (radius, slope, surface area) used by heat-transfer
  * and performance analyses.
  *
- * <p>Four contour families are supported:
+ * <p>Five contour families are supported:
  * <ul>
  *   <li>{@link ContourType#CONICAL} — straight conical wall, the simplest baseline.</li>
  *   <li>{@link ContourType#RAO_BELL} — cubic Bézier bell contour that approximates the
  *       Rao thrust-optimized shape without a full MOC solve.</li>
+ *   <li>{@link ContourType#TRUNCATED_IDEAL} — Truncated Ideal Contour (TIC): the ideal
+ *       nozzle (perfectly uniform exit flow at the design Mach) is parameterized in
+ *       Prandtl-Meyer space and truncated at {@code lengthFraction × L_ref}.  Widely
+ *       used in upper stages where simplicity and predictable separation behavior are
+ *       more important than the last fraction of a percent of thrust.</li>
  *   <li>{@link ContourType#CUSTOM_SPLINE} — user-supplied control points fitted with a
  *       natural cubic spline.</li>
  *   <li>{@link ContourType#MOC_GENERATED} — wall points produced by {@link
@@ -62,6 +68,32 @@ public class NozzleContour {
         CONICAL,
         /** Rao-style bell nozzle approximated with a cubic Bézier curve. */
         RAO_BELL,
+        /**
+         * Truncated Ideal Contour (TIC).
+         *
+         * <p>The ideal nozzle for design Mach {@code exitMach} produces perfectly
+         * uniform, parallel flow at its exit when run to its full length.  This
+         * family truncates that ideal contour at {@code lengthFraction × L_ref}
+         * (where {@code L_ref} is the 15° reference-cone length to the full exit
+         * radius), yielding a shorter nozzle with a small but non-zero residual
+         * exit wall angle.
+         *
+         * <p>The wall is parameterized in Prandtl-Meyer space: the PM angle is
+         * linearly interpolated between the inflection value ν_n = ν(M_n) and
+         * the design value ν_e = ν(M_D) at the truncation fraction, which gives
+         * the TIC exit Mach M_TIC and radius r_TIC.  The exit wall angle is
+         * {@code (1 − f) × θ_n}, where θ_n is {@code wallAngleInitial} and f is
+         * {@code lengthFraction}.  A cubic Bézier blends the inflection point to
+         * the TIC exit with the correct tangent slopes at both ends.
+         *
+         * <p>Role of each design parameter:
+         * <ul>
+         *   <li>{@code wallAngleInitial} — throat-arc inflection angle θ_n</li>
+         *   <li>{@code exitMach}         — full ideal nozzle design Mach M_D</li>
+         *   <li>{@code lengthFraction}   — truncation fraction f ∈ (0, 1]</li>
+         * </ul>
+         */
+        TRUNCATED_IDEAL,
         /**
          * Nozzle wall defined by user-supplied control points and interpolated
          * with a natural cubic spline.
@@ -148,8 +180,9 @@ public class NozzleContour {
         contourPoints.clear();
         
         switch (type) {
-            case CONICAL -> generateConicalContour(numPoints);
-            case RAO_BELL -> generateBellContour(numPoints);
+            case CONICAL          -> generateConicalContour(numPoints);
+            case RAO_BELL         -> generateBellContour(numPoints);
+            case TRUNCATED_IDEAL  -> generateTruncatedIdealContour(numPoints);
             case CUSTOM_SPLINE, MOC_GENERATED -> generateSplineContour(numPoints);
         }
         
@@ -238,6 +271,89 @@ public class NozzleContour {
         }
     }
     
+    /**
+     * Populates {@code contourPoints} with a Truncated Ideal Contour (TIC).
+     *
+     * <p>The algorithm:
+     * <ol>
+     *   <li>Circular throat arc (radius 0.382 × r_t) from 0 to θ_n.</li>
+     *   <li>Mach at inflection: M_n = machFromPrandtlMeyer(θ_n); ν_n = ν(M_n).</li>
+     *   <li>Design PM angle: ν_e = ν(M_D) for the full ideal nozzle.</li>
+     *   <li>TIC exit: ν_TIC = ν_n + f × (ν_e − ν_n) → M_TIC, r_TIC = r_t √(A/A*(M_TIC)).</li>
+     *   <li>Exit wall angle: θ_e = (1 − f) × θ_n (zero at f = 1).</li>
+     *   <li>TIC length: f × (r_full − r_t) / tan(15°), where r_full = r_t √(A/A*(M_D)).</li>
+     *   <li>Cubic Bézier from inflection point to (x_TIC, r_TIC).</li>
+     * </ol>
+     *
+     * @param numPoints Total points (throat arc + Bézier divergent section)
+     */
+    private void generateTruncatedIdealContour(int numPoints) {
+        double rt      = parameters.throatRadius();
+        GasProperties gas = parameters.gasProperties();
+        double thetaN  = parameters.wallAngleInitial();   // inflection angle (rad)
+        double mDesign = parameters.exitMach();           // full ideal design Mach
+        double f       = parameters.lengthFraction();     // truncation fraction
+
+        // ------------------------------------------------------------------
+        // 1. Circular throat arc: r_cd = 0.382 × r_t, sweeping 0 → θ_n
+        // ------------------------------------------------------------------
+        double rcd = 0.382 * rt;
+        int throatPts = Math.max(5, numPoints / 10);
+        for (int i = 0; i <= throatPts; i++) {
+            double angle = thetaN * i / throatPts;
+            contourPoints.add(new Point2D(
+                    rcd * Math.sin(angle),
+                    rt  + rcd * (1.0 - Math.cos(angle))));
+        }
+        Point2D p0 = contourPoints.getLast();
+
+        // ------------------------------------------------------------------
+        // 2. Prandtl-Meyer angles at inflection and at full design Mach
+        // ------------------------------------------------------------------
+        double mN  = gas.machFromPrandtlMeyer(thetaN);   // Mach at end of throat arc
+        double nuN = gas.prandtlMeyerFunction(mN);        // ≈ θ_n
+        double nuE = gas.prandtlMeyerFunction(mDesign);
+
+        // ------------------------------------------------------------------
+        // 3. TIC exit conditions (linear interpolation in PM space)
+        //    At f = 1: ν_TIC = ν_e → M_TIC = M_D, θ_e = 0 (ideal parallel exit)
+        //    At f < 1: M_TIC < M_D, θ_e = (1−f)×θ_n > 0 (residual divergence)
+        // ------------------------------------------------------------------
+        double nuTIC  = nuN + f * (nuE - nuN);
+        double mTIC   = gas.machFromPrandtlMeyer(nuTIC);
+        double rTIC   = rt * Math.sqrt(gas.areaRatio(mTIC));
+        double thetaE = (1.0 - f) * thetaN;
+
+        // ------------------------------------------------------------------
+        // 4. TIC axial length = f × (reference 15° cone length to full exit)
+        // ------------------------------------------------------------------
+        double reFull = rt * Math.sqrt(gas.areaRatio(mDesign));
+        double lTIC   = f * (reFull - rt) / Math.tan(Math.toRadians(15.0));
+
+        // ------------------------------------------------------------------
+        // 5. Cubic Bézier: inflection → (x0 + lTIC, rTIC)
+        //    Entry slope = tan(θ_n);  exit slope = tan(θ_e)
+        // ------------------------------------------------------------------
+        double x0  = p0.x();
+        double y0  = p0.y();
+        double x3  = x0 + lTIC;
+        double y3  = rTIC;
+        double dx  = x3 - x0;
+        double cx1 = x0 + dx / 3.0;
+        double cy1 = y0 + (dx / 3.0) * Math.tan(thetaN);
+        double cx2 = x3 - dx / 3.0;
+        double cy2 = y3 - (dx / 3.0) * Math.tan(thetaE);
+
+        int bellPts = numPoints - throatPts - 1;
+        for (int i = 1; i <= bellPts; i++) {
+            double t = (double) i / bellPts;
+            double u = 1.0 - t;
+            contourPoints.add(new Point2D(
+                    u*u*u*x0 + 3*u*u*t*cx1 + 3*u*t*t*cx2 + t*t*t*x3,
+                    u*u*u*y0 + 3*u*u*t*cy1 + 3*u*t*t*cy2 + t*t*t*y3));
+        }
+    }
+
     /**
      * Fits a natural cubic spline through {@code controlPoints} and stores the
      * piecewise polynomial coefficients in {@code splineCoeffA/B/C/D}.

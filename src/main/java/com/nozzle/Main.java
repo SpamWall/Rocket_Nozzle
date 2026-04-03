@@ -96,6 +96,7 @@ public class Main {
             // Run demonstrations
             demonstrateBasicDesign(outputDir);
             demonstrateRaoComparison();
+            demonstrateTruncatedIdealContour();
             demonstrateThermalAnalysis(outputDir);
             demonstrateChemistryModeling();
             demonstrateValidation();
@@ -221,6 +222,78 @@ public class Main {
         System.out.printf("  Cf difference:    %.4f%n", comparison.thrustCoefficientDifference());
     }
     
+    /**
+     * Demonstrates Truncated Ideal Contour (TIC) as a fifth contour family.
+     *
+     * <p>Compares TIC at three truncation fractions against the Rao bell for the
+     * same design Mach.  Shows how the TIC exit radius and nozzle length change
+     * with truncation, and that f = 1 recovers the full ideal exit radius.
+     */
+    private static void demonstrateTruncatedIdealContour() {
+        System.out.println("\n--- TRUNCATED IDEAL CONTOUR (TIC) ---\n");
+
+        final double RT      = 0.05;
+        final double M_D     = 3.0;
+        final double THETA_N = 30.0;   // initial wall angle (degrees)
+
+        NozzleDesignParameters base = NozzleDesignParameters.builder()
+                .throatRadius(RT)
+                .exitMach(M_D)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500)
+                .ambientPressure(101325)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(25)
+                .wallAngleInitialDegrees(THETA_N)
+                .lengthFraction(0.8)          // overridden per row below
+                .axisymmetric(true)
+                .build();
+
+        System.out.printf("Design Mach M_D = %.1f  (full exit A/A* = %.2f,  r_e = %.1f mm)%n",
+                M_D, base.exitAreaRatio(), base.exitRadius() * 1000);
+        System.out.printf("Throat radius   = %.0f mm   Initial wall angle θ_n = %.0f°%n%n",
+                RT * 1000, THETA_N);
+
+        System.out.println("  f     TIC exit A/A*   TIC exit r (mm)   TIC length (mm)   θ_exit (°)");
+        System.out.println("  " + "-".repeat(65));
+
+        for (double f : new double[]{0.6, 0.8, 1.0}) {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .throatRadius(RT).exitMach(M_D).chamberPressure(7e6)
+                    .chamberTemperature(3500).ambientPressure(101325)
+                    .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                    .numberOfCharLines(25).wallAngleInitialDegrees(THETA_N)
+                    .lengthFraction(f).axisymmetric(true).build();
+
+            NozzleContour tic = new NozzleContour(NozzleContour.ContourType.TRUNCATED_IDEAL, p)
+                    .generate(200);
+
+            double rTIC     = tic.getContourPoints().getLast().y();
+            double arTIC    = (rTIC / RT) * (rTIC / RT);   // (r/r_t)^2 = A/A*
+            double lTIC     = tic.getLength() * 1000;       // mm
+            double thetaE   = (1.0 - f) * THETA_N;
+
+            System.out.printf("  %.1f   %10.3f       %12.2f        %12.2f       %5.2f°%n",
+                    f, arTIC, rTIC * 1000, lTIC, thetaE);
+        }
+
+        // Compare TIC (f=0.8) with Rao bell (f=0.8) side by side
+        NozzleContour tic = new NozzleContour(NozzleContour.ContourType.TRUNCATED_IDEAL, base)
+                .generate(200);
+        NozzleContour rao = new NozzleContour(NozzleContour.ContourType.RAO_BELL, base)
+                .generate(200);
+
+        System.out.println();
+        System.out.printf("Comparison at f = 0.8 (θ_n = %.0f°):%n", THETA_N);
+        System.out.printf("  TIC:      length = %6.2f mm   exit r = %5.2f mm   exit A/A* = %5.2f%n",
+                tic.getLength() * 1000, tic.getContourPoints().getLast().y() * 1000,
+                Math.pow(tic.getContourPoints().getLast().y() / RT, 2));
+        System.out.printf("  Rao bell: length = %6.2f mm   exit r = %5.2f mm   exit A/A* = %5.2f%n",
+                rao.getLength() * 1000, rao.getContourPoints().getLast().y() * 1000,
+                Math.pow(rao.getContourPoints().getLast().y() / RT, 2));
+        System.out.println("  (TIC exits at a lower A/A* because truncation stops before full M_D)");
+    }
+
     /**
      * Demonstrates thermal and boundary layer analysis.
      */
