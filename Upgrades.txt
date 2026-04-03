@@ -13,7 +13,6 @@ Continue to write all code using the Jakarta coding guidelines and accepted obje
 
   Testing gaps
 
-  - DesignDocument_UT — the only main class in the io package without a dedicated unit test.
   - PhysicsValidation_N2O_UT — physics-level check that N₂O element conservation holds across a range of O/F ratios (analogous to PhysicsValidation_IsentropicRelations_UT for the chemistry side).
 
   Geometry / design
