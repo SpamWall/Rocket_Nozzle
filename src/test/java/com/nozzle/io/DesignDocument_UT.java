@@ -39,11 +39,11 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  *
  * <p>{@code DesignDocument} is a record whose compiler-generated accessors,
  * {@code equals}, {@code hashCode}, and {@code toString} are validated here
- * independently of the serializer.  The single hand-written method —
+ * independently of the serializer.  The single handwritten method —
  * {@link DesignDocument#parametersOnly} — is tested for correct field
  * assignment and for generating a parseable ISO-8601 timestamp.
  *
- * <p>Serialization round-trip behaviour is covered by
+ * <p>Serialization round-trip behavior is covered by
  * {@link NozzleSerializer_UT}; this class tests the record itself in
  * isolation.
  */

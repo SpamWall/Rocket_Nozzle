@@ -329,4 +329,151 @@ public class ChemistryModel {
     public Map<String, Double> getSpeciesMassFractions() {
         return new HashMap<>(composition.get());
     }
+
+    // -----------------------------------------------------------------------
+    // Frozen / equilibrium Isp comparison
+    // -----------------------------------------------------------------------
+
+    /**
+     * Result of a frozen-vs-equilibrium Isp comparison at a single operating point.
+     *
+     * <p>Equilibrium Isp exceeds frozen Isp because recombination reactions during
+     * nozzle expansion release the dissociation energy that was stored at the chamber
+     * conditions.  The delta is typically 1–4% for highly dissociating propellants
+     * (LOX/LH₂ at high temperature) and less than 1% for mixtures dominated by a
+     * stable inert diluent (N₂O propellants).
+     *
+     * @param frozenIsp      Isp computed with frozen specific-heat ratio γ in seconds
+     * @param equilibriumIsp Isp computed with equilibrium isentropic exponent γ_s in seconds
+     */
+    public record IspComparison(double frozenIsp, double equilibriumIsp) {
+
+        /**
+         * Returns the Isp gain due to equilibrium chemistry: {@code equilibriumIsp − frozenIsp}.
+         *
+         * @return Delta Isp in seconds (always ≥ 0 for physical combustion)
+         */
+        public double delta() {
+            return equilibriumIsp - frozenIsp;
+        }
+
+        /**
+         * Returns the Isp gain as a percentage of frozen Isp:
+         * {@code 100 × (equilibriumIsp − frozenIsp) / frozenIsp}.
+         *
+         * @return Percentage improvement (always ≥ 0 for physical combustion)
+         */
+        public double deltaPercent() {
+            return frozenIsp > 0 ? 100.0 * delta() / frozenIsp : 0.0;
+        }
+    }
+
+    /**
+     * Computes the ideal specific impulse using the supplied specific-heat ratio.
+     * Uses the same c*-Cf product formula as {@link com.nozzle.chemistry.OFSweep}:
+     * <pre>
+     *   c* = √(γ R T_c) / (γ · (2/(γ+1))^((γ+1)/(2(γ−1))))
+     *   Cf = √(2γ²/(γ−1) · (2/(γ+1))^((γ+1)/(γ−1)) · (1−(pe/pc)^((γ−1)/γ)))
+     *        + (pe − pa)/pc · Ae/At
+     *   Isp = c* · Cf / g₀
+     * </pre>
+     *
+     * @param gamma           Specific-heat ratio (frozen γ or equilibrium γ_s)
+     * @param molecularWeight Mean molecular weight M̄ in kg/kmol
+     * @param chamberTemp     Chamber stagnation temperature in K
+     * @param chamberPressure Chamber stagnation pressure in Pa
+     * @param exitMach        Design exit Mach number (≥ 1)
+     * @param ambientPressure Ambient back-pressure in Pa
+     * @return Ideal specific impulse in seconds
+     */
+    private static double ispFromGamma(double gamma, double molecularWeight,
+                                       double chamberTemp, double chamberPressure,
+                                       double exitMach, double ambientPressure) {
+        double R    = GasProperties.UNIVERSAL_GAS_CONSTANT / molecularWeight;
+        double gp1  = gamma + 1.0;
+        double gm1  = gamma - 1.0;
+
+        double cStar = Math.sqrt(gamma * R * chamberTemp) / gamma
+                       / Math.pow(2.0 / gp1, gp1 / (2.0 * gm1));
+
+        double pePc  = Math.pow(1.0 + gm1 / 2.0 * exitMach * exitMach, -gamma / gm1);
+        double aeAt  = (1.0 / exitMach)
+                       * Math.pow((2.0 / gp1) * (1.0 + gm1 / 2.0 * exitMach * exitMach),
+                                   gp1 / (2.0 * gm1));
+        double term1 = 2.0 * gamma * gamma / gm1 * Math.pow(2.0 / gp1, gp1 / gm1);
+        double term2 = 1.0 - Math.pow(pePc, gm1 / gamma);
+        double cf    = Math.sqrt(term1 * term2)
+                       + (pePc * chamberPressure - ambientPressure) / chamberPressure * aeAt;
+
+        return cStar * cf / 9.80665;
+    }
+
+    /**
+     * Calculates ideal specific impulse for frozen flow (constant composition).
+     * Uses the frozen specific-heat ratio γ from {@link #calculateGamma} at the
+     * given chamber temperature, together with the mean molecular weight M̄.
+     *
+     * <p>Requires that a propellant composition has been set via one of the
+     * {@code set*Composition} methods before calling this method.
+     *
+     * @param chamberTemp     Chamber stagnation temperature in K
+     * @param chamberPressure Chamber stagnation pressure in Pa
+     * @param exitMach        Design exit Mach number (≥ 1)
+     * @param ambientPressure Ambient back-pressure in Pa
+     * @return Frozen-flow Isp in seconds
+     */
+    public double calculateFrozenIsp(double chamberTemp, double chamberPressure,
+                                     double exitMach, double ambientPressure) {
+        double gamma = calculateGamma(chamberTemp);
+        double mw    = calculateMolecularWeight();
+        return ispFromGamma(gamma, mw, chamberTemp, chamberPressure, exitMach, ambientPressure);
+    }
+
+    /**
+     * Calculates ideal specific impulse for equilibrium flow (shifting composition).
+     * Uses the equilibrium isentropic exponent γ_s from {@link #calculateEquilibriumGamma}
+     * at the given chamber conditions, together with the mean molecular weight M̄.
+     *
+     * <p>Equilibrium Isp exceeds frozen Isp because recombination reactions during
+     * nozzle expansion release dissociation energy stored at the chamber conditions.
+     *
+     * <p>Requires that a propellant composition has been set and
+     * {@link #calculateEquilibrium} has been called before invoking this method.
+     *
+     * @param chamberTemp     Chamber stagnation temperature in K
+     * @param chamberPressure Chamber stagnation pressure in Pa
+     * @param exitMach        Design exit Mach number (≥ 1)
+     * @param ambientPressure Ambient back-pressure in Pa
+     * @return Equilibrium-flow Isp in seconds
+     */
+    public double calculateEquilibriumIsp(double chamberTemp, double chamberPressure,
+                                          double exitMach, double ambientPressure) {
+        double gamma = calculateEquilibriumGamma(chamberTemp, chamberPressure);
+        double mw    = calculateMolecularWeight();
+        return ispFromGamma(gamma, mw, chamberTemp, chamberPressure, exitMach, ambientPressure);
+    }
+
+    /**
+     * Computes frozen and equilibrium Isp at the same operating point and
+     * returns an {@link IspComparison} with both values and the derived delta.
+     *
+     * <p>Equivalent to calling {@link #calculateFrozenIsp} and
+     * {@link #calculateEquilibriumIsp} with the same arguments, but avoids
+     * recomputing M̄ twice.
+     *
+     * @param chamberTemp     Chamber stagnation temperature in K
+     * @param chamberPressure Chamber stagnation pressure in Pa
+     * @param exitMach        Design exit Mach number (≥ 1)
+     * @param ambientPressure Ambient back-pressure in Pa
+     * @return Frozen and equilibrium Isp with derived delta and delta-percent
+     */
+    public IspComparison compareIsp(double chamberTemp, double chamberPressure,
+                                    double exitMach, double ambientPressure) {
+        double mw      = calculateMolecularWeight();
+        double gammaF  = calculateGamma(chamberTemp);
+        double gammaEq = calculateEquilibriumGamma(chamberTemp, chamberPressure);
+        double ispF    = ispFromGamma(gammaF,  mw, chamberTemp, chamberPressure, exitMach, ambientPressure);
+        double ispEq   = ispFromGamma(gammaEq, mw, chamberTemp, chamberPressure, exitMach, ambientPressure);
+        return new IspComparison(ispF, ispEq);
+    }
 }

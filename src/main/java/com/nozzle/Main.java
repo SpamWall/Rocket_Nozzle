@@ -405,6 +405,34 @@ public class Main {
         System.out.println("  Species mass fractions:");
         eqModel.getSpeciesMassFractions().forEach((species, fraction) ->
                 System.out.printf("    %s: %.1f%%%n", species, fraction * 100));
+
+        // Frozen vs. equilibrium Isp comparison across propellant families
+        System.out.println("\nFrozen vs. Equilibrium Isp  (Tc=3500 K  Pc=7 MPa  Me=3.0  Pa=101 325 Pa)");
+        System.out.println("  Propellant          Frozen (s)  Equil. (s)  ΔIsp (s)  Δ%");
+        System.out.println("  " + "-".repeat(58));
+        record IspEntry(String label, ChemistryModel model) {}
+        ChemistryModel lh2Isp = ChemistryModel.equilibrium(GasProperties.LOX_LH2_PRODUCTS);
+        lh2Isp.setLoxLh2Composition(6.0);
+        lh2Isp.calculateEquilibrium(3500, 7e6);
+        ChemistryModel rp1Isp = ChemistryModel.equilibrium(GasProperties.LOX_RP1_PRODUCTS);
+        rp1Isp.setLoxRp1Composition(2.77);
+        rp1Isp.calculateEquilibrium(3500, 7e6);
+        ChemistryModel ch4Isp = ChemistryModel.equilibrium(GasProperties.LOX_CH4_PRODUCTS);
+        ch4Isp.setLoxCh4Composition(3.5);
+        ch4Isp.calculateEquilibrium(3500, 7e6);
+        ChemistryModel n2oIsp = ChemistryModel.equilibrium(GasProperties.N2O_ETHANOL_PRODUCTS);
+        n2oIsp.setN2oEthanolComposition(5.0);
+        n2oIsp.calculateEquilibrium(3500, 7e6);
+        for (IspEntry e : List.of(
+                new IspEntry("LOX/LH2   (O/F=6.0) ", lh2Isp),
+                new IspEntry("LOX/RP-1  (O/F=2.77)", rp1Isp),
+                new IspEntry("LOX/CH4   (O/F=3.5) ", ch4Isp),
+                new IspEntry("N2O/EtOH  (O/F=5.0) ", n2oIsp))) {
+            ChemistryModel.IspComparison cmp = e.model().compareIsp(3500, 7e6, 3.0, 101_325.0);
+            System.out.printf("  %s  %7.1f     %7.1f     %5.1f   %4.2f%%%n",
+                    e.label(), cmp.frozenIsp(), cmp.equilibriumIsp(),
+                    cmp.delta(), cmp.deltaPercent());
+        }
     }
     
     /**

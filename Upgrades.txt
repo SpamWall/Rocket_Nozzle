@@ -8,12 +8,8 @@ Continue to write all code using the Jakarta coding guidelines and accepted obje
 
   Chemistry — capability gap
 
-  - Frozen vs. equilibrium Isp comparison — the solver has both calculateGamma (frozen) and calculateEquilibriumGamma (equilibrium), but nothing computes the Isp delta between them, which is
-        a standard engineering quantity.
 
   Testing gaps
-
-  - PhysicsValidation_N2O_UT — physics-level check that N₂O element conservation holds across a range of O/F ratios (analogous to PhysicsValidation_IsentropicRelations_UT for the chemistry side).
 
   Geometry / design
 
