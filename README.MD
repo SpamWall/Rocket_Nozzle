@@ -18,6 +18,18 @@ structural analysis, and multi-format CAD/CFD export.
   truncation, and altitude compensation
 - **Dual-bell nozzle** — altitude-compensating two-section bell with sea-level and
   high-altitude Isp, transition pressure, and kink geometry
+- **Convergent section geometry** — `ConvergentSection` generates the full
+  chamber-to-throat wall contour: upstream circular arc (r_cu), conical section,
+  and chamber face; C¹-continuous throughout
+- **Configurable throat geometry** — `NozzleDesignParameters` exposes four new
+  optional parameters (all backward-compatible with existing call sites):
+  `throatCurvatureRatio` (r_cd/r_t, default 0.382), `upstreamCurvatureRatio`
+  (r_cu/r_t, default 1.5), `convergentHalfAngle` (default 30°), and
+  `contractionRatio` (Ac/At, default 4.0)
+- **Discharge coefficient** — `NozzleDesignParameters.dischargeCoefficient()`
+  computes the geometric sonic-line Cd from the Kliegel & Levine (1969)
+  harmonic-mean curvature model; for Rao defaults (r_cd/r_t = 0.382,
+  r_cu/r_t = 1.5, γ = 1.4) this gives Cd ≈ 0.9962
 
 ### Chemistry
 - **Frozen and equilibrium flow** — selectable per analysis stage
@@ -25,6 +37,9 @@ structural analysis, and multi-format CAD/CFD export.
   (H₂O, CO₂, CO, H₂, O₂, OH, O, H, N₂, NO, C, Ar and propellant-specific species)
 - **NASA-7 polynomial thermodynamics** — Cp, H, S for all species
 - **O/F sweep** — Isp(O/F) and c★(O/F) curves with golden-section optimum search
+- **Isp comparison** — `ChemistryModel.compareIsp()` returns an `IspComparison`
+  record with `frozenIsp`, `equilibriumIsp`, `delta()`, and `deltaPercent()`
+  at a single operating point
 - **Propellants** — LOX/RP-1, LOX/LH₂, LOX/CH₄, N₂O/Ethanol, N₂O/Propane
 
 ### Thermal and Structural Analysis
@@ -107,6 +122,11 @@ NozzleDesignParameters params = NozzleDesignParameters.builder()
         .wallAngleInitialDegrees(30)
         .lengthFraction(0.8)              // 80% of ideal nozzle length
         .axisymmetric(true)
+        // convergent-section geometry (all optional — defaults shown)
+        .throatCurvatureRatio(0.382)      // r_cd/r_t — classical Rao value
+        .upstreamCurvatureRatio(1.5)      // r_cu/r_t
+        .convergentHalfAngleDegrees(30)   // conical convergent half-angle
+        .contractionRatio(4.0)            // Ac/At
         .build();
 ```
 
@@ -171,6 +191,29 @@ NozzleDesignParameters optimisedParams = NozzleDesignParameters.builder()
 
 ---
 
+## Isp Comparison (Frozen vs Equilibrium)
+
+```
+ChemistryModel chem = ChemistryModel.equilibrium(GasProperties.LOX_RP1_PRODUCTS);
+
+ChemistryModel.IspComparison isp = chem.compareIsp(
+        3500,    // chamber temperature K
+        7e6,     // chamber pressure Pa
+        3.5,     // exit Mach
+        101_325  // ambient pressure Pa
+);
+
+System.out.printf("Frozen Isp     : %.1f s%n",   isp.frozenIsp());
+System.out.printf("Equilibrium Isp: %.1f s%n",   isp.equilibriumIsp());
+System.out.printf("Delta          : %.1f s%n",   isp.delta());
+System.out.printf("Delta %%        : %.2f %%%n", isp.deltaPercent());
+```
+
+`ChemistryModel` also exposes `calculateFrozenIsp` and
+`calculateEquilibriumIsp` separately if only one value is needed.
+
+---
+
 ## Aerospike Nozzle
 
 ```
@@ -203,6 +246,32 @@ System.out.printf("Sea-level Isp    : %.1f s%n",  s.seaLevelIsp());
 System.out.printf("High-altitude Isp: %.1f s%n",  s.highAltitudeIsp());
 System.out.printf("Isp gain         : %.1f s%n",  s.ispGain());
 System.out.printf("Transition at    : %.0f Pa%n",  s.transitionPressure());
+```
+
+---
+
+## Convergent Section
+
+`ConvergentSection` generates the wall contour from the chamber face to just
+upstream of the throat and computes the geometric discharge-coefficient
+correction arising from sonic-line curvature.
+
+```
+ConvergentSection conv = new ConvergentSection(params).generate(60);
+
+System.out.printf("Convergent length : %.3f m%n",  conv.getLength());
+System.out.printf("Chamber radius    : %.3f m%n",  conv.getChamberRadius());
+System.out.printf("Sonic-line Cd     : %.4f%n",    conv.getSonicLineCdCorrection());
+
+// Wall points can be prepended to a divergent contour
+List<Point2D> convergentWall = conv.getContourPoints();  // chamber face → just upstream of throat
+```
+
+The same Cd value is also available directly from the parameters record without
+constructing a `ConvergentSection`:
+
+```
+double cd = params.dischargeCoefficient();  // geometric sonic-line Cd
 ```
 
 ---
@@ -333,7 +402,7 @@ if (warnings.isEmpty()) {
 |---------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
 | `com.nozzle.core`         | `NozzleDesignParameters`, `GasProperties`, `PerformanceCalculator`, `FlowSeparationPredictor`                                                |
 | `com.nozzle.moc`          | `CharacteristicNet`, `RaoNozzle`, `AerospikeNozzle`, `DualBellNozzle`, `CharacteristicPoint`                                                 |
-| `com.nozzle.geometry`     | `NozzleContour` (five contour families), `Point2D`                                                                                           |
+| `com.nozzle.geometry`     | `NozzleContour` (five contour families), `ConvergentSection`, `Point2D`                                                                      |
 | `com.nozzle.chemistry`    | `ChemistryModel`, `OFSweep`, `GibbsMinimizer`, `NasaSpeciesDatabase`                                                                         |
 | `com.nozzle.thermal`      | `HeatTransferModel`, `BoundaryLayerCorrection`, `CoolantChannel`, `ThermalStressAnalysis`, `AblativeNozzleModel`, `RadiationCooledExtension` |
 | `com.nozzle.export`       | `CFDMeshExporter`, `OpenFOAMExporter`, `CSVExporter`, `DXFExporter`, `STEPExporter`, `STLExporter`, `RevolvedMeshExporter`                   |

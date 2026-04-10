@@ -100,6 +100,9 @@ End of instructions to Claude
 High value — currently missing or approximate
 
   - Geometry-complete CFD/CAD export. Every exporter today outputs only the divergent section. A real blockMesh or STEP file needs the full nozzle from injector face to exit. The convergent section is required geometry, not optional.
+  The geometry-complete export case alone is probably sufficient justification — it's a gap that affects every user who
+   takes output into a CFD or CAD tool.
+
   - Boundary layer growth. BoundaryLayerCorrection currently starts at the throat. The BL actually begins at the injector face and grows through the converging section, thickening the displacement body and reducing the effective throat area (the discharge coefficient Cd). Ignoring this understates the BL
   displacement thickness at the throat.
 
@@ -118,11 +121,8 @@ High value — currently missing or approximate
 
   What would actually need to be added
 
-  The geometry-complete export case alone is probably sufficient justification — it's a gap that affects every user who
-   takes output into a CFD or CAD tool.
-
   2. Convergent section length/angle — how long/steep the contracting section is before the throat. Affects boundary layer development and flow uniformity entering the throat.
-  3. Throat width (for 2D rectangular nozzles) — the depth into the page for a planar nozzle, used when designing nozzles for wind tunnels or linear aerospike segments.
+  3. Throat width (for 2D rectangular nozzles) — the depth into the page for a planar nozzle, used when designing nozzles for wind tunnels or linear Aerospike segments.
 
  Chemistry — natural follow-ons to this session's work
 
