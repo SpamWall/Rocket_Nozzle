@@ -341,6 +341,119 @@ class NozzleDesignParameters_UT {
                     .build())
                     .doesNotThrowAnyException();
         }
+
+        // --- upstreamCurvatureRatio ---
+
+        @Test
+        @DisplayName("Builder should use default upstream curvature ratio of 1.5")
+        void builderShouldUseDefaultUpstreamCurvatureRatio() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder().exitMach(2.0).build();
+            assertThat(p.upstreamCurvatureRatio())
+                    .isCloseTo(NozzleDesignParameters.DEFAULT_UPSTREAM_CURVATURE_RATIO, within(1e-9));
+        }
+
+        @Test
+        @DisplayName("Builder should accept custom upstream curvature ratio")
+        void builderShouldAcceptCustomUpstreamCurvatureRatio() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .exitMach(2.0).upstreamCurvatureRatio(2.0).build();
+            assertThat(p.upstreamCurvatureRatio()).isCloseTo(2.0, within(1e-9));
+        }
+
+        @Test
+        @DisplayName("Builder should reject upstream curvature ratio above 3.0")
+        void builderShouldRejectExcessiveUpstreamCurvatureRatio() {
+            assertThatThrownBy(() -> NozzleDesignParameters.builder()
+                    .exitMach(2.0).upstreamCurvatureRatio(3.1).build())
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Upstream curvature ratio");
+        }
+
+        @Test
+        @DisplayName("Builder should reject non-positive upstream curvature ratio")
+        void builderShouldRejectZeroUpstreamCurvatureRatio() {
+            assertThatThrownBy(() -> NozzleDesignParameters.builder()
+                    .exitMach(2.0).upstreamCurvatureRatio(0.0).build())
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        // --- convergentHalfAngle ---
+
+        @Test
+        @DisplayName("Builder should use default convergent half-angle of 30 degrees")
+        void builderShouldUseDefaultConvergentHalfAngle() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder().exitMach(2.0).build();
+            assertThat(Math.toDegrees(p.convergentHalfAngle())).isCloseTo(30.0, within(0.001));
+        }
+
+        @Test
+        @DisplayName("Builder should accept convergent half-angle in degrees")
+        void builderShouldAcceptConvergentHalfAngleDegrees() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .exitMach(2.0).convergentHalfAngleDegrees(45).build();
+            assertThat(Math.toDegrees(p.convergentHalfAngle())).isCloseTo(45.0, within(0.001));
+            assertThat(p.convergentHalfAngleDegrees()).isCloseTo(45.0, within(0.001));
+        }
+
+        @Test
+        @DisplayName("Builder should reject convergent half-angle below 5 degrees")
+        void builderShouldRejectTooSmallConvergentHalfAngle() {
+            assertThatThrownBy(() -> NozzleDesignParameters.builder()
+                    .exitMach(2.0).convergentHalfAngleDegrees(4).build())
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Convergent half-angle");
+        }
+
+        @Test
+        @DisplayName("Builder should reject convergent half-angle above 60 degrees")
+        void builderShouldRejectTooLargeConvergentHalfAngle() {
+            assertThatThrownBy(() -> NozzleDesignParameters.builder()
+                    .exitMach(2.0).convergentHalfAngleDegrees(61).build())
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        // --- contractionRatio ---
+
+        @Test
+        @DisplayName("Builder should use default contraction ratio of 4.0")
+        void builderShouldUseDefaultContractionRatio() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder().exitMach(2.0).build();
+            assertThat(p.contractionRatio())
+                    .isCloseTo(NozzleDesignParameters.DEFAULT_CONTRACTION_RATIO, within(1e-9));
+        }
+
+        @Test
+        @DisplayName("Builder should accept custom contraction ratio")
+        void builderShouldAcceptCustomContractionRatio() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .exitMach(2.0).contractionRatio(6.0).build();
+            assertThat(p.contractionRatio()).isCloseTo(6.0, within(1e-9));
+        }
+
+        @Test
+        @DisplayName("Builder should reject contraction ratio below 1.5")
+        void builderShouldRejectTooSmallContractionRatio() {
+            assertThatThrownBy(() -> NozzleDesignParameters.builder()
+                    .exitMach(2.0).contractionRatio(1.4).build())
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Contraction ratio");
+        }
+
+        @Test
+        @DisplayName("Builder should reject contraction ratio above 20")
+        void builderShouldRejectTooLargeContractionRatio() {
+            assertThatThrownBy(() -> NozzleDesignParameters.builder()
+                    .exitMach(2.0).contractionRatio(21.0).build())
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("chamberRadius() should equal throatRadius × sqrt(contractionRatio)")
+        void chamberRadiusShouldMatchFormula() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(2.0).contractionRatio(4.0).build();
+            assertThat(p.chamberRadius()).isCloseTo(0.05 * Math.sqrt(4.0), within(1e-9));
+        }
     }
     
     @Nested

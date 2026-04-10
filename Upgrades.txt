@@ -97,6 +97,36 @@ to demonstrate use.  Include features that will make this library as good as or 
 End of instructions to Claude
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+High value — currently missing or approximate
+
+  - Geometry-complete CFD/CAD export. Every exporter today outputs only the divergent section. A real blockMesh or STEP file needs the full nozzle from injector face to exit. The convergent section is required geometry, not optional.
+  - Boundary layer growth. BoundaryLayerCorrection currently starts at the throat. The BL actually begins at the injector face and grows through the converging section, thickening the displacement body and reducing the effective throat area (the discharge coefficient Cd). Ignoring this understates the BL
+  displacement thickness at the throat.
+  - Discharge coefficient (Cd). The geometric throat area and the effective (sonic) throat area differ because the sonic
+   line is curved, not flat. The curvature of the sonic line depends on both the upstream radius of curvature (r_cu,
+   typically ~1.5 × r_t for bell nozzles) and the downstream one (r_cd, which you just parameterized). Modeling r_cu
+   gives you a physically correct Cd.
+
+  Moderate value
+
+  - Heat transfer peak location. The throat heat flux peak is sensitive to the local wall curvature on both sides. The
+  upstream r_cu affects how sharply the flow accelerates, which shifts where the peak occurs.
+  - MOC initial data line accuracy. The library's initial data line assumes a flat sonic plane. Accounting for sonic
+  line curvature (a function of r_cu and r_cd together) would improve the accuracy of the first few characteristic rows.
+
+  Low value
+
+  - Isp and Cf. These are dominated by the divergent section geometry. The converging section contributes negligibly
+  once you have a good Cd.
+
+  What would actually need to be added
+
+  At minimum: an upstream throat radius of curvature r_cu (analogous to the throatCurvatureRatio you just added) and a
+  convergent half-angle. From those two inputs you can derive the full convergent section contour, compute the sonic
+  line curvature correction to Cd, extend the boundary layer integration upstream, and produce geometry-complete exports.
+
+  The geometry-complete export case alone is probably sufficient justification — it's a gap that affects every user who
+   takes output into a CFD or CAD tool.
 
   2. Convergent section length/angle — how long/steep the contracting section is before the throat. Affects boundary layer development and flow uniformity entering the throat.
   3. Throat width (for 2D rectangular nozzles) — the depth into the page for a planar nozzle, used when designing nozzles for wind tunnels or linear aerospike segments.

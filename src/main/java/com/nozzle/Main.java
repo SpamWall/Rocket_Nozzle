@@ -28,6 +28,7 @@ import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.core.PerformanceCalculator;
 import com.nozzle.core.ShockExpansionModel;
 import com.nozzle.export.*;
+import com.nozzle.geometry.ConvergentSection;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.AltitudePerformance;
@@ -76,6 +77,8 @@ import java.util.List;
  * - O/F sweep and optimum search: OFSweep adiabatic Isp(O/F), c*(O/F), γ(O/F) curves with golden-section optimum
  * - Dual-bell altitude-compensating nozzle: DualBellNozzle contour, sea-level and high-altitude Isp, transition pressure
  * - Throat curvature ratio sweep: effect of r_cd/r_t on exit area ratio and Cf across Rao, MOC, and conical contours
+ * - Convergent section: full nozzle geometry (chamber face to exit), sonic-line Cd correction, upstream BL extension,
+ *   geometry-complete exports
  */
 public class Main {
 
@@ -115,6 +118,7 @@ public class Main {
             demonstrateOFSweep();
             demonstrateDualBellNozzle();
             demonstrateThroatCurvatureRatio();
+            demonstrateConvergentSection(outputDir);
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -1820,6 +1824,139 @@ public class Main {
                 fixed.chamberTemperature(), fixed.cStar(), fixed.isp());
         System.out.printf("  Adiabatic:  Tc=%5.0f K  c*=%6.0f m/s  Isp=%6.1f s%n",
                 adiab.chamberTemperature(), adiab.cStar(), adiab.isp());
+    }
+
+    /**
+     * Demonstrates the full convergent-section feature:
+     * geometry, sonic-line Cd correction, upstream BL integration,
+     * and geometry-complete exports.
+     */
+    private static void demonstrateConvergentSection(Path outputDir) throws Exception {
+        System.out.println("\n--- CONVERGENT SECTION: FULL NOZZLE GEOMETRY ---\n");
+
+        final double RT = 0.05;   // 50 mm throat radius
+
+        NozzleDesignParameters params = NozzleDesignParameters.builder()
+                .throatRadius(RT)
+                .exitMach(3.0)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500)
+                .ambientPressure(101325)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(25)
+                .wallAngleInitialDegrees(30)
+                .lengthFraction(0.8)
+                .throatCurvatureRatio(0.382)          // r_cd / r_t (downstream)
+                .upstreamCurvatureRatio(1.5)          // r_cu / r_t (upstream)
+                .convergentHalfAngleDegrees(30)       // convergent cone half-angle
+                .contractionRatio(4.0)                // Ac / At = 4:1
+                .build();
+
+        // ------------------------------------------------------------------
+        // 1. Convergent section geometry
+        // ------------------------------------------------------------------
+        ConvergentSection cs = new ConvergentSection(params).generate(60);
+
+        System.out.println("Convergent section geometry:");
+        System.out.printf("  Throat radius (r_t):         %.1f mm%n", RT * 1000);
+        System.out.printf("  Chamber radius (r_c):        %.2f mm  (contraction ratio %.1f:1)%n",
+                cs.getChamberRadius() * 1000, params.contractionRatio());
+        System.out.printf("  Upstream curvature (r_cu):   %.2f mm  (= %.3f × r_t)%n",
+                params.upstreamCurvatureRatio() * RT * 1000, params.upstreamCurvatureRatio());
+        System.out.printf("  Convergent half-angle:       %.1f°%n",
+                params.convergentHalfAngleDegrees());
+        System.out.printf("  Arc end-point x:             %.2f mm%n", cs.getArcEndX() * 1000);
+        System.out.printf("  Arc end-point radius:        %.2f mm%n", cs.getArcEndY() * 1000);
+        System.out.printf("  Chamber face x:              %.2f mm%n", cs.getChamberFaceX() * 1000);
+        System.out.printf("  Convergent section length:   %.2f mm%n", cs.getLength() * 1000);
+        System.out.printf("  Contour wall points:         %d%n", cs.getContourPoints().size());
+
+        // ------------------------------------------------------------------
+        // 2. Sonic-line discharge-coefficient correction
+        // ------------------------------------------------------------------
+        System.out.println("\nSonic-line Cd correction:");
+        System.out.printf("  Cd_geo (default r_cu=1.5, r_cd=0.382):  %.5f%n",
+                cs.getSonicLineCdCorrection());
+
+        // Sweep over upstream curvature ratios
+        System.out.println("\n  r_cu/r_t   r_cd/r_t   Cd_geo    ΔCd (%)");
+        System.out.println("  " + "-".repeat(44));
+        double[] upRatios = {0.5, 1.0, 1.5, 2.0, 3.0};
+        for (double uRatio : upRatios) {
+            NozzleDesignParameters p2 = NozzleDesignParameters.builder()
+                    .throatRadius(RT).exitMach(3.0).chamberPressure(7e6)
+                    .chamberTemperature(3500).ambientPressure(101325)
+                    .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                    .upstreamCurvatureRatio(uRatio)
+                    .convergentHalfAngleDegrees(30).contractionRatio(4.0)
+                    .build();
+            double cd = new ConvergentSection(p2).generate(40).getSonicLineCdCorrection();
+            String flag = Math.abs(uRatio - 1.5) < 1e-6 ? " <- default" : "";
+            System.out.printf("  %-9.2f  %-9.3f  %.5f   %.3f%%%s%n",
+                    uRatio, params.throatCurvatureRatio(), cd, (1.0 - cd) * 100, flag);
+        }
+
+        // ------------------------------------------------------------------
+        // 3. Full-geometry NozzleContour (chamber face → exit)
+        // ------------------------------------------------------------------
+        NozzleContour divergent = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+        divergent.generate(100);
+        NozzleContour fullContour = divergent.withConvergentSection(cs);
+
+        System.out.println("\nFull nozzle contour (chamber → exit):");
+        System.out.printf("  Divergent-only length:    %.2f mm%n", divergent.getLength() * 1000);
+        System.out.printf("  Full contour length:      %.2f mm%n", fullContour.getLength() * 1000);
+        System.out.printf("  Total wall points:        %d%n", fullContour.getContourPoints().size());
+        System.out.printf("  First point x:            %.2f mm  (chamber face)%n",
+                fullContour.getContourPoints().getFirst().x() * 1000);
+        System.out.printf("  Last point x:             %.2f mm  (exit plane)%n",
+                fullContour.getContourPoints().getLast().x() * 1000);
+
+        // ------------------------------------------------------------------
+        // 4. Upstream boundary-layer integration
+        //    Pass the full-geometry contour to BoundaryLayerCorrection;
+        //    it will start at the chamber face automatically.
+        // ------------------------------------------------------------------
+        com.nozzle.thermal.BoundaryLayerCorrection blFull =
+                new com.nozzle.thermal.BoundaryLayerCorrection(params, fullContour).calculate(null);
+        com.nozzle.thermal.BoundaryLayerCorrection blDivOnly =
+                new com.nozzle.thermal.BoundaryLayerCorrection(params, divergent).calculate(null);
+
+        System.out.println("\nBoundary-layer comparison (divergent-only vs. full geometry):");
+        System.out.printf("  Exit displacement thickness — divergent only: %.4f mm%n",
+                blDivOnly.getExitDisplacementThickness() * 1000);
+        System.out.printf("  Exit displacement thickness — full geometry:  %.4f mm%n",
+                blFull.getExitDisplacementThickness() * 1000);
+        System.out.printf("  BL starts at x = %.1f mm for full geometry (vs 0 for divergent-only)%n",
+                fullContour.getContourPoints().getFirst().x() * 1000);
+
+        // ------------------------------------------------------------------
+        // 5. Performance with Cd_sonic applied
+        // ------------------------------------------------------------------
+        PerformanceCalculator perfNoCd = PerformanceCalculator.simple(params).calculate();
+        PerformanceCalculator perfWithCd = new PerformanceCalculator(
+                params, null, null, null, null, cs).calculate();
+
+        System.out.println("\nPerformance — effect of Cd_geo correction:");
+        System.out.printf("  Without Cd_geo:  thrust = %.3f kN   ṁ = %.4f kg/s%n",
+                perfNoCd.getThrust() / 1000, perfNoCd.getMassFlowRate());
+        System.out.printf("  With    Cd_geo:  thrust = %.3f kN   ṁ = %.4f kg/s  (Cd = %.5f)%n",
+                perfWithCd.getThrust() / 1000, perfWithCd.getMassFlowRate(),
+                perfWithCd.getSonicLineCdCorrection());
+        System.out.printf("  Isp unchanged:   %.1f s (geometry-independent)%n",
+                perfWithCd.getSpecificImpulse());
+
+        // ------------------------------------------------------------------
+        // 6. Geometry-complete CSV export
+        // ------------------------------------------------------------------
+        CSVExporter csv = new CSVExporter();
+        csv.exportContour(fullContour, outputDir.resolve("full_nozzle_contour.csv"));
+        System.out.printf("%nExported full nozzle wall contour (chamber to exit) → full_nozzle_contour.csv%n");
+
+        // DXF export automatically includes convergent section via full contour
+        DXFExporter dxf = new DXFExporter();
+        dxf.exportRevolutionProfile(fullContour, outputDir.resolve("full_nozzle_profile.dxf"));
+        System.out.println("Exported full revolution profile → full_nozzle_profile.dxf");
     }
 
     /**

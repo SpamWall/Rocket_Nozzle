@@ -233,6 +233,11 @@ public class CSVExporter {
             writeParameter(writer, "length_fraction", params.lengthFraction(), "-");
             writeParameter(writer, "num_char_lines", params.numberOfCharLines(), "-");
             writeParameter(writer, "axisymmetric", params.axisymmetric() ? 1 : 0, "-");
+            writeParameter(writer, "throat_curvature_ratio", params.throatCurvatureRatio(), "-");
+            writeParameter(writer, "upstream_curvature_ratio", params.upstreamCurvatureRatio(), "-");
+            writeParameter(writer, "convergent_half_angle", params.convergentHalfAngleDegrees(), "deg");
+            writeParameter(writer, "contraction_ratio", params.contractionRatio(), "-");
+            writeParameter(writer, "chamber_radius", params.chamberRadius(), "m");
             writeParameter(writer, "ideal_thrust_coeff", params.idealThrustCoefficient(), "-");
             writeParameter(writer, "ideal_specific_impulse", params.idealSpecificImpulse(), "s");
             writeParameter(writer, "exit_velocity", params.exitVelocity(), "m/s");

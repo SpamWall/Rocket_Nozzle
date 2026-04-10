@@ -171,25 +171,65 @@ public class BoundaryLayerCorrection {
     }
     
     /**
-     * Provides a crude linear estimate of the local Mach number at axial
-     * position {@code x} when no MOC flow-field point is available nearby.
-     * Interpolates linearly from Mach 1 at the throat (x = 0) to the design
-     * exit Mach at the nozzle exit plane.
+     * Estimates the local Mach number at axial position {@code x} when no
+     * MOC flow-field point is available nearby.
+     *
+     * <ul>
+     *   <li><b>Divergent section (x ≥ 0):</b> linear interpolation from
+     *       Mach 1 at the throat to the design exit Mach.</li>
+     *   <li><b>Convergent section (x &lt; 0):</b> subsonic Mach from the
+     *       isentropic area–velocity relation using the local wall radius
+     *       interpolated from the contour spline.  Solved by bisection on
+     *       A/A*(M) in M ∈ [0.001, 1].</li>
+     * </ul>
      *
      * @param x Axial position in metres
-     * @return Estimated local Mach number (clamped to [1, exitMach])
+     * @return Estimated local Mach number ≥ 0
      */
     private double estimateMach(double x) {
-        double rt = parameters.throatRadius();
-        double re = parameters.exitRadius();
+        if (x < 0) {
+            return estimateSubsonicMach(x);
+        }
+        double re       = parameters.exitRadius();
+        double rt       = parameters.throatRadius();
         double exitMach = parameters.exitMach();
-        
-        // Linear interpolation (crude approximation)
+
         double length = contour.getLength();
         if (length <= 0) length = (re - rt) / Math.tan(parameters.wallAngleInitial());
-        
-        double fraction = Math.clamp(x / length, 0, 1);
+
+        double fraction = Math.clamp(x / length, 0.0, 1.0);
         return 1.0 + fraction * (exitMach - 1.0);
+    }
+
+    /**
+     * Returns the subsonic isentropic Mach number at the given axial position
+     * in the convergent section, derived from the local wall radius via bisection
+     * on the isentropic area–Mach relation A/A*(M).
+     *
+     * @param x Axial position (must be &lt; 0)
+     * @return Subsonic Mach number in (0, 1]
+     */
+    private double estimateSubsonicMach(double x) {
+        double rt = parameters.throatRadius();
+        double r;
+        try {
+            r = contour.getRadiusAt(x);
+        } catch (Exception e) {
+            // Contour spline not defined at x; fall back to chamber M≈0 estimate
+            return 0.1;
+        }
+        double aRatio = (r / rt) * (r / rt);   // A/A* at this position
+        if (aRatio <= 1.0) return 1.0;          // at or past throat
+
+        // Bisection on isentropic area-Mach relation for the subsonic root
+        var gas = parameters.gasProperties();
+        double lo = 0.001, hi = 1.0;
+        for (int iter = 0; iter < 60; iter++) {
+            double mid = 0.5 * (lo + hi);
+            if (gas.areaRatio(mid) > aRatio) lo = mid;
+            else hi = mid;
+        }
+        return 0.5 * (lo + hi);
     }
     
     /**

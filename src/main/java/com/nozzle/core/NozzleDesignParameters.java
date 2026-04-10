@@ -39,10 +39,23 @@ import jakarta.validation.constraints.Positive;
  * @param wallAngleInitial      Initial wall angle at throat in radians
  * @param lengthFraction        Fractional length compared to 15° cone (Rao parameter)
  * @param axisymmetric          True for axisymmetric nozzle, false for 2D planar
- * @param throatCurvatureRatio  Downstream throat radius of curvature as a multiple
- *                              of the throat radius (r_cd = ratio × r_t).
- *                              The classical Rao value is 0.382; the valid range
- *                              is (0, 2.0].
+ * @param throatCurvatureRatio    Downstream throat radius of curvature as a multiple
+ *                                of the throat radius (r_cd = ratio × r_t).
+ *                                The classical Rao value is 0.382; the valid range
+ *                                is (0, 2.0].
+ * @param upstreamCurvatureRatio  Upstream throat radius of curvature as a multiple
+ *                                of the throat radius (r_cu = ratio × r_t).
+ *                                Controls the shape of the convergent-section arc
+ *                                immediately upstream of the throat.  Typical value
+ *                                1.5; valid range (0, 3.0].
+ * @param convergentHalfAngle     Half-angle of the convergent cone in radians.
+ *                                The conical section joins the upstream circular
+ *                                arc to the cylindrical combustion chamber.
+ *                                Typical value 30°; valid range [5°, 60°].
+ * @param contractionRatio        Combustion-chamber-to-throat area ratio (Ac/At).
+ *                                Determines the chamber radius:
+ *                                r_c = r_t × √(contractionRatio).
+ *                                Typical value 4.0; valid range [1.5, 20].
  */
 @JsonDeserialize(builder = NozzleDesignParameters.Builder.class)
 public record NozzleDesignParameters(
@@ -56,7 +69,10 @@ public record NozzleDesignParameters(
         @Positive double wallAngleInitial,
         @Positive double lengthFraction,
         boolean axisymmetric,
-        @Positive double throatCurvatureRatio
+        @Positive double throatCurvatureRatio,
+        @Positive double upstreamCurvatureRatio,
+        @Positive double convergentHalfAngle,
+        @Positive double contractionRatio
 ) {
     
     /**
@@ -71,6 +87,23 @@ public record NozzleDesignParameters(
      * This is the classical Rao value for bell nozzles.
      */
     public static final double DEFAULT_THROAT_CURVATURE_RATIO = 0.382;
+
+    /**
+     * Default upstream throat radius-of-curvature ratio (r_cu / r_t).
+     * Typical value for liquid rocket bell nozzles.
+     */
+    public static final double DEFAULT_UPSTREAM_CURVATURE_RATIO = 1.5;
+
+    /**
+     * Default convergent-section half-angle in radians (30°).
+     */
+    public static final double DEFAULT_CONVERGENT_HALF_ANGLE = Math.toRadians(30.0);
+
+    /**
+     * Default combustion-chamber-to-throat area ratio.
+     * A 4:1 contraction ratio is common for small-to-medium liquid engines.
+     */
+    public static final double DEFAULT_CONTRACTION_RATIO = 4.0;
 
     /**
      * Compact canonical constructor that validates all design parameters.
@@ -106,6 +139,40 @@ public record NozzleDesignParameters(
             throw new IllegalArgumentException(
                     "Throat curvature ratio must be in (0, 2.0]; got " + throatCurvatureRatio);
         }
+        if (upstreamCurvatureRatio <= 0 || upstreamCurvatureRatio > 3.0) {
+            throw new IllegalArgumentException(
+                    "Upstream curvature ratio must be in (0, 3.0]; got " + upstreamCurvatureRatio);
+        }
+        double minHalfAngle = Math.toRadians(5.0);
+        double maxHalfAngle = Math.toRadians(60.0);
+        if (convergentHalfAngle < minHalfAngle || convergentHalfAngle > maxHalfAngle) {
+            throw new IllegalArgumentException(
+                    "Convergent half-angle must be in [5°, 60°]; got "
+                    + Math.toDegrees(convergentHalfAngle) + "°");
+        }
+        if (contractionRatio < 1.5 || contractionRatio > 20.0) {
+            throw new IllegalArgumentException(
+                    "Contraction ratio must be in [1.5, 20]; got " + contractionRatio);
+        }
+    }
+
+    /**
+     * Computes the combustion-chamber radius derived from the throat radius
+     * and the contraction ratio.
+     *
+     * @return Chamber radius r_c = r_throat × √(contractionRatio) in metres
+     */
+    public double chamberRadius() {
+        return throatRadius * Math.sqrt(contractionRatio);
+    }
+
+    /**
+     * Converts {@link #convergentHalfAngle} to degrees for display purposes.
+     *
+     * @return Convergent half-angle in degrees
+     */
+    public double convergentHalfAngleDegrees() {
+        return Math.toDegrees(convergentHalfAngle);
     }
     
     /**
@@ -277,7 +344,10 @@ public record NozzleDesignParameters(
         private double wallAngleInitial = Math.toRadians(30.0);
         private double lengthFraction = 0.8;
         private boolean axisymmetric = true;
-        private double throatCurvatureRatio = DEFAULT_THROAT_CURVATURE_RATIO;
+        private double throatCurvatureRatio    = DEFAULT_THROAT_CURVATURE_RATIO;
+        private double upstreamCurvatureRatio  = DEFAULT_UPSTREAM_CURVATURE_RATIO;
+        private double convergentHalfAngle     = DEFAULT_CONVERGENT_HALF_ANGLE;
+        private double contractionRatio        = DEFAULT_CONTRACTION_RATIO;
 
         /**
          * Sets the throat radius.
@@ -440,6 +510,52 @@ public record NozzleDesignParameters(
         }
 
         /**
+         * Sets the upstream throat radius of curvature as a multiple of the
+         * throat radius ({@code r_cu = ratio × r_t}).  Controls the shape of the
+         * circular arc on the convergent side of the throat and determines the
+         * curvature of the sonic line together with
+         * {@link #throatCurvatureRatio(double)}.
+         *
+         * <p>Typical values:
+         * <ul>
+         *   <li>1.5 — standard bell nozzle design (default)</li>
+         *   <li>0.8–1.0 — compact designs with a tight convergent arc</li>
+         *   <li>2.0–3.0 — research nozzles requiring a very flat sonic line</li>
+         * </ul>
+         *
+         * @param upstreamCurvatureRatio dimensionless ratio r_cu / r_t; must be in (0, 3]
+         * @return This builder
+         */
+        public Builder upstreamCurvatureRatio(double upstreamCurvatureRatio) {
+            this.upstreamCurvatureRatio = upstreamCurvatureRatio;
+            return this;
+        }
+
+        /**
+         * Sets the half-angle of the convergent cone in degrees (converted to
+         * radians internally).
+         *
+         * @param degrees Half-angle in degrees; must be in [5°, 60°]
+         * @return This builder
+         */
+        public Builder convergentHalfAngleDegrees(double degrees) {
+            this.convergentHalfAngle = Math.toRadians(degrees);
+            return this;
+        }
+
+        /**
+         * Sets the combustion-chamber-to-throat area ratio (Ac/At).
+         * Determines the chamber radius: {@code r_c = r_t × √(contractionRatio)}.
+         *
+         * @param contractionRatio Contraction ratio; must be in [1.5, 20]
+         * @return This builder
+         */
+        public Builder contractionRatio(double contractionRatio) {
+            this.contractionRatio = contractionRatio;
+            return this;
+        }
+
+        /**
          * Builds and returns a validated {@link NozzleDesignParameters} instance
          * from the current builder state.
          *
@@ -452,7 +568,8 @@ public record NozzleDesignParameters(
                     throatRadius, exitMach, chamberPressure, chamberTemperature,
                     ambientPressure, gasProperties, numberOfCharLines,
                     wallAngleInitial, lengthFraction, axisymmetric,
-                    throatCurvatureRatio
+                    throatCurvatureRatio, upstreamCurvatureRatio,
+                    convergentHalfAngle, contractionRatio
             );
         }
     }

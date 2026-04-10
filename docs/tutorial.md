@@ -79,7 +79,10 @@ NozzleDesignParameters params = NozzleDesignParameters.builder()
         .wallAngleInitialDegrees(30)      // initial wall angle at throat
         .lengthFraction(0.8)              // 80% of ideal (conical) nozzle length
         .axisymmetric(true)
-        // .throatCurvatureRatio(0.382)   // optional — 0.382 is the default
+        // .throatCurvatureRatio(0.382)        // downstream arc (default 0.382)
+        // .upstreamCurvatureRatio(1.5)        // upstream arc (default 1.5)
+        // .convergentHalfAngleDegrees(30)     // convergent cone half-angle (default 30°)
+        // .contractionRatio(4.0)              // Ac/At (default 4.0)
         .build();
 ```
 
@@ -92,11 +95,43 @@ typical for flight engines; 0.8 is a good starting point.
 
 `throatCurvatureRatio` sets the downstream throat radius of curvature as a
 multiple of the throat radius (`r_cd = ratio × r_throat`). The default of
-0.382 is the classical Rao value and is appropriate for most designs. Increase
-it toward 0.75–1.0 for research nozzles where exit flow uniformity matters more
-than length; decrease it toward 0.25 only if tight packaging forces a very short
-throat arc. The ratio affects all contour types (MOC, Rao bell, conical, TIC,
-dual-bell) because all share the same circular-arc throat region.
+0.382 is the classical Rao value and is appropriate for most designs.
+
+`upstreamCurvatureRatio` sets the upstream (convergent-side) throat arc radius
+as a multiple of r_t. The default 1.5 is standard for liquid-propellant bell
+nozzles. Together with `throatCurvatureRatio`, it determines the curvature of
+the sonic line and hence the geometric discharge-coefficient correction.
+
+`convergentHalfAngleDegrees` sets the half-angle of the straight conical section
+that connects the upstream arc to the combustion chamber. Default 30°.
+
+`contractionRatio` is the chamber-to-throat area ratio Ac/At. It determines the
+chamber radius `r_c = r_t × √(contractionRatio)`. Default 4.0.
+
+To generate the full convergent-section geometry and use it throughout the
+pipeline:
+
+```
+// Build the convergent section geometry
+ConvergentSection cs = new ConvergentSection(params).generate(60);
+
+// Build a geometry-complete wall contour (chamber face → exit)
+NozzleContour divergent = NozzleContour.fromMOCWallPoints(params, net.getWallPoints());
+NozzleContour full      = divergent.withConvergentSection(cs);
+
+// BL integration now starts at the chamber face
+BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, full).calculate(null);
+
+// Sonic-line Cd applied to thrust and mass flow; Isp unchanged
+PerformanceCalculator pc = new PerformanceCalculator(
+        params, net, full, bl, null, cs).calculate();
+
+System.out.printf("Cd_geo = %.5f%n", pc.getSonicLineCdCorrection());
+
+// All exporters produce geometry-complete output automatically
+new DXFExporter().exportRevolutionProfile(full, outputDir.resolve("full_nozzle.dxf"));
+new STLExporter().exportMesh(full,             outputDir.resolve("full_nozzle.stl"));
+```
 
 ### Step 2 — Run the Method of Characteristics solver
 

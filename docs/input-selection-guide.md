@@ -23,6 +23,9 @@ This guide documents *how to choose it*.
    - [lengthFraction](#lengthfraction)
    - [axisymmetric](#axisymmetric)
    - [throatCurvatureRatio](#throatcurvatureratio)
+   - [upstreamCurvatureRatio](#upstreamcurvatureratio)
+   - [convergentHalfAngleDegrees](#convergenthalfangledegrees)
+   - [contractionRatio](#contractionratio)
 2. [Nozzle type selection](#2-nozzle-type-selection)
 3. [AerospikeNozzle parameters](#3-aerospikenozzle-parameters)
 4. [DualBellNozzle parameters](#4-dualbellnozzle-parameters)
@@ -383,13 +386,13 @@ Changing this value therefore affects all of them consistently.
 
 **Typical values:**
 
-| Ratio | Characterisation |
-|-------|-----------------|
+| Ratio | Characterisation                                                                                                                                                                   |
+|-------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 0.25  | Very tight arc. Produces a strong initial expansion fan; shortest throat arc length. Use only when packaging is severely constrained. Risk of flow non-uniformity near the throat. |
-| 0.382 | **Default (Rao classical value).** Recommended minimum for bell nozzles. Balances arc length against downstream flow quality. |
-| 0.5   | Slightly gentler arc. A safe choice when exit flow uniformity matters more than minimum length. |
-| 0.75  | Noticeably longer throat arc. Common in high-performance wind-tunnel or research nozzles. |
-| 1.0   | Arc radius equals the throat radius. Very uniform flow entering the divergent section; adds measurable nozzle length and mass. |
+| 0.382 | **Default (Rao classical value).** Recommended minimum for bell nozzles. Balances arc length against downstream flow quality.                                                      |
+| 0.5   | Slightly gentler arc. A safe choice when exit flow uniformity matters more than minimum length.                                                                                    |
+| 0.75  | Noticeably longer throat arc. Common in high-performance wind-tunnel or research nozzles.                                                                                          |
+| 1.0   | Arc radius equals the throat radius. Very uniform flow entering the divergent section; adds measurable nozzle length and mass.                                                     |
 
 **Effect on performance:** Ideal Cf and A/A\* are purely functions of Mach
 number and gamma; they do not depend on this ratio. What changes is the geometry
@@ -416,6 +419,81 @@ constructor with an `IllegalArgumentException`.
 - Increase toward 0.75–1.0 for laboratory or wind-tunnel nozzles where the
   uniformity of the exit profile is the primary design objective.
 - For all flight propulsion designs, the default 0.382 is appropriate.
+
+### upstreamCurvatureRatio
+
+**What it controls:** The radius of the circular arc on the convergent
+(upstream) side of the throat, expressed as a multiple of the throat radius:
+`r_cu = upstreamCurvatureRatio × r_t`.
+
+**Where it appears:** Used exclusively by `ConvergentSection` to generate the
+upstream arc and to compute the sonic-line discharge-coefficient correction
+`Cd_geo` (via the harmonic mean of `r_cu` and `r_cd`).
+
+**Typical values:**
+
+| Ratio | Description                                                                                      |
+|-------|--------------------------------------------------------------------------------------------------|
+| 0.8   | Compact convergent section; tight upstream arc. Only use when packaging is severely constrained. |
+| 1.5   | **Default.** Standard liquid-propellant bell nozzle.                                             |
+| 2.0   | Gentler arc; slightly flatter sonic line and higher `Cd_geo`.                                    |
+| 3.0   | Research nozzle requiring maximum flow uniformity at the throat.                                 |
+
+**Constraint:** The arc end-point radius `r_t + r_cu(1 − cos(θ_c))` must be
+less than the chamber radius `r_c`. If this is violated, `ConvergentSection`
+throws an `IllegalArgumentException`.  Reduce `upstreamCurvatureRatio` or
+increase `contractionRatio` if this occurs.
+
+**Interaction with `throatCurvatureRatio`:** Both ratios together determine
+`Cd_geo`. When they are equal (symmetric throat), the sonic-line correction is
+at its maximum for that curvature magnitude. Increasing `upstreamCurvatureRatio`
+while keeping `throatCurvatureRatio` fixed makes the sonic line less convex,
+raising `Cd_geo` toward 1.
+
+---
+
+### convergentHalfAngleDegrees
+
+**What it controls:** The half-angle of the straight conical section that
+connects the upstream circular arc to the cylindrical combustion chamber.
+
+**Typical values:** 20°–40°. The default 30° is standard for liquid-propellant
+engines. Steeper angles (40°–55°) shorten the convergent section at the cost of
+higher flow non-uniformity entering the arc. Shallower angles (10°–20°) are used
+in research nozzles and wind tunnels where the convergent Mach-number
+distribution must be highly uniform.
+
+**Interaction with `upstreamCurvatureRatio`:** The arc sweeps from 0° to
+`convergentHalfAngle` and is tangent to the cone at their junction. A large
+half-angle combined with a large upstream curvature ratio produces a long arc
+and can cause the arc to overshoot the chamber radius (see the constraint note
+above).
+
+**Validation range:** [5°, 60°].
+
+---
+
+### contractionRatio
+
+**What it controls:** The chamber-to-throat area ratio Ac/At.  Determines the
+chamber radius via `r_c = r_t × √(contractionRatio)` and therefore the upstream
+extent of the convergent section.
+
+**Typical values:**
+
+| Ratio | Application                                       |
+|-------|---------------------------------------------------|
+| 2–3   | Small pressure-fed engines, cold-gas thrusters    |
+| 3–5   | Medium liquid-propellant engines (default 4.0)    |
+| 5–8   | Large engines where chamber volume is constrained |
+| 8–20  | Solid-rocket motors, hybrid engines               |
+
+**Effect:** A higher contraction ratio increases the chamber radius and therefore
+lengthens the conical section of the convergent geometry. It does not affect
+nozzle expansion performance (Cf, Isp) — those are set entirely by the divergent
+section and the throat conditions.
+
+**Validation range:** [1.5, 20].
 
 ---
 

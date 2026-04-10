@@ -24,20 +24,89 @@ NozzleDesignParameters params = NozzleDesignParameters.builder()
         .lengthFraction(0.8)                        // 80% of ideal nozzle length
         .axisymmetric(true)
         .throatCurvatureRatio(0.382)                // r_cd / r_t (optional, default 0.382)
+        .upstreamCurvatureRatio(1.5)               // r_cu / r_t (optional, default 1.5)
+        .convergentHalfAngleDegrees(30)            // convergent cone half-angle (optional, default 30°)
+        .contractionRatio(4.0)                     // Ac/At (optional, default 4.0)
         .build();
 ```
 
 **Key builder defaults:** `throatRadius=0.05`, `exitMach=3.0`, `Pc=7 MPa`,
 `Tc=3500 K`, `Pa=101325 Pa`, `numberOfCharLines=50`, `wallAngleDeg=30`,
-`lengthFraction=0.8`, `axisymmetric=true`, `throatCurvatureRatio=0.382`.
+`lengthFraction=0.8`, `axisymmetric=true`, `throatCurvatureRatio=0.382`,
+`upstreamCurvatureRatio=1.5`, `convergentHalfAngleDeg=30`, `contractionRatio=4.0`.
 
-**`throatCurvatureRatio(double ratio)`** — Sets the downstream throat
-radius of curvature as a multiple of the throat radius:
-`r_cd = ratio × r_throat`. Controls how sharply the flow turns through the
-throat and directly seeds the initial expansion wave fan used by all contour
-generators (MOC, Rao bell, conical, TIC, dual-bell). Valid range: `(0, 2.0]`.
-The constant `NozzleDesignParameters.DEFAULT_THROAT_CURVATURE_RATIO` equals
-`0.382`, the classical Rao value for bell nozzles.
+**`throatCurvatureRatio(double ratio)`** — Downstream throat arc radius as a
+multiple of r_t (`r_cd = ratio × r_t`). Valid range `(0, 2.0]`.
+
+**`upstreamCurvatureRatio(double ratio)`** — Upstream throat arc radius as a
+multiple of r_t (`r_cu = ratio × r_t`). Controls convergent-side arc shape and
+the curvature of the sonic line. Valid range `(0, 3.0]`.
+
+**`convergentHalfAngleDegrees(double deg)`** —
+Half-angle of the convergent cone that connects the upstream arc to the
+combustion chamber. Valid range `[5°, 60°]`.
+
+**`contractionRatio(double ratio)`** — Chamber-to-throat area ratio (Ac/At).
+Determines chamber radius: `r_c = r_t × √(contractionRatio)`. Valid range
+`[1.5, 20]`.
+
+**Derived quantities also added:**
+
+| Method                         | Returns                                  |
+|--------------------------------|------------------------------------------|
+| `chamberRadius()`              | r_t · √(contractionRatio)                |
+| `convergentHalfAngleDegrees()` | convergentHalfAngle converted to degrees |
+
+---
+
+### ConvergentSection
+
+Generates the full convergent-section wall contour (chamber face → throat) and
+computes the sonic-line discharge-coefficient correction.
+
+```
+ConvergentSection cs = new ConvergentSection(params).generate(60);
+
+// Geometry
+double chamberR  = cs.getChamberRadius();      // r_c in metres
+double length    = cs.getLength();             // axial extent (positive) in metres
+double arcEndX   = cs.getArcEndX();            // x of arc/cone junction (negative)
+List<Point2D> pts = cs.getContourPoints();     // ordered chamber → throat (x < 0)
+
+// Sonic-line Cd correction
+double cdGeo = cs.getSonicLineCdCorrection();  // typically 0.995–0.9999
+
+// Build geometry-complete contour (chamber → exit)
+NozzleContour divergent = new NozzleContour(ContourType.RAO_BELL, params).generate(100);
+NozzleContour full      = divergent.withConvergentSection(cs);
+
+// Pass full contour to any exporter for complete geometry output
+new DXFExporter().exportRevolutionProfile(full, path);
+new STLExporter().exportMesh(full, path);
+
+// BL integration starts at the chamber face automatically
+BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, full).calculate(null);
+
+// Incorporate Cd_geo into PerformanceCalculator
+PerformanceCalculator pc = new PerformanceCalculator(
+        params, net, full, bl, null, cs).calculate();
+System.out.println(pc.getSonicLineCdCorrection());  // Cd_geo
+System.out.println(pc.getMassFlowRate());           // scaled by Cd_geo
+System.out.println(pc.getThrust());                 // scaled by Cd_geo
+System.out.println(pc.getSpecificImpulse());        // unchanged
+```
+
+**Key methods:**
+
+| Method                       | Description                                               |
+|------------------------------|-----------------------------------------------------------|
+| `generate(int n)`            | Populate wall points; returns `this`                      |
+| `getContourPoints()`         | Ordered wall points from chamber face to throat (x < 0)   |
+| `getChamberRadius()`         | r_c = r_t · √(contractionRatio) in metres                 |
+| `getLength()`                | Axial extent of convergent section (positive value)       |
+| `getArcEndX()`               | x-coordinate of arc/cone junction                         |
+| `getArcEndY()`               | Radius at arc/cone junction                               |
+| `getSonicLineCdCorrection()` | Cd_geo ∈ [0.98, 1.0] from harmonic-mean curvature formula |
 
 **Derived quantities (computed lazily on first access):**
 

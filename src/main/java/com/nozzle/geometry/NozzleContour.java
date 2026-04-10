@@ -167,6 +167,50 @@ public class NozzleContour {
     }
 
     /**
+     * Returns a new {@link NozzleContour} whose wall-point sequence is the
+     * convergent section prepended to this divergent contour, producing a
+     * geometry-complete nozzle profile from the chamber face to the exit plane.
+     *
+     * <p>The {@link ConvergentSection} must have been populated by calling
+     * {@link ConvergentSection#generate(int)} before passing it here.  The
+     * throat point ({@code x = 0, y = r_t}) is already included as the first
+     * point of this (divergent) contour, so the last point of the convergent
+     * sequence — which would also be the throat — is intentionally excluded to
+     * avoid duplication.
+     *
+     * <p>The cubic spline is refitted over the full combined x-range (from
+     * the negative chamber-face x to the positive exit x), so
+     * {@link #getRadiusAt(double)} remains valid for any position in
+     * [{@code x_chamber}, {@code x_exit}].
+     *
+     * <p>Passing the returned contour to
+     * {@link com.nozzle.thermal.BoundaryLayerCorrection} automatically extends
+     * the boundary-layer integration upstream through the convergent section,
+     * capturing the extra momentum-thickness growth before the throat.
+     * All exporters ({@link com.nozzle.export.DXFExporter},
+     * {@link com.nozzle.export.STLExporter},
+     * {@link com.nozzle.export.STEPExporter},
+     * {@link com.nozzle.export.CFDMeshExporter},
+     * {@link com.nozzle.export.OpenFOAMExporter}) likewise receive the full
+     * geometry without further modification.
+     *
+     * @param cs A fully generated {@link ConvergentSection}; must not be {@code null}
+     *           and must have been populated by {@link ConvergentSection#generate(int)}
+     * @return A new {@code NozzleContour} of type {@link ContourType#MOC_GENERATED}
+     *         spanning from the chamber face to the nozzle exit
+     * @throws IllegalStateException if the convergent section has not been generated
+     */
+    public NozzleContour withConvergentSection(ConvergentSection cs) {
+        if (cs.getContourPoints().isEmpty()) {
+            throw new IllegalStateException(
+                    "ConvergentSection has no points — call generate() before withConvergentSection()");
+        }
+        List<Point2D> combined = new ArrayList<>(cs.getContourPoints());
+        combined.addAll(this.contourPoints);
+        return NozzleContour.fromPoints(parameters, combined);
+    }
+
+    /**
      * Factory method that builds a {@link ContourType#MOC_GENERATED} contour directly
      * from a pre-computed wall-point sequence (e.g. from {@link com.nozzle.moc.RaoNozzle}
      * or {@link com.nozzle.moc.DualBellNozzle}).
