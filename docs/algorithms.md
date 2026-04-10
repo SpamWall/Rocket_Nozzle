@@ -47,6 +47,28 @@ where `y` is the radial distance from the axis, `μ_avg` is the mean Mach angle,
 and `Δs` is the arc length along the characteristic. The correction is applied
 iteratively until |Δθ| < 1e-8 and |Δν| < 1e-8 (maximum 100 iterations).
 
+### Throat Circular Arc
+
+Before the initial data line can be placed, the geometry locates the end of the
+circular-arc throat transition. The arc has radius
+
+```
+r_cd = throatCurvatureRatio × r_throat
+```
+
+and sweeps from 0° (the sonic throat) to `wallAngleInitial` (the start of the
+divergent section). The arc end-point coordinates are
+
+```
+x₀ = r_cd · sin(wallAngleInitial)
+y₀ = r_throat + r_cd · (1 − cos(wallAngleInitial))
+```
+
+This point `(x₀, y₀)` is the origin of the Rao wall Bézier and the radial
+position of the outermost point on the initial data line. A larger
+`throatCurvatureRatio` places the initial data line further downstream and at a
+slightly larger radial position, producing a gentler initial expansion fan.
+
 ### Initial Data Line
 
 The initial data line spans from the centerline to the nozzle wall at the start

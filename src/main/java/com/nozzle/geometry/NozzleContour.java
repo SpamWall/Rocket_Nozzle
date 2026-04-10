@@ -221,7 +221,8 @@ public class NozzleContour {
     
     /**
      * Populates {@code contourPoints} with a conical divergent section preceded
-     * by a 0.382 × r_throat circular-arc throat transition.
+     * by a circular-arc throat transition whose radius is
+     * {@link NozzleDesignParameters#throatCurvatureRatio()} × r_throat.
      * The cone half-angle is taken from {@link NozzleDesignParameters#wallAngleInitial()}.
      *
      * @param numPoints Total points to distribute between the throat arc and cone
@@ -232,7 +233,7 @@ public class NozzleContour {
         double halfAngle = parameters.wallAngleInitial();
         double length = (re - rt) / Math.tan(halfAngle);
         
-        double rThroat = 0.382 * rt;
+        double rThroat = parameters.throatCurvatureRatio() * rt;
         int throatPoints = numPoints / 5;
         
         for (int i = 0; i <= throatPoints; i++) {
@@ -274,9 +275,9 @@ public class NozzleContour {
         double thetaE = Math.toRadians(8.0 - 0.5 * Math.log(parameters.exitAreaRatio()));
         thetaE = Math.max(thetaE, Math.toRadians(1));
         
-        double rcd = 0.382 * rt;
+        double rcd = parameters.throatCurvatureRatio() * rt;
         int throatPoints = numPoints / 5;
-        
+
         for (int i = 0; i <= throatPoints; i++) {
             double angle = i * thetaN / throatPoints;
             double x = rcd * Math.sin(angle);
@@ -306,7 +307,7 @@ public class NozzleContour {
      *
      * <p>The algorithm:
      * <ol>
-     *   <li>Circular throat arc (radius 0.382 × r_t) from 0 to θ_n.</li>
+     *   <li>Circular throat arc (radius = throatCurvatureRatio × r_t) from 0 to θ_n.</li>
      *   <li>Mach at inflection: M_n = machFromPrandtlMeyer(θ_n); ν_n = ν(M_n).</li>
      *   <li>Design PM angle: ν_e = ν(M_D) for the full ideal nozzle.</li>
      *   <li>TIC exit: ν_TIC = ν_n + f × (ν_e − ν_n) → M_TIC, r_TIC = r_t √(A/A*(M_TIC)).</li>
@@ -325,9 +326,9 @@ public class NozzleContour {
         double f       = parameters.lengthFraction();     // truncation fraction
 
         // ------------------------------------------------------------------
-        // 1. Circular throat arc: r_cd = 0.382 × r_t, sweeping 0 → θ_n
+        // 1. Circular throat arc: r_cd = throatCurvatureRatio × r_t, sweeping 0 → θ_n
         // ------------------------------------------------------------------
-        double rcd = 0.382 * rt;
+        double rcd = parameters.throatCurvatureRatio() * rt;
         int throatPts = Math.max(5, numPoints / 10);
         for (int i = 0; i <= throatPts; i++) {
             double angle = thetaN * i / throatPts;

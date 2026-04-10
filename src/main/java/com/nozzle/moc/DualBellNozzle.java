@@ -65,7 +65,7 @@ import java.util.List;
  * <h2>Contour generation</h2>
  * <p>The contour is built from three segments, all anchored at x = 0 (throat):
  * <ol>
- *   <li>Circular throat arc (radius = 0.382 × r_throat), same as
+ *   <li>Circular throat arc (radius = throatCurvatureRatio × r_throat), same as
  *       {@link RaoNozzle}.</li>
  *   <li>Base-bell cubic Bézier from the arc endpoint to the kink at
  *       {@code (baseLength, transitionRadius)}.</li>
@@ -476,7 +476,7 @@ public class DualBellNozzle {
 
     /** Circular downstream throat arc, identical to the RaoNozzle approach. */
     private void generateThroatArc(double rt) {
-        double rcd = 0.382 * rt;
+        double rcd = parameters.throatCurvatureRatio() * rt;
         int n = Math.max(5, numContourPoints / 10);
         for (int i = 0; i <= n; i++) {
             double angle = inflectionAngle * i / n;
@@ -488,7 +488,7 @@ public class DualBellNozzle {
 
     /** Cubic Bézier from the throat arc endpoint to the kink. */
     private void generateBaseBell(double rt, double rKink, double lBase) {
-        double rcd = 0.382 * rt;
+        double rcd = parameters.throatCurvatureRatio() * rt;
         double x0  = rcd * Math.sin(inflectionAngle);
         double y0  = rt  + rcd * (1.0 - Math.cos(inflectionAngle));
         int n = numContourPoints * 7 / 10;

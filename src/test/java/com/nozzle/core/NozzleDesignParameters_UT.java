@@ -247,18 +247,29 @@ class NozzleDesignParameters_UT {
     @Nested
     @DisplayName("Builder Tests")
     class BuilderTests {
-        
+
         @Test
         @DisplayName("Builder should use defaults")
         void builderShouldUseDefaults() {
             NozzleDesignParameters defaultParams = NozzleDesignParameters.builder()
                     .exitMach(2.0)
                     .build();
-            
+
             assertThat(defaultParams.numberOfCharLines()).isEqualTo(NozzleDesignParameters.DEFAULT_CHAR_LINES);
             assertThat(defaultParams.axisymmetric()).isTrue();
         }
-        
+
+        @Test
+        @DisplayName("Builder should use default throat curvature ratio of 0.382")
+        void builderShouldUseDefaultThroatCurvatureRatio() {
+            NozzleDesignParameters defaultParams = NozzleDesignParameters.builder()
+                    .exitMach(2.0)
+                    .build();
+
+            assertThat(defaultParams.throatCurvatureRatio())
+                    .isCloseTo(NozzleDesignParameters.DEFAULT_THROAT_CURVATURE_RATIO, within(1e-9));
+        }
+
         @Test
         @DisplayName("Builder should allow planar configuration")
         void builderShouldAllowPlanar() {
@@ -266,10 +277,10 @@ class NozzleDesignParameters_UT {
                     .exitMach(2.0)
                     .planar()
                     .build();
-            
+
             assertThat(planarParams.axisymmetric()).isFalse();
         }
-        
+
         @Test
         @DisplayName("Builder should accept wall angle in degrees")
         void builderShouldAcceptWallAngleDegrees() {
@@ -277,8 +288,58 @@ class NozzleDesignParameters_UT {
                     .exitMach(2.0)
                     .wallAngleInitialDegrees(25)
                     .build();
-            
+
             assertThat(Math.toDegrees(p.wallAngleInitial())).isCloseTo(25, within(0.001));
+        }
+
+        @Test
+        @DisplayName("Builder should accept custom throat curvature ratio")
+        void builderShouldAcceptCustomThroatCurvatureRatio() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .exitMach(2.0)
+                    .throatCurvatureRatio(0.75)
+                    .build();
+
+            assertThat(p.throatCurvatureRatio()).isCloseTo(0.75, within(1e-9));
+        }
+
+        @Test
+        @DisplayName("Builder should reject throat curvature ratio of zero")
+        void builderShouldRejectZeroThroatCurvatureRatio() {
+            assertThatThrownBy(() -> NozzleDesignParameters.builder()
+                    .exitMach(2.0)
+                    .throatCurvatureRatio(0.0)
+                    .build())
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Throat curvature ratio");
+        }
+
+        @Test
+        @DisplayName("Builder should reject throat curvature ratio above 2.0")
+        void builderShouldRejectExcessiveThroatCurvatureRatio() {
+            assertThatThrownBy(() -> NozzleDesignParameters.builder()
+                    .exitMach(2.0)
+                    .throatCurvatureRatio(2.1)
+                    .build())
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Throat curvature ratio");
+        }
+
+        @Test
+        @DisplayName("Builder should accept boundary values for throat curvature ratio")
+        void builderShouldAcceptBoundaryThroatCurvatureRatio() {
+            // Just above zero and exactly at the upper bound should both be accepted
+            assertThatCode(() -> NozzleDesignParameters.builder()
+                    .exitMach(2.0)
+                    .throatCurvatureRatio(0.01)
+                    .build())
+                    .doesNotThrowAnyException();
+
+            assertThatCode(() -> NozzleDesignParameters.builder()
+                    .exitMach(2.0)
+                    .throatCurvatureRatio(2.0)
+                    .build())
+                    .doesNotThrowAnyException();
         }
     }
     

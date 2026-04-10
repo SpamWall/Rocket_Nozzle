@@ -75,6 +75,7 @@ import java.util.List;
  * - Full 3-D revolved mesh export: RevolvedMeshExporter (OpenFOAM blockMesh, Gmsh, Plot3D)
  * - O/F sweep and optimum search: OFSweep adiabatic Isp(O/F), c*(O/F), γ(O/F) curves with golden-section optimum
  * - Dual-bell altitude-compensating nozzle: DualBellNozzle contour, sea-level and high-altitude Isp, transition pressure
+ * - Throat curvature ratio sweep: effect of r_cd/r_t on exit area ratio and Cf across Rao, MOC, and conical contours
  */
 public class Main {
 
@@ -113,6 +114,7 @@ public class Main {
             demonstrateRevolvedMesh(outputDir);
             demonstrateOFSweep();
             demonstrateDualBellNozzle();
+            demonstrateThroatCurvatureRatio();
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -1818,5 +1820,131 @@ public class Main {
                 fixed.chamberTemperature(), fixed.cStar(), fixed.isp());
         System.out.printf("  Adiabatic:  Tc=%5.0f K  c*=%6.0f m/s  Isp=%6.1f s%n",
                 adiab.chamberTemperature(), adiab.cStar(), adiab.isp());
+    }
+
+    /**
+     * Demonstrates the effect of the downstream throat radius-of-curvature ratio
+     * (r_cd / r_t) on nozzle contour and performance.
+     *
+     * <p>A sweep over five representative ratios (0.25, 0.382, 0.5, 0.75, 1.0)
+     * is run for three contour types — MOC (CharacteristicNet), Rao bell
+     * (RaoNozzle), and conical (NozzleContour CONICAL) — so the influence on
+     * exit area ratio and ideal thrust coefficient is visible across design
+     * strategies.
+     */
+    private static void demonstrateThroatCurvatureRatio() {
+        System.out.println("\n--- THROAT CURVATURE RATIO SWEEP ---\n");
+
+        System.out.println("Downstream throat radius of curvature: r_cd = ratio × r_t");
+        System.out.println("Classical Rao default: 0.382  |  Valid range: (0, 2.0]");
+        System.out.println();
+
+        final double RT   = 0.05;   // 50 mm throat radius
+        final double ME   = 3.0;    // design exit Mach
+        final double PC   = 7e6;    // chamber pressure (Pa)
+        final double TC   = 3500.0; // chamber temperature (K)
+        final double PA   = 101325; // sea-level ambient (Pa)
+        final double[] RATIOS = { 0.25, 0.382, 0.5, 0.75, 1.0 };
+
+        // ------------------------------------------------------------------
+        // 1. MOC (CharacteristicNet) sweep — computed exit A/A* and ideal Cf
+        // ------------------------------------------------------------------
+        System.out.println("1. MOC solver (CharacteristicNet)");
+        System.out.printf("   %-8s  %-10s  %-10s  %-10s%n",
+                "r_cd/r_t", "A/A* (calc)", "A/A* (ideal)", "Cf (ideal)");
+        System.out.println("   " + "-".repeat(46));
+
+        for (double ratio : RATIOS) {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .throatRadius(RT).exitMach(ME)
+                    .chamberPressure(PC).chamberTemperature(TC)
+                    .ambientPressure(PA)
+                    .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                    .numberOfCharLines(25)
+                    .wallAngleInitialDegrees(30)
+                    .lengthFraction(0.8)
+                    .throatCurvatureRatio(ratio)
+                    .build();
+
+            CharacteristicNet net = new CharacteristicNet(p).generate();
+            double arCalc  = net.calculateExitAreaRatio();
+            double arIdeal = p.exitAreaRatio();
+            double cfIdeal = p.idealThrustCoefficient();
+
+            String flag = (Math.abs(ratio - NozzleDesignParameters.DEFAULT_THROAT_CURVATURE_RATIO) < 1e-6)
+                    ? " <- default" : "";
+            System.out.printf("   %-8.3f  %-10.4f  %-10.4f  %-10.4f%s%n",
+                    ratio, arCalc, arIdeal, cfIdeal, flag);
+        }
+
+        // ------------------------------------------------------------------
+        // 2. Rao bell (RaoNozzle) sweep — contour length and exit angle
+        // ------------------------------------------------------------------
+        System.out.println("\n2. Rao bell nozzle (RaoNozzle)");
+        System.out.printf("   %-8s  %-14s  %-12s  %-10s%n",
+                "r_cd/r_t", "Length (mm)", "Exit angle °", "Wall pts");
+        System.out.println("   " + "-".repeat(50));
+
+        for (double ratio : RATIOS) {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .throatRadius(RT).exitMach(ME)
+                    .chamberPressure(PC).chamberTemperature(TC)
+                    .ambientPressure(PA)
+                    .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                    .numberOfCharLines(25)
+                    .wallAngleInitialDegrees(30)
+                    .lengthFraction(0.8)
+                    .throatCurvatureRatio(ratio)
+                    .build();
+
+            RaoNozzle rao = new RaoNozzle(p);
+            String flag = (Math.abs(ratio - NozzleDesignParameters.DEFAULT_THROAT_CURVATURE_RATIO) < 1e-6)
+                    ? " <- default" : "";
+            System.out.printf("   %-8.3f  %-14.2f  %-12.4f  %-10d%s%n",
+                    ratio,
+                    rao.getActualLength() * 1000,
+                    Math.toDegrees(rao.getExitAngle()),
+                    rao.getContourPoints().size(),
+                    flag);
+        }
+
+        // ------------------------------------------------------------------
+        // 3. Conical contour sweep — arc end-point radius shift
+        // ------------------------------------------------------------------
+        System.out.println("\n3. Conical contour (NozzleContour.CONICAL)");
+        System.out.printf("   %-8s  %-16s  %-14s%n",
+                "r_cd/r_t", "Arc r_cd (mm)", "Total pts");
+        System.out.println("   " + "-".repeat(42));
+
+        for (double ratio : RATIOS) {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .throatRadius(RT).exitMach(ME)
+                    .chamberPressure(PC).chamberTemperature(TC)
+                    .ambientPressure(PA)
+                    .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                    .numberOfCharLines(25)
+                    .wallAngleInitialDegrees(15)
+                    .lengthFraction(0.8)
+                    .throatCurvatureRatio(ratio)
+                    .build();
+
+            NozzleContour contour = new NozzleContour(NozzleContour.ContourType.CONICAL, p);
+            double rcd = ratio * RT * 1000; // mm
+            String flag = (Math.abs(ratio - NozzleDesignParameters.DEFAULT_THROAT_CURVATURE_RATIO) < 1e-6)
+                    ? " <- default" : "";
+            System.out.printf("   %-8.3f  %-16.2f  %-14d%s%n",
+                    ratio, rcd, contour.getContourPoints().size(), flag);
+        }
+
+        // ------------------------------------------------------------------
+        // 4. Physical interpretation
+        // ------------------------------------------------------------------
+        System.out.println("\nPhysical interpretation:");
+        System.out.println("  Smaller ratio -> tighter throat arc -> stronger initial expansion fan");
+        System.out.println("  -> wave interactions begin closer to the throat.");
+        System.out.println("  Larger ratio  -> gentler arc -> more uniform flow entering the divergent");
+        System.out.println("  section, at the cost of added nozzle mass and length.");
+        System.out.println("  Ideal Cf and A/A* are geometry-independent (set by Mach and gamma);");
+        System.out.println("  the MOC computed A/A* confirms the solver reaches the design exit Mach.");
     }
 }

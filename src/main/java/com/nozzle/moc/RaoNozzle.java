@@ -139,8 +139,8 @@ public class RaoNozzle {
      * @param rt Throat radius
      */
     private void generateThroatRegion(double rt) {
-        // Throat downstream radius of curvature (typical 0.382 * rt for bell)
-        double rcd = 0.382 * rt;
+        // Throat downstream radius of curvature (r_cd = ratio × r_t)
+        double rcd = parameters.throatCurvatureRatio() * rt;
 
         // Generate downstream arc (divergent section start) beginning at the throat
         int numDownstreamPoints = numContourPoints / 10;
@@ -160,7 +160,7 @@ public class RaoNozzle {
      */
     private void generateBellContour(double rt, double re) {
         // Start point (end of throat arc)
-        double rcd = 0.382 * rt;
+        double rcd = parameters.throatCurvatureRatio() * rt;
         double x0 = rcd * Math.sin(inflectionAngle);
         double y0 = rt + rcd * (1 - Math.cos(inflectionAngle));
         double slope0 = Math.tan(inflectionAngle);

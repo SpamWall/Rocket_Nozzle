@@ -29,16 +29,20 @@ import jakarta.validation.constraints.Positive;
  * Immutable record containing nozzle design parameters.
  * All dimensions are in SI units (meters, Pascals, Kelvin).
  *
- * @param throatRadius        Throat radius in meters
- * @param exitMach            Design exit Mach number
- * @param chamberPressure     Chamber (stagnation) pressure in Pa
- * @param chamberTemperature  Chamber (stagnation) temperature in K
- * @param ambientPressure     Ambient pressure in Pa
- * @param gasProperties       Gas thermodynamic properties
- * @param numberOfCharLines   Number of characteristic lines for MOC
- * @param wallAngleInitial    Initial wall angle at throat in radians
- * @param lengthFraction      Fractional length compared to 15° cone (Rao parameter)
- * @param axisymmetric        True for axisymmetric nozzle, false for 2D planar
+ * @param throatRadius          Throat radius in meters
+ * @param exitMach              Design exit Mach number
+ * @param chamberPressure       Chamber (stagnation) pressure in Pa
+ * @param chamberTemperature    Chamber (stagnation) temperature in K
+ * @param ambientPressure       Ambient pressure in Pa
+ * @param gasProperties         Gas thermodynamic properties
+ * @param numberOfCharLines     Number of characteristic lines for MOC
+ * @param wallAngleInitial      Initial wall angle at throat in radians
+ * @param lengthFraction        Fractional length compared to 15° cone (Rao parameter)
+ * @param axisymmetric          True for axisymmetric nozzle, false for 2D planar
+ * @param throatCurvatureRatio  Downstream throat radius of curvature as a multiple
+ *                              of the throat radius (r_cd = ratio × r_t).
+ *                              The classical Rao value is 0.382; the valid range
+ *                              is (0, 2.0].
  */
 @JsonDeserialize(builder = NozzleDesignParameters.Builder.class)
 public record NozzleDesignParameters(
@@ -51,7 +55,8 @@ public record NozzleDesignParameters(
         @Min(5) int numberOfCharLines,
         @Positive double wallAngleInitial,
         @Positive double lengthFraction,
-        boolean axisymmetric
+        boolean axisymmetric,
+        @Positive double throatCurvatureRatio
 ) {
     
     /**
@@ -62,13 +67,20 @@ public record NozzleDesignParameters(
     public static final int DEFAULT_CHAR_LINES = 50;
     
     /**
+     * Default downstream throat radius-of-curvature ratio (r_cd / r_t).
+     * This is the classical Rao value for bell nozzles.
+     */
+    public static final double DEFAULT_THROAT_CURVATURE_RATIO = 0.382;
+
+    /**
      * Compact canonical constructor that validates all design parameters.
      *
      * @throws IllegalArgumentException if {@code exitMach} &lt; 1, {@code throatRadius} ≤ 0,
      *         {@code chamberPressure} ≤ {@code ambientPressure},
      *         {@code numberOfCharLines} &lt; 5,
-     *         {@code wallAngleInitial} outside (0, π/4], or
-     *         {@code lengthFraction} outside (0, 1]
+     *         {@code wallAngleInitial} outside (0, π/4],
+     *         {@code lengthFraction} outside (0, 1], or
+     *         {@code throatCurvatureRatio} outside (0, 2]
      */
     public NozzleDesignParameters {
         if (exitMach < 1.0) {
@@ -89,6 +101,10 @@ public record NozzleDesignParameters(
         }
         if (lengthFraction <= 0 || lengthFraction > 1.0) {
             throw new IllegalArgumentException("Length fraction must be between 0 and 1");
+        }
+        if (throatCurvatureRatio <= 0 || throatCurvatureRatio > 2.0) {
+            throw new IllegalArgumentException(
+                    "Throat curvature ratio must be in (0, 2.0]; got " + throatCurvatureRatio);
         }
     }
     
@@ -241,7 +257,8 @@ public record NozzleDesignParameters(
      * All fields are pre-initialized to reasonable defaults (throat radius 50 mm,
      * exit Mach 3, chamber pressure 7 MPa, chamber temperature 3500 K,
      * sea-level ambient pressure, {@link GasProperties#AIR}, 30° initial wall
-     * angle, length fraction 0.8, axisymmetric geometry).
+     * angle, length fraction 0.8, throat curvature ratio 0.382, axisymmetric
+     * geometry).
      * Overriding any subset before calling {@link #build()} is sufficient.
      */
     @JsonPOJOBuilder(withPrefix = "")
@@ -260,6 +277,7 @@ public record NozzleDesignParameters(
         private double wallAngleInitial = Math.toRadians(30.0);
         private double lengthFraction = 0.8;
         private boolean axisymmetric = true;
+        private double throatCurvatureRatio = DEFAULT_THROAT_CURVATURE_RATIO;
 
         /**
          * Sets the throat radius.
@@ -399,6 +417,29 @@ public record NozzleDesignParameters(
         }
 
         /**
+         * Sets the downstream throat radius of curvature as a multiple of the
+         * throat radius ({@code r_cd = ratio × r_t}).  Controls how sharply the
+         * flow turns through the throat and directly seeds the initial expansion
+         * wave fan used by the MOC solver.
+         *
+         * <p>Typical values:
+         * <ul>
+         *   <li>0.382 — classical Rao bell nozzle default (minimum recommended
+         *       for uniform exit flow)</li>
+         *   <li>0.5–1.0 — shorter nozzles or designs with tighter length budgets</li>
+         *   <li>&gt; 1.0 — very gentle throat transition, used in high-performance
+         *       research nozzles where exit uniformity is paramount</li>
+         * </ul>
+         *
+         * @param throatCurvatureRatio dimensionless ratio r_cd / r_t; must be in (0, 2]
+         * @return This builder
+         */
+        public Builder throatCurvatureRatio(double throatCurvatureRatio) {
+            this.throatCurvatureRatio = throatCurvatureRatio;
+            return this;
+        }
+
+        /**
          * Builds and returns a validated {@link NozzleDesignParameters} instance
          * from the current builder state.
          *
@@ -410,7 +451,8 @@ public record NozzleDesignParameters(
             return new NozzleDesignParameters(
                     throatRadius, exitMach, chamberPressure, chamberTemperature,
                     ambientPressure, gasProperties, numberOfCharLines,
-                    wallAngleInitial, lengthFraction, axisymmetric
+                    wallAngleInitial, lengthFraction, axisymmetric,
+                    throatCurvatureRatio
             );
         }
     }

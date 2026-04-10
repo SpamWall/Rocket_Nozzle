@@ -23,12 +23,21 @@ NozzleDesignParameters params = NozzleDesignParameters.builder()
         .wallAngleInitialDegrees(30)                // throat-side wall angle
         .lengthFraction(0.8)                        // 80% of ideal nozzle length
         .axisymmetric(true)
+        .throatCurvatureRatio(0.382)                // r_cd / r_t (optional, default 0.382)
         .build();
 ```
 
 **Key builder defaults:** `throatRadius=0.05`, `exitMach=3.0`, `Pc=7 MPa`,
 `Tc=3500 K`, `Pa=101325 Pa`, `numberOfCharLines=50`, `wallAngleDeg=30`,
-`lengthFraction=0.8`, `axisymmetric=true`.
+`lengthFraction=0.8`, `axisymmetric=true`, `throatCurvatureRatio=0.382`.
+
+**`throatCurvatureRatio(double ratio)`** — Sets the downstream throat
+radius of curvature as a multiple of the throat radius:
+`r_cd = ratio × r_throat`. Controls how sharply the flow turns through the
+throat and directly seeds the initial expansion wave fan used by all contour
+generators (MOC, Rao bell, conical, TIC, dual-bell). Valid range: `(0, 2.0]`.
+The constant `NozzleDesignParameters.DEFAULT_THROAT_CURVATURE_RATIO` equals
+`0.382`, the classical Rao value for bell nozzles.
 
 **Derived quantities (computed lazily on first access):**
 

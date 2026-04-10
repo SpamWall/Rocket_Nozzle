@@ -79,6 +79,7 @@ NozzleDesignParameters params = NozzleDesignParameters.builder()
         .wallAngleInitialDegrees(30)      // initial wall angle at throat
         .lengthFraction(0.8)              // 80% of ideal (conical) nozzle length
         .axisymmetric(true)
+        // .throatCurvatureRatio(0.382)   // optional — 0.382 is the default
         .build();
 ```
 
@@ -88,6 +89,14 @@ NozzleDesignParameters params = NozzleDesignParameters.builder()
 `lengthFraction` controls how aggressively the Rao bell contour is shortened
 relative to a 15° conical reference nozzle. Values between 0.7 and 0.9 are
 typical for flight engines; 0.8 is a good starting point.
+
+`throatCurvatureRatio` sets the downstream throat radius of curvature as a
+multiple of the throat radius (`r_cd = ratio × r_throat`). The default of
+0.382 is the classical Rao value and is appropriate for most designs. Increase
+it toward 0.75–1.0 for research nozzles where exit flow uniformity matters more
+than length; decrease it toward 0.25 only if tight packaging forces a very short
+throat arc. The ratio affects all contour types (MOC, Rao bell, conical, TIC,
+dual-bell) because all share the same circular-arc throat region.
 
 ### Step 2 — Run the Method of Characteristics solver
 

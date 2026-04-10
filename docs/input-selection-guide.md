@@ -22,6 +22,7 @@ This guide documents *how to choose it*.
    - [wallAngleInitialDegrees](#wallangleinitialdegrees)
    - [lengthFraction](#lengthfraction)
    - [axisymmetric](#axisymmetric)
+   - [throatCurvatureRatio](#throatcurvatureratio)
 2. [Nozzle type selection](#2-nozzle-type-selection)
 3. [AerospikeNozzle parameters](#3-aerospikenozzle-parameters)
 4. [DualBellNozzle parameters](#4-dualbellnozzle-parameters)
@@ -367,6 +368,54 @@ nozzle (rectangular cross-section with parallel side walls).
 default).** Nearly all liquid and solid rocket nozzles are round in cross-section. 
 Setting `false` changes the source term in the MOC equations and
 produces a contour that is only correct for a 2-D geometry.
+
+### throatCurvatureRatio
+
+**What it controls:** The radius of the circular arc used to blend the sonic
+throat into the divergent section, expressed as a multiple of the throat radius.
+Specifically, `r_cd = throatCurvatureRatio × r_throat`, where `r_cd` is the
+downstream radius of curvature.
+
+**Where it appears:** The circular-arc throat region is shared by every contour
+generator in the library — `CharacteristicNet`, `RaoNozzle`,
+`NozzleContour` (CONICAL, RAO\_BELL, TRUNCATED\_IDEAL), and `DualBellNozzle`.
+Changing this value therefore affects all of them consistently.
+
+**Typical values:**
+
+| Ratio | Characterisation |
+|-------|-----------------|
+| 0.25  | Very tight arc. Produces a strong initial expansion fan; shortest throat arc length. Use only when packaging is severely constrained. Risk of flow non-uniformity near the throat. |
+| 0.382 | **Default (Rao classical value).** Recommended minimum for bell nozzles. Balances arc length against downstream flow quality. |
+| 0.5   | Slightly gentler arc. A safe choice when exit flow uniformity matters more than minimum length. |
+| 0.75  | Noticeably longer throat arc. Common in high-performance wind-tunnel or research nozzles. |
+| 1.0   | Arc radius equals the throat radius. Very uniform flow entering the divergent section; adds measurable nozzle length and mass. |
+
+**Effect on performance:** Ideal Cf and A/A\* are purely functions of Mach
+number and gamma; they do not depend on this ratio. What changes is the geometry
+of the wall immediately downstream of the throat, which affects:
+- The location and strength of the initial expansion wave fan (important for the
+  MOC initial data line).
+- The axial starting position of the Bézier or parabolic bell section.
+- Physical nozzle length (larger ratio → longer arc → longer nozzle for the same
+  `lengthFraction`).
+
+**Interaction with wallAngleInitialDegrees:** Both parameters together determine
+the shape of the first part of the divergent section. The arc sweeps from 0° to
+`wallAngleInitial`; its arc length is `r_cd × wallAngleInitial`. A large wall
+angle combined with a large curvature ratio produces a long throat arc and a
+gentle expansion. A small wall angle with a small curvature ratio produces the
+shortest possible throat transition.
+
+**Validation range:** `(0, 2.0]`. Values above 2.0 are rejected by the compact
+constructor with an `IllegalArgumentException`.
+
+**When to change from the default:**
+- Reduce toward 0.25 only if the nozzle must fit in a very tight axial envelope
+  and flow uniformity is a secondary concern.
+- Increase toward 0.75–1.0 for laboratory or wind-tunnel nozzles where the
+  uniformity of the exit profile is the primary design objective.
+- For all flight propulsion designs, the default 0.382 is appropriate.
 
 ---
 
