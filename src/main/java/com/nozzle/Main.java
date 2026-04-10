@@ -1872,14 +1872,18 @@ public class Main {
         System.out.printf("  Contour wall points:         %d%n", cs.getContourPoints().size());
 
         // ------------------------------------------------------------------
-        // 2. Sonic-line discharge-coefficient correction
+        // 2. Discharge coefficient — computed directly from NozzleDesignParameters
         // ------------------------------------------------------------------
-        System.out.println("\nSonic-line Cd correction:");
-        System.out.printf("  Cd_geo (default r_cu=1.5, r_cd=0.382):  %.5f%n",
-                cs.getSonicLineCdCorrection());
+        System.out.println("\nDischarge coefficient (params.dischargeCoefficient()):");
+        System.out.printf("  Cd  = %.5f  (r_cd/r_t=%.3f, r_cu/r_t=%.3f, γ=%.3f)%n",
+                params.dischargeCoefficient(),
+                params.throatCurvatureRatio(),
+                params.upstreamCurvatureRatio(),
+                params.gasProperties().gamma());
+        System.out.printf("  ΔCd = %.3f%%%n", (1.0 - params.dischargeCoefficient()) * 100);
 
-        // Sweep over upstream curvature ratios
-        System.out.println("\n  r_cu/r_t   r_cd/r_t   Cd_geo    ΔCd (%)");
+        // Sweep: Cd as a function of r_cu/r_t — no ConvergentSection required
+        System.out.println("\n  r_cu/r_t   r_cd/r_t   Cd        ΔCd (%)");
         System.out.println("  " + "-".repeat(44));
         double[] upRatios = {0.5, 1.0, 1.5, 2.0, 3.0};
         for (double uRatio : upRatios) {
@@ -1888,12 +1892,11 @@ public class Main {
                     .chamberTemperature(3500).ambientPressure(101325)
                     .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
                     .upstreamCurvatureRatio(uRatio)
-                    .convergentHalfAngleDegrees(30).contractionRatio(4.0)
                     .build();
-            double cd = new ConvergentSection(p2).generate(40).getSonicLineCdCorrection();
+            double cd = p2.dischargeCoefficient();
             String flag = Math.abs(uRatio - 1.5) < 1e-6 ? " <- default" : "";
             System.out.printf("  %-9.2f  %-9.3f  %.5f   %.3f%%%s%n",
-                    uRatio, params.throatCurvatureRatio(), cd, (1.0 - cd) * 100, flag);
+                    uRatio, p2.throatCurvatureRatio(), cd, (1.0 - cd) * 100, flag);
         }
 
         // ------------------------------------------------------------------
@@ -1931,20 +1934,17 @@ public class Main {
                 fullContour.getContourPoints().getFirst().x() * 1000);
 
         // ------------------------------------------------------------------
-        // 5. Performance with Cd_sonic applied
+        // 5. Performance — Cd always applied from NozzleDesignParameters
         // ------------------------------------------------------------------
-        PerformanceCalculator perfNoCd = PerformanceCalculator.simple(params).calculate();
-        PerformanceCalculator perfWithCd = new PerformanceCalculator(
-                params, null, null, null, null, cs).calculate();
+        PerformanceCalculator perf = PerformanceCalculator.simple(params).calculate();
 
-        System.out.println("\nPerformance — effect of Cd_geo correction:");
-        System.out.printf("  Without Cd_geo:  thrust = %.3f kN   ṁ = %.4f kg/s%n",
-                perfNoCd.getThrust() / 1000, perfNoCd.getMassFlowRate());
-        System.out.printf("  With    Cd_geo:  thrust = %.3f kN   ṁ = %.4f kg/s  (Cd = %.5f)%n",
-                perfWithCd.getThrust() / 1000, perfWithCd.getMassFlowRate(),
-                perfWithCd.getSonicLineCdCorrection());
-        System.out.printf("  Isp unchanged:   %.1f s (geometry-independent)%n",
-                perfWithCd.getSpecificImpulse());
+        System.out.println("\nPerformance (Cd applied automatically from curvature ratios):");
+        System.out.printf("  Cd_geo:  %.5f  (r_cd/r_t=%.3f, r_cu/r_t=%.3f)%n",
+                params.dischargeCoefficient(),
+                params.throatCurvatureRatio(), params.upstreamCurvatureRatio());
+        System.out.printf("  thrust = %.3f kN   ṁ = %.4f kg/s   Isp = %.1f s%n",
+                perf.getThrust() / 1000, perf.getMassFlowRate(), perf.getSpecificImpulse());
+        System.out.printf("  (Isp is geometry-independent; Cd scales thrust and mass flow equally)%n");
 
         // ------------------------------------------------------------------
         // 6. Geometry-complete CSV export

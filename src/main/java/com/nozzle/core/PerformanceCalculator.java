@@ -21,7 +21,6 @@
 package com.nozzle.core;
 
 import com.nozzle.chemistry.ChemistryModel;
-import com.nozzle.geometry.ConvergentSection;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.CharacteristicPoint;
@@ -65,14 +64,12 @@ public class PerformanceCalculator {
     private final NozzleContour contour;
     private final BoundaryLayerCorrection boundaryLayer;
     private final ChemistryModel chemistry;
-    private final ConvergentSection convergentSection;
 
     // Calculated results
     private double idealThrustCoeff;
     private double divergenceLoss;
     private double boundaryLayerLoss;
     private double chemicalLoss;
-    private double sonicLineCdCorrection = 1.0;   // Cd_geo from sonic-line curvature
     private double actualThrustCoeff;
     private double efficiency;
     private double specificImpulse;
@@ -101,48 +98,24 @@ public class PerformanceCalculator {
                                   NozzleContour contour,
                                   BoundaryLayerCorrection boundaryLayer,
                                   ChemistryModel chemistry) {
-        this(parameters, characteristicNet, contour, boundaryLayer, chemistry, null);
-    }
-
-    /**
-     * Creates a fully configured performance calculator that also applies the
-     * sonic-line discharge-coefficient correction from a
-     * {@link ConvergentSection}.
-     *
-     * @param parameters        Nozzle design parameters; must not be {@code null}
-     * @param characteristicNet MOC net for divergence factor; may be {@code null}
-     * @param contour           Wall contour; may be {@code null}
-     * @param boundaryLayer     Boundary-layer model; may be {@code null}
-     * @param chemistry         Chemistry model; may be {@code null}
-     * @param convergentSection Convergent section providing the sonic-line Cd
-     *                          correction; may be {@code null}
-     */
-    public PerformanceCalculator(NozzleDesignParameters parameters,
-                                  CharacteristicNet characteristicNet,
-                                  NozzleContour contour,
-                                  BoundaryLayerCorrection boundaryLayer,
-                                  ChemistryModel chemistry,
-                                  ConvergentSection convergentSection) {
         this.parameters = parameters;
         this.characteristicNet = characteristicNet;
         this.contour = contour;
         this.boundaryLayer = boundaryLayer;
         this.chemistry = chemistry;
-        this.convergentSection = convergentSection;
     }
 
     /**
      * Creates a minimal performance calculator backed only by design parameters.
      * All optional models ({@link CharacteristicNet}, {@link NozzleContour},
-     * {@link BoundaryLayerCorrection}, {@link ChemistryModel},
-     * {@link ConvergentSection}) are {@code null};
+     * {@link BoundaryLayerCorrection}, {@link ChemistryModel}) are {@code null};
      * losses are estimated from built-in correlations.
      *
      * @param parameters Nozzle design parameters; must not be {@code null}
      * @return A new {@code PerformanceCalculator} with all optional models absent
      */
     public static PerformanceCalculator simple(NozzleDesignParameters parameters) {
-        return new PerformanceCalculator(parameters, null, null, null, null, null);
+        return new PerformanceCalculator(parameters, null, null, null, null);
     }
     
     /**
@@ -356,11 +329,10 @@ public class PerformanceCalculator {
 
    /**
      * Combines all loss terms, applies the sonic-line discharge-coefficient
-     * correction (if a {@link ConvergentSection} was supplied), and computes
-     * the delivered performance metrics.
+     * correction, and computes the delivered performance metrics.
      *
-     * <p>The sonic-line correction {@code Cd_geo} scales both the throat mass
-     * flow and the delivered thrust proportionally, leaving Isp unchanged
+     * <p>{@code Cd_geo} is derived directly from {@link NozzleDesignParameters#dischargeCoefficient()}
+     * and scales both thrust and mass flow proportionally, leaving Isp unchanged
      * (Isp = F / (g₀ṁ) = Cf · c* / g₀ is geometry-independent).
      */
     private void calculateActualPerformance() {
@@ -374,18 +346,16 @@ public class PerformanceCalculator {
 
         specificImpulse = cStar * actualThrustCoeff / g0;
 
-        // Sonic-line Cd correction: scales effective throat area, reducing both
-        // thrust and mass flow by the same factor.  Isp is unaffected.
-        if (convergentSection != null) {
-            sonicLineCdCorrection = convergentSection.getSonicLineCdCorrection();
-        }
+        // Sonic-line Cd: always applied; derived from throat curvature ratios
+        // already present in NozzleDesignParameters.  Isp is unaffected.
+        double cd = parameters.dischargeCoefficient();
 
         thrust       = actualThrustCoeff * parameters.chamberPressure()
-                       * parameters.throatArea() * sonicLineCdCorrection;
-        massFlowRate = massFlowRate * sonicLineCdCorrection;
+                       * parameters.throatArea() * cd;
+        massFlowRate = massFlowRate * cd;
 
-        LOG.debug("Performance: Cf_ideal={} Cf_actual={} Cd_geo={} efficiency={}% Isp={} s thrust={} N",
-                idealThrustCoeff, actualThrustCoeff, sonicLineCdCorrection,
+        LOG.debug("Performance: Cf_ideal={} Cf_actual={} Cd={} efficiency={}% Isp={} s thrust={} N",
+                idealThrustCoeff, actualThrustCoeff, cd,
                 efficiency * 100, specificImpulse, thrust);
     }
     
@@ -454,21 +424,13 @@ public class PerformanceCalculator {
 
     /**
      * Returns the propellant mass flow rate through the throat, corrected for
-     * the sonic-line discharge coefficient when a {@link ConvergentSection} was
-     * supplied.
+     * the sonic-line discharge coefficient from
+     * {@link NozzleDesignParameters#dischargeCoefficient()}.
      *
-     * @return Mass flow rate = {@code Cd_geo · Pc · At / c*} in kg/s
+     * @return Mass flow rate = {@code Cd · Pc · At / c*} in kg/s
      */
     public double getMassFlowRate() { return massFlowRate; }
 
-    /**
-     * Returns the geometric discharge-coefficient correction from sonic-line
-     * curvature.  This is 1.0 if no {@link ConvergentSection} was supplied.
-     *
-     * @return Cd_geo ∈ [0.98, 1.0]
-     */
-    public double getSonicLineCdCorrection() { return sonicLineCdCorrection; }
-    
     /**
      * Returns the sum of all three thrust-coefficient loss terms.
      *

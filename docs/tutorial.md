@@ -100,7 +100,7 @@ multiple of the throat radius (`r_cd = ratio × r_throat`). The default of
 `upstreamCurvatureRatio` sets the upstream (convergent-side) throat arc radius
 as a multiple of r_t. The default 1.5 is standard for liquid-propellant bell
 nozzles. Together with `throatCurvatureRatio`, it determines the curvature of
-the sonic line and hence the geometric discharge-coefficient correction.
+the sonic line and hence the discharge coefficient.
 
 `convergentHalfAngleDegrees` sets the half-angle of the straight conical section
 that connects the upstream arc to the combustion chamber. Default 30°.
@@ -108,8 +108,20 @@ that connects the upstream arc to the combustion chamber. Default 30°.
 `contractionRatio` is the chamber-to-throat area ratio Ac/At. It determines the
 chamber radius `r_c = r_t × √(contractionRatio)`. Default 4.0.
 
-To generate the full convergent-section geometry and use it throughout the
-pipeline:
+The discharge coefficient `Cd` is a derived property of `NozzleDesignParameters`
+and is always applied automatically by `PerformanceCalculator`:
+
+```
+// Cd is available directly from params — no ConvergentSection required
+double cd = params.dischargeCoefficient();   // e.g. 0.9962 for defaults
+
+// PerformanceCalculator always applies Cd to thrust and mass flow
+PerformanceCalculator pc = PerformanceCalculator.simple(params).calculate();
+System.out.printf("Cd  = %.5f%n", params.dischargeCoefficient());
+System.out.printf("Isp = %.1f s  (Cd does not affect Isp)%n", pc.getSpecificImpulse());
+```
+
+To also generate the full convergent-section geometry:
 
 ```
 // Build the convergent section geometry
@@ -122,11 +134,8 @@ NozzleContour full      = divergent.withConvergentSection(cs);
 // BL integration now starts at the chamber face
 BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, full).calculate(null);
 
-// Sonic-line Cd applied to thrust and mass flow; Isp unchanged
-PerformanceCalculator pc = new PerformanceCalculator(
-        params, net, full, bl, null, cs).calculate();
-
-System.out.printf("Cd_geo = %.5f%n", pc.getSonicLineCdCorrection());
+// Cd still comes from params; pass the full contour for BL and geometry exports
+PerformanceCalculator pc = new PerformanceCalculator(params, net, full, bl, null).calculate();
 
 // All exporters produce geometry-complete output automatically
 new DXFExporter().exportRevolutionProfile(full, outputDir.resolve("full_nozzle.dxf"));

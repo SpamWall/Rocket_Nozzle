@@ -426,9 +426,10 @@ constructor with an `IllegalArgumentException`.
 (upstream) side of the throat, expressed as a multiple of the throat radius:
 `r_cu = upstreamCurvatureRatio × r_t`.
 
-**Where it appears:** Used exclusively by `ConvergentSection` to generate the
-upstream arc and to compute the sonic-line discharge-coefficient correction
-`Cd_geo` (via the harmonic mean of `r_cu` and `r_cd`).
+**Where it appears:** Controls the upstream convergent arc geometry in
+`ConvergentSection`.  Together with `throatCurvatureRatio`, it determines
+`NozzleDesignParameters.dischargeCoefficient()` — the sonic-line Cd correction
+applied automatically by `PerformanceCalculator` to thrust and mass flow rate.
 
 **Typical values:**
 

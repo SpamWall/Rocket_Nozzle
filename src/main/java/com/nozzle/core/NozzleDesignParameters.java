@@ -174,7 +174,38 @@ public record NozzleDesignParameters(
     public double convergentHalfAngleDegrees() {
         return Math.toDegrees(convergentHalfAngle);
     }
-    
+
+    /**
+     * Geometric discharge coefficient (Cd) based on sonic-line curvature.
+     *
+     * <p>The sonic line at the throat is curved rather than flat, so the
+     * effective (mass-flow) throat area is slightly smaller than the geometric
+     * throat area.  The correction depends on the harmonic mean of the upstream
+     * and downstream throat radii of curvature:
+     *
+     * <pre>
+     *   κ  = (1/r_cd + 1/r_cu) / (2 r_t)
+     *      = (throatCurvatureRatio + upstreamCurvatureRatio)
+     *        / (2 · throatCurvatureRatio · upstreamCurvatureRatio · r_t / r_t)
+     *      simplifies to a dimensionless ratio independent of r_t
+     *
+     *   Cd = max(0.98,  1 − 0.0023 · √((γ+1)/2.4) · κ)
+     * </pre>
+     *
+     * <p>Coefficient calibrated to the axisymmetric Kliegel &amp; Levine (1969)
+     * nozzle data.  For typical bell-nozzle parameters
+     * (r_cd/r_t = 0.382, r_cu/r_t = 1.5, γ = 1.4) this gives Cd ≈ 0.9962.
+     *
+     * @return Cd ∈ [0.98, 1.0]
+     */
+    public double dischargeCoefficient() {
+        // κ is independent of r_t because rcd and rcu scale with r_t
+        double kappa = (throatCurvatureRatio + upstreamCurvatureRatio)
+                       / (2.0 * throatCurvatureRatio * upstreamCurvatureRatio);
+        double coeff = 0.0023 * Math.sqrt((gasProperties.gamma() + 1.0) / 2.4);
+        return Math.max(0.98, 1.0 - coeff * kappa);
+    }
+
     /**
      * Creates a builder for NozzleDesignParameters.
      *
@@ -528,6 +559,20 @@ public record NozzleDesignParameters(
          */
         public Builder upstreamCurvatureRatio(double upstreamCurvatureRatio) {
             this.upstreamCurvatureRatio = upstreamCurvatureRatio;
+            return this;
+        }
+
+        /**
+         * Sets the half-angle of the convergent cone in radians.
+         * Used by the Jackson JSON deserializer to restore values written by
+         * the record's {@code convergentHalfAngle()} accessor.
+         * Prefer {@link #convergentHalfAngleDegrees(double)} in application code.
+         *
+         * @param convergentHalfAngle Half-angle in radians; must be in [5°, 60°]
+         * @return This builder
+         */
+        public Builder convergentHalfAngle(double convergentHalfAngle) {
+            this.convergentHalfAngle = convergentHalfAngle;
             return this;
         }
 

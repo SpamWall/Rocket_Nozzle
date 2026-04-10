@@ -52,10 +52,11 @@ Determines chamber radius: `r_c = r_t × √(contractionRatio)`. Valid range
 
 **Derived quantities also added:**
 
-| Method                         | Returns                                  |
-|--------------------------------|------------------------------------------|
-| `chamberRadius()`              | r_t · √(contractionRatio)                |
-| `convergentHalfAngleDegrees()` | convergentHalfAngle converted to degrees |
+| Method                         | Returns                                                                     |
+|--------------------------------|-----------------------------------------------------------------------------|
+| `chamberRadius()`              | r_t · √(contractionRatio)                                                   |
+| `convergentHalfAngleDegrees()` | convergentHalfAngle converted to degrees                                    |
+| `dischargeCoefficient()`       | Cd ∈ [0.98, 1.0] — sonic-line curvature correction to effective throat area |
 
 ---
 
@@ -87,26 +88,25 @@ new STLExporter().exportMesh(full, path);
 // BL integration starts at the chamber face automatically
 BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, full).calculate(null);
 
-// Incorporate Cd_geo into PerformanceCalculator
-PerformanceCalculator pc = new PerformanceCalculator(
-        params, net, full, bl, null, cs).calculate();
-System.out.println(pc.getSonicLineCdCorrection());  // Cd_geo
-System.out.println(pc.getMassFlowRate());           // scaled by Cd_geo
-System.out.println(pc.getThrust());                 // scaled by Cd_geo
+// Cd is applied automatically — no ConvergentSection needed by PerformanceCalculator
+PerformanceCalculator pc = new PerformanceCalculator(params, net, full, bl, null).calculate();
+System.out.println(params.dischargeCoefficient());  // Cd ∈ [0.98, 1.0]
+System.out.println(pc.getMassFlowRate());           // scaled by Cd
+System.out.println(pc.getThrust());                 // scaled by Cd
 System.out.println(pc.getSpecificImpulse());        // unchanged
 ```
 
 **Key methods:**
 
-| Method                       | Description                                               |
-|------------------------------|-----------------------------------------------------------|
-| `generate(int n)`            | Populate wall points; returns `this`                      |
-| `getContourPoints()`         | Ordered wall points from chamber face to throat (x < 0)   |
-| `getChamberRadius()`         | r_c = r_t · √(contractionRatio) in metres                 |
-| `getLength()`                | Axial extent of convergent section (positive value)       |
-| `getArcEndX()`               | x-coordinate of arc/cone junction                         |
-| `getArcEndY()`               | Radius at arc/cone junction                               |
-| `getSonicLineCdCorrection()` | Cd_geo ∈ [0.98, 1.0] from harmonic-mean curvature formula |
+| Method                       | Description                                                     |
+|------------------------------|-----------------------------------------------------------------|
+| `generate(int n)`            | Populate wall points; returns `this`                            |
+| `getContourPoints()`         | Ordered wall points from chamber face to throat (x < 0)         |
+| `getChamberRadius()`         | r_c = r_t · √(contractionRatio) in metres                       |
+| `getLength()`                | Axial extent of convergent section (positive value)             |
+| `getArcEndX()`               | x-coordinate of arc/cone junction                               |
+| `getArcEndY()`               | Radius at arc/cone junction                                     |
+| `getSonicLineCdCorrection()` | Cd ∈ [0.98, 1.0] — delegates to `params.dischargeCoefficient()` |
 
 **Derived quantities (computed lazily on first access):**
 

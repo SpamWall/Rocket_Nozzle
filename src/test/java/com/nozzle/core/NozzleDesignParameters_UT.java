@@ -396,6 +396,18 @@ class NozzleDesignParameters_UT {
         }
 
         @Test
+        @DisplayName("Builder radians setter and degrees setter produce the same result")
+        void convergentHalfAngleRadiansSetterMatchesDegreesSetter() {
+            double rad = Math.toRadians(40.0);
+            NozzleDesignParameters fromRad = NozzleDesignParameters.builder()
+                    .exitMach(2.0).convergentHalfAngle(rad).build();
+            NozzleDesignParameters fromDeg = NozzleDesignParameters.builder()
+                    .exitMach(2.0).convergentHalfAngleDegrees(40.0).build();
+            assertThat(fromRad.convergentHalfAngle())
+                    .isCloseTo(fromDeg.convergentHalfAngle(), within(1e-12));
+        }
+
+        @Test
         @DisplayName("Builder should reject convergent half-angle below 5 degrees")
         void builderShouldRejectTooSmallConvergentHalfAngle() {
             assertThatThrownBy(() -> NozzleDesignParameters.builder()
@@ -453,6 +465,63 @@ class NozzleDesignParameters_UT {
             NozzleDesignParameters p = NozzleDesignParameters.builder()
                     .throatRadius(0.05).exitMach(2.0).contractionRatio(4.0).build();
             assertThat(p.chamberRadius()).isCloseTo(0.05 * Math.sqrt(4.0), within(1e-9));
+        }
+
+        // --- dischargeCoefficient ---
+
+        @Test
+        @DisplayName("dischargeCoefficient() should be in [0.98, 1.0]")
+        void dischargeCoefficientShouldBeInValidRange() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder().exitMach(2.0).build();
+            assertThat(p.dischargeCoefficient()).isBetween(0.98, 1.0);
+        }
+
+        @Test
+        @DisplayName("dischargeCoefficient() should be strictly less than 1.0 for finite curvature")
+        void dischargeCoefficientShouldBeLessThanOne() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder().exitMach(2.0).build();
+            assertThat(p.dischargeCoefficient()).isLessThan(1.0);
+        }
+
+        @Test
+        @DisplayName("dischargeCoefficient() expected value for defaults")
+        void dischargeCoefficientExpectedValueForDefaults() {
+            // defaults: r_cd/r_t = 0.382, r_cu/r_t = 1.5, γ = 1.4
+            // κ = (0.382 + 1.5) / (2 × 0.382 × 1.5) ≈ 1.6422
+            // Cd = 1 − 0.0023 × 1.6422 ≈ 0.9962
+            NozzleDesignParameters p = NozzleDesignParameters.builder().exitMach(2.0).build();
+            assertThat(p.dischargeCoefficient()).isCloseTo(0.9962, within(0.0005));
+        }
+
+        @Test
+        @DisplayName("dischargeCoefficient() should decrease as throatCurvatureRatio decreases")
+        void dischargeCoefficientDecreasesWithSmallerDownstreamRadius() {
+            NozzleDesignParameters small = NozzleDesignParameters.builder()
+                    .exitMach(2.0).throatCurvatureRatio(0.2).build();
+            NozzleDesignParameters large = NozzleDesignParameters.builder()
+                    .exitMach(2.0).throatCurvatureRatio(1.0).build();
+            assertThat(small.dischargeCoefficient()).isLessThan(large.dischargeCoefficient());
+        }
+
+        @Test
+        @DisplayName("dischargeCoefficient() should increase as upstreamCurvatureRatio increases")
+        void dischargeCoefficientIncreasesWithLargerUpstreamRadius() {
+            NozzleDesignParameters small = NozzleDesignParameters.builder()
+                    .exitMach(2.0).upstreamCurvatureRatio(0.5).build();
+            NozzleDesignParameters large = NozzleDesignParameters.builder()
+                    .exitMach(2.0).upstreamCurvatureRatio(2.5).build();
+            assertThat(small.dischargeCoefficient()).isLessThan(large.dischargeCoefficient());
+        }
+
+        @Test
+        @DisplayName("dischargeCoefficient() should be independent of throatRadius")
+        void dischargeCoefficientIsIndependentOfThroatRadius() {
+            NozzleDesignParameters small = NozzleDesignParameters.builder()
+                    .exitMach(2.0).throatRadius(0.01).build();
+            NozzleDesignParameters large = NozzleDesignParameters.builder()
+                    .exitMach(2.0).throatRadius(0.5).build();
+            assertThat(small.dischargeCoefficient())
+                    .isCloseTo(large.dischargeCoefficient(), within(1e-9));
         }
     }
     

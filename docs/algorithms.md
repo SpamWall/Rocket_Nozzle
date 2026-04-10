@@ -109,23 +109,33 @@ The complete contour runs from `x_cone` (negative, upstream) to just upstream of
 
 The M = 1 surface in the throat is curved, not flat.  Its curvature depends on
 both `r_cu` (upstream) and `r_cd` (downstream).  The fractional reduction in
-effective throat area — the discharge-coefficient correction `Cd_geo` — is
-computed from the harmonic mean of the two curvature radii:
+effective throat area — the discharge coefficient `Cd` — is computed from the
+harmonic mean of the two curvature radii.  Because `r_cu` and `r_cd` scale with
+`r_t`, `κ` is independent of the physical throat size:
 
 ```
-r_eq = 2 · r_cd · r_cu / (r_cd + r_cu)      harmonic mean radius
-κ    = r_t / r_eq                            curvature parameter
-C(γ) = 0.0023 · √((γ + 1) / 2.4)            γ-scaled coefficient (ref γ = 1.4)
-Cd_geo = max(0.98,  1 − C(γ) · κ)
+r_eq = 2 · r_cd · r_cu / (r_cd + r_cu)
+     = 2 r_t · throatCurvatureRatio · upstreamCurvatureRatio
+       / (throatCurvatureRatio + upstreamCurvatureRatio)
+
+κ    = r_t / r_eq
+     = (throatCurvatureRatio + upstreamCurvatureRatio)
+       / (2 · throatCurvatureRatio · upstreamCurvatureRatio)
+
+C(γ) = 0.0023 · √((γ + 1) / 2.4)        γ-scaled coefficient (calibrated γ = 1.4)
+
+Cd   = max(0.98,  1 − C(γ) · κ)
 ```
 
 The coefficient 0.0023 is calibrated against the axisymmetric solutions of
 Kliegel & Levine (1969).  For the library defaults
 (`r_cd/r_t = 0.382`, `r_cu/r_t = 1.5`, `γ = 1.4`) the correction is ~0.38%
-(Cd_geo ≈ 0.9962).
+(Cd ≈ 0.9962).
 
-`Cd_geo` scales both the delivered thrust and the mass flow rate proportionally,
-leaving Isp unchanged (`Isp = Cf · c* / g₀` is geometry-independent).
+`Cd` is exposed as `NozzleDesignParameters.dischargeCoefficient()` and is always
+applied by `PerformanceCalculator` to thrust and mass flow rate.  Isp is
+unaffected (`Isp = Cf · c* / g₀` is geometry-independent).
+`ConvergentSection.getSonicLineCdCorrection()` delegates to the same method.
 
 ### Boundary-Layer Integration Upstream
 

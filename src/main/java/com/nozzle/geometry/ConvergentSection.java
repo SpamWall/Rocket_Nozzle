@@ -52,7 +52,7 @@ import java.util.List;
  *       </pre>
  *   </li>
  *   <li><b>Chamber face</b> — the single point {@code (x_cone, r_c)}, which is
- *       the upstream boundary of the modelled geometry.</li>
+ *       the upstream boundary of the modeled geometry.</li>
  * </ol>
  *
  * <p>The arc is tangent to the cone at their shared endpoint, so the contour
@@ -63,7 +63,7 @@ import java.util.List;
  * the exit.  The curvature depends on both the upstream radius of curvature
  * {@code r_cu} and the downstream radius of curvature
  * {@code r_cd = throatCurvatureRatio × r_t}.  A symmetric throat
- * ({@code r_cu = r_cd}) minimises sonic-line curvature; asymmetry reduces the
+ * ({@code r_cu = r_cd}) minimizes sonic-line curvature; asymmetry reduces the
  * effective throat area and lowers the discharge coefficient.
  *
  * <p>The correction implemented here uses the harmonic mean of the two curvature
@@ -264,25 +264,6 @@ public class ConvergentSection {
      * harmonic-mean curvature approach calibrated to Kliegel &amp; Levine (1969).
      */
     private double computeSonicLineCd() {
-        double rt  = parameters.throatRadius();
-        double rcd = parameters.throatCurvatureRatio()   * rt;
-        double rcu = parameters.upstreamCurvatureRatio() * rt;
-
-        // Harmonic mean of the two throat curvature radii.
-        // When r_cu = r_cd (symmetric), r_eq = r_cd and the correction is at its
-        // maximum for a given r_cd value.  As r_cu → ∞ (flat upstream wall), r_eq → 2·r_cd
-        // and the correction roughly halves.
-        double rEq = 2.0 * rcd * rcu / (rcd + rcu);
-
-        // Effective curvature parameter κ = r_t / r_eq
-        // κ = (1/throatCurvatureRatio + 1/upstreamCurvatureRatio) / 2
-        double kappa = rt / rEq;
-
-        // γ-scaled correction coefficient, calibrated at γ = 1.4 to match the
-        // Kliegel & Levine (1969) axisymmetric nozzle Cd data:
-        double gamma = parameters.gasProperties().gamma();
-        double coeff = 0.0023 * Math.sqrt((gamma + 1.0) / 2.4);
-
-        return Math.max(0.98, 1.0 - coeff * kappa);
+        return parameters.dischargeCoefficient();
     }
 }
