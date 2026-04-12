@@ -20,6 +20,7 @@ All quantities are SI throughout (metres, Pascals, Kelvin, Newtons, kg).
 7. [Tutorial 6 — Validation and uncertainty analysis](#7-tutorial-6--validation-and-uncertainty-analysis)
 8. [Tutorial 7 — Saving and reloading design checkpoints](#8-tutorial-7--saving-and-reloading-design-checkpoints)
 9. [Tutorial 8 — CFD and CAD export](#9-tutorial-8--cfd-and-cad-export)
+10. [Tutorial 9 — Full nozzle geometry, boundary layer, and unit conversion](#10-tutorial-9--full-nozzle-geometry-boundary-layer-and-unit-conversion)
 
 ---
 
@@ -121,25 +122,25 @@ System.out.printf("Cd  = %.5f%n", params.dischargeCoefficient());
 System.out.printf("Isp = %.1f s  (Cd does not affect Isp)%n", pc.getSpecificImpulse());
 ```
 
-To also generate the full convergent-section geometry:
+To generate the full nozzle geometry from the injector face to the exit, use
+`FullNozzleGeometry`. This is the object required by the geometry-complete DXF
+export methods and by the injector-face boundary layer calculation (see
+Tutorial 9 for full worked examples):
 
 ```
-// Build the convergent section geometry
-ConvergentSection cs = new ConvergentSection(params).generate(60);
+// Assemble the complete wall: convergent section + MOC divergent wall
+FullNozzleGeometry fullGeom = FullNozzleGeometry.fromMOC(params, net).generate(50, 0);
 
-// Build a geometry-complete wall contour (chamber face → exit)
-NozzleContour divergent = NozzleContour.fromMOCWallPoints(params, net.getWallPoints());
-NozzleContour full      = divergent.withConvergentSection(cs);
+// BL that starts at the injector face (more accurate throat δ*)
+BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, net)
+        .calculateFromInjectorFace(fullGeom, net.getFlowPoints());
 
-// BL integration now starts at the chamber face
-BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, full).calculate(null);
+System.out.printf("Combined Cd (geo × BL): %.5f%n", bl.getCombinedCd());
 
-// Cd still comes from params; pass the full contour for BL and geometry exports
-PerformanceCalculator pc = new PerformanceCalculator(params, net, full, bl, null).calculate();
-
-// All exporters produce geometry-complete output automatically
-new DXFExporter().exportRevolutionProfile(full, outputDir.resolve("full_nozzle.dxf"));
-new STLExporter().exportMesh(full,             outputDir.resolve("full_nozzle.stl"));
+// Geometry-complete DXF exports (include convergent section)
+DXFExporter dxf = new DXFExporter().setScaleFactor(1000);
+dxf.exportFullNozzleProfile(fullGeom,           outputDir.resolve("full_nozzle.dxf"));
+dxf.exportFullNozzleRevolutionProfile(fullGeom, outputDir.resolve("full_nozzle_rev.dxf"));
 ```
 
 ### Step 2 — Run the Method of Characteristics solver
@@ -788,12 +789,28 @@ Export the nozzle geometry to DXF, STEP, STL, and OpenFOAM formats.
 ### DXF (2D wall profile)
 
 DXF is suitable for import into CAD tools and for manufacturing drawings.
-The exporter writes the wall contour and nozzle axis as separate layers.
+
+**Divergent section only** (throat to exit — no convergent section):
 
 ```
 new DXFExporter()
         .setScaleFactor(1000)             // convert metres to mm
         .exportContour(contour, java.nio.file.Path.of("nozzle.dxf"));
+```
+
+**Full nozzle** (injector face → exit, geometry-complete):
+
+```
+FullNozzleGeometry fullGeom = new FullNozzleGeometry(params).generate();
+
+DXFExporter dxf = new DXFExporter().setScaleFactor(1000);
+
+// Profile only: WALL polyline + AXIS line + THROAT marker at x=0
+dxf.exportFullNozzleProfile(fullGeom, java.nio.file.Path.of("full_nozzle.dxf"));
+
+// Closed revolution sketch: adds INLET and OUTLET face lines
+// Use this as the revolve-sketch profile in CAD tools (FreeCAD, SolidWorks, etc.)
+dxf.exportFullNozzleRevolutionProfile(fullGeom, java.nio.file.Path.of("profile.dxf"));
 ```
 
 For an Aerospike nozzle, use `exportAerospikeContour()` instead; it writes
@@ -932,3 +949,168 @@ csv.exportSpikeContour(aero,              java.nio.file.Path.of("spike.csv"));
 csv.exportAltitudePerformance(altPerf,    java.nio.file.Path.of("altitude.csv"));
 csv.exportAerospikeReport(aero, ambientPressures, java.nio.file.Path.of("report/"));
 ```
+
+---
+
+## 10. Tutorial 9 — Full nozzle geometry, boundary layer, and unit conversion
+
+### Goal
+
+Assemble the complete nozzle wall from the injector face to the exit, compute
+the physically correct boundary layer displacement thickness at the throat, and
+handle imperial/SI unit conversion at system input and output boundaries.
+
+---
+
+### Step 1 — Accepting imperial inputs
+
+All library quantities are SI. Use `Units` at the point where external data
+enters the calculation, then work entirely in SI from that point onward.
+
+```
+import com.nozzle.core.Units;
+
+// User-supplied values in US customary units
+double throatDiamIn  = 2.0;    // inches
+double chamberPsi    = 1000.0; // psia
+double chamberRankine = 6300.0; // °R
+
+// Convert once at the boundary
+double throatRadius   = Units.inchesToMeters(throatDiamIn / 2.0);
+double chamberPa      = Units.psiToPascals(chamberPsi);
+double chamberKelvin  = Units.rankineToKelvin(chamberRankine);
+
+NozzleDesignParameters params = NozzleDesignParameters.builder()
+        .throatRadius(throatRadius)
+        .chamberPressure(chamberPa)
+        .chamberTemperature(chamberKelvin)
+        .exitMach(3.5)
+        .ambientPressure(101_325.0)
+        .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+        .numberOfCharLines(30)
+        .wallAngleInitialDegrees(30.0)
+        .lengthFraction(0.8)
+        .axisymmetric(true)
+        .contractionRatio(4.0)
+        .build();
+```
+
+---
+
+### Step 2 — Build the full nozzle geometry
+
+`FullNozzleGeometry` concatenates a `ConvergentSection` (injector face to
+throat, x < 0) with a divergent `NozzleContour` (throat to exit, x > 0) into
+a single wall-point list with strict axial monotonicity.
+
+```
+import com.nozzle.geometry.FullNozzleGeometry;
+
+// Default: Rao bell divergent + ConvergentSection from params
+FullNozzleGeometry fullGeom = new FullNozzleGeometry(params).generate(50, 100);
+//                                                      ↑ conv pts  ↑ div pts
+
+System.out.printf("Chamber radius:    %.1f mm%n",
+        Units.metersToMillimeters(fullGeom.getChamberRadius()));
+System.out.printf("Throat radius:     %.1f mm%n",
+        Units.metersToMillimeters(fullGeom.getThroatRadius()));
+System.out.printf("Exit radius:       %.1f mm%n",
+        Units.metersToMillimeters(fullGeom.getExitRadius()));
+System.out.printf("Convergent length: %.1f mm%n",
+        Units.metersToMillimeters(fullGeom.getConvergentLength()));
+System.out.printf("Divergent length:  %.1f mm%n",
+        Units.metersToMillimeters(fullGeom.getDivergentLength()));
+System.out.printf("Total length:      %.1f mm%n",
+        Units.metersToMillimeters(fullGeom.getTotalLength()));
+System.out.printf("Sonic-line Cd:     %.5f%n", fullGeom.getSonicLineCd());
+System.out.printf("Wall points:       %d%n",   fullGeom.getWallPoints().size());
+```
+
+To use a MOC-derived divergent section, pass `numDivergentPoints = 0` to keep
+the MOC wall unchanged:
+
+```
+CharacteristicNet net = new CharacteristicNet(params).generate();
+FullNozzleGeometry mocGeom = FullNozzleGeometry.fromMOC(params, net).generate(50, 0);
+```
+
+---
+
+### Step 3 — Export geometry-complete DXF
+
+The full-nozzle DXF methods write the convergent section and are suitable for
+direct import into FreeCAD, SolidWorks, Fusion 360, or any DXF-compatible tool.
+
+```
+DXFExporter dxf = new DXFExporter().setScaleFactor(1000); // metres → mm
+
+// Profile: WALL polyline, AXIS centerline, THROAT marker at x=0
+dxf.exportFullNozzleProfile(fullGeom,
+        java.nio.file.Path.of("full_nozzle.dxf"));
+
+// Closed revolution sketch: adds INLET and OUTLET face lines
+// Use as the profile for a revolve operation in CAD tools
+dxf.exportFullNozzleRevolutionProfile(fullGeom,
+        java.nio.file.Path.of("full_nozzle_rev.dxf"));
+```
+
+---
+
+### Step 4 — Compute the boundary layer from the injector face
+
+The boundary layer begins at the injector face and grows through the entire
+convergent section before reaching the throat. Starting the BL at the throat
+(the previous default) understates the displacement thickness δ* at the throat
+and therefore overstates the effective throat area.
+
+`calculateFromInjectorFace()` accumulates running length from the chamber face
+(x_min) through the convergent arc length, then continues through the divergent
+section. The result is a more accurate throat δ* and a lower combined Cd.
+
+```
+BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, net)
+        .calculateFromInjectorFace(fullGeom, net.getFlowPoints());
+
+System.out.printf("δ* at throat:          %.3f mm%n",
+        Units.metersToMillimeters(bl.getThroatDisplacementThickness()));
+System.out.printf("BL Cd correction:      %.5f%n",
+        bl.getBoundaryLayerCdCorrection());
+System.out.printf("Geometric Cd:          %.5f%n",
+        params.dischargeCoefficient());
+System.out.printf("Combined Cd (geo × BL):%.5f%n",
+        bl.getCombinedCd());
+```
+
+The **geometric Cd** accounts for sonic-line curvature (Kliegel & Levine 1969).
+The **BL Cd correction** accounts for the displacement body reducing the
+effective throat area: `(1 − δ*/r_t)²`. The **combined Cd** is their product
+and is the value to use when computing effective mass flow rate.
+
+---
+
+### Step 5 — Present results in imperial units
+
+Convert the final SI outputs to whatever units the user expects at the output
+boundary.
+
+```
+double thrustN  = params.idealThrustCoefficient()
+                  * params.chamberPressure()
+                  * params.throatArea();
+double mdotKgs  = params.chamberPressure() * params.throatArea()
+                  / params.characteristicVelocity();
+
+System.out.printf("Throat area:  %.4f in²%n",
+        Units.squareMetersToSquareInches(params.throatArea()));
+System.out.printf("Ideal thrust: %.1f lbf%n",
+        Units.newtonsToLbf(thrustN));
+System.out.printf("Mass flow:    %.2f lb/s%n",
+        Units.kgPerSecToLbPerSec(mdotKgs));
+System.out.printf("Exit velocity:%.0f ft/s%n",
+        Units.metersPerSecToFeetPerSec(params.exitVelocity()));
+System.out.printf("Ideal Isp:    %.1f s  (same in SI and US customary)%n",
+        params.idealSpecificImpulse());
+```
+
+Specific impulse in seconds is numerically identical in both systems because g₀
+cancels, so no conversion is needed.

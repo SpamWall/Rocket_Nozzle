@@ -77,23 +77,24 @@ List<Point2D> pts = cs.getContourPoints();     // ordered chamber → throat (x 
 // Sonic-line Cd correction
 double cdGeo = cs.getSonicLineCdCorrection();  // typically 0.995–0.9999
 
-// Build geometry-complete contour (chamber → exit)
-NozzleContour divergent = new NozzleContour(ContourType.RAO_BELL, params).generate(100);
-NozzleContour full      = divergent.withConvergentSection(cs);
+// Build geometry-complete wall (chamber face → exit) with FullNozzleGeometry
+FullNozzleGeometry fullGeom = new FullNozzleGeometry(params).generate(50, 100);
 
-// Pass full contour to any exporter for complete geometry output
-new DXFExporter().exportRevolutionProfile(full, path);
-new STLExporter().exportMesh(full, path);
+// Pass to full-nozzle DXF export methods
+new DXFExporter().exportFullNozzleProfile(fullGeom, path);
+new DXFExporter().exportFullNozzleRevolutionProfile(fullGeom, path);
 
-// BL integration starts at the chamber face automatically
-BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, full).calculate(null);
+// BL integration starting from the injector face — more accurate throat δ*
+CharacteristicNet net = new CharacteristicNet(params).generate();
+BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, net)
+        .calculateFromInjectorFace(fullGeom, net.getFlowPoints());
 
 // Cd is applied automatically — no ConvergentSection needed by PerformanceCalculator
-PerformanceCalculator pc = new PerformanceCalculator(params, net, full, bl, null).calculate();
-System.out.println(params.dischargeCoefficient());  // Cd ∈ [0.98, 1.0]
-System.out.println(pc.getMassFlowRate());           // scaled by Cd
-System.out.println(pc.getThrust());                 // scaled by Cd
-System.out.println(pc.getSpecificImpulse());        // unchanged
+PerformanceCalculator pc = new PerformanceCalculator(params, net,
+        NozzleContour.fromMOCWallPoints(params, net.getWallPoints()), bl, null).calculate();
+System.out.println(params.dischargeCoefficient());  // geometric Cd ∈ [0.98, 1.0]
+System.out.println(bl.getCombinedCd());             // geometric × BL Cd
+System.out.println(pc.getSpecificImpulse());
 ```
 
 **Key methods:**
@@ -233,6 +234,75 @@ System.out.println(result.specificImpulse());
 System.out.println(result.plumeHalfAngleDeg());
 System.out.println(result.postWaveMach());
 ```
+
+---
+
+### Units
+
+Static utility class for unit conversion at imperial/SI system boundaries.
+All internal library calculations use SI; use `Units` only when ingesting
+external data in non-SI units or formatting results for non-SI consumers.
+
+**Length:**
+
+```
+Units.metersToMillimeters(0.05)   // → 50.0
+Units.metersToInches(0.0254)      // → 1.0
+Units.metersToFeet(0.3048)        // → 1.0
+Units.millimetersToMeters(50.0)   // → 0.05
+Units.inchesToMeters(1.0)         // → 0.0254
+Units.feetToMeters(1.0)           // → 0.3048
+```
+
+**Pressure:**
+
+```
+Units.pascalsToPsi(101_325.0)     // ≈ 14.696
+Units.psiToPascals(14.696)        // ≈ 101 325
+Units.pascalsToBar(100_000.0)     // → 1.0
+Units.barToPascals(1.0)           // → 100 000
+Units.pascalsToAtm(101_325.0)     // → 1.0
+Units.atmToPascals(1.0)           // → 101 325
+```
+
+**Temperature:**
+
+```
+Units.kelvinToCelsius(273.15)          // → 0.0
+Units.celsiusToKelvin(0.0)             // → 273.15
+Units.kelvinToFahrenheit(255.372)      // → 0.0
+Units.fahrenheitToKelvin(0.0)          // ≈ 255.372
+Units.rankineToKelvin(491.67)          // → 273.15
+Units.kelvinToRankine(273.15)          // → 491.67
+```
+
+**Force and mass:**
+
+```
+Units.newtonsToLbf(4.44822)       // → 1.0
+Units.lbfToNewtons(1.0)           // → 4.44822
+Units.kilogramsToLbm(0.453592)    // → 1.0
+Units.lbmToKilograms(1.0)         // → 0.453592
+```
+
+**Specific heat (propulsion-critical):**
+
+Conversion factor: 1 BTU/(lbm·°R) = 4186.8 J/(kg·K)
+
+```
+Units.jPerKgKToBtuPerLbmR(4186.8)  // → 1.0
+Units.btuPerLbmRToJPerKgK(1.0)     // → 4186.8
+Units.jPerKgKToBtuPerLbmR(1005.0)  // ≈ 0.240  (air Cp at STP)
+```
+
+**Velocity:**
+
+```
+Units.metersPerSecondToFeetPerSecond(304.8)  // → 1000.0
+Units.feetPerSecondToMetersPerSecond(1000.0) // → 304.8
+```
+
+No instances are permitted — all methods are `static`.
 
 ---
 
@@ -441,6 +511,68 @@ List<Point2D> pts = contour.getContourPoints();
 
 ---
 
+### FullNozzleGeometry
+
+Assembles a contiguous, axially ordered wall-point sequence spanning the
+injector face (x < 0) through the throat (x = 0) to the exit (x > 0).
+All DXF/STEP/STL geometry-complete export methods expect this object.
+
+**Coordinate convention:** x = 0 at the throat, x < 0 in the convergent
+section, y = wall radius.
+
+```
+// Default: Rao bell divergent + ConvergentSection derived from params
+FullNozzleGeometry geom = new FullNozzleGeometry(params).generate();
+// equivalent to:
+FullNozzleGeometry geom = new FullNozzleGeometry(params).generate(50, 100);
+
+// Explicit convergent/divergent point counts
+FullNozzleGeometry geom = new FullNozzleGeometry(params).generate(60, 150);
+
+// MOC-derived divergent section (pass 0 to skip re-generating the divergent wall)
+CharacteristicNet net = new CharacteristicNet(params).generate();
+FullNozzleGeometry mocGeom = FullNozzleGeometry.fromMOC(params, net).generate(50, 0);
+
+// Custom sections
+ConvergentSection  cs  = new ConvergentSection(params);
+NozzleContour      div = new NozzleContour(NozzleContour.ContourType.CONICAL, params);
+FullNozzleGeometry custom = new FullNozzleGeometry(params, cs, div).generate(40, 80);
+```
+
+**Key methods:**
+
+| Method                    | Returns                                                          |
+|---------------------------|------------------------------------------------------------------|
+| `generate()`              | Populate wall points (50 conv, 100 div); returns `this`          |
+| `generate(nConv, nDiv)`   | Custom point counts; pass `nDiv=0` to keep existing divergent    |
+| `getWallPoints()`         | Unmodifiable list, injector face → exit                          |
+| `getThroatRadius()`       | r_t in metres                                                    |
+| `getChamberRadius()`      | r_t · √(contractionRatio)                                        |
+| `getExitRadius()`         | r_t · √(A_e / A_t)                                               |
+| `getChamberFaceX()`       | x of most upstream wall point (negative)                         |
+| `getExitX()`              | x of most downstream wall point                                  |
+| `getTotalLength()`        | exit_x − chamber_x in metres                                     |
+| `getConvergentLength()`   | axial extent of convergent section                               |
+| `getDivergentLength()`    | exit_x (measured from throat)                                    |
+| `getSonicLineCd()`        | geometric Cd from `params.dischargeCoefficient()`                |
+| `getConvergentSection()`  | the underlying `ConvergentSection`                               |
+| `getDivergentContour()`   | the underlying `NozzleContour`                                   |
+| `isGenerated()`           | `true` after any `generate()` call                               |
+
+```
+// Full-nozzle DXF exports
+DXFExporter dxf = new DXFExporter().setScaleFactor(1000);
+dxf.exportFullNozzleProfile(geom, Path.of("nozzle.dxf"));
+dxf.exportFullNozzleRevolutionProfile(geom, Path.of("profile.dxf"));
+
+// Geometry queries
+System.out.printf("Total length : %.3f m%n", geom.getTotalLength());
+System.out.printf("Cd (sonic)   : %.4f%n",   geom.getSonicLineCd());
+System.out.printf("Wall pts     : %d%n",      geom.getWallPoints().size());
+```
+
+---
+
 ## com.nozzle.chemistry
 
 ### ChemistryModel
@@ -545,14 +677,44 @@ for (var p : profile) {
 
 ### BoundaryLayerCorrection
 
+Two calculation modes are available. The standard mode starts the BL at the
+throat and covers only the divergent section. The injector-face mode starts at
+the chamber face, accumulating running length through the convergent arc and
+cone, so the throat displacement thickness δ* is physically larger and more
+accurate.
+
 ```
-BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
+// Standard mode — BL starts at throat (divergent section only)
+BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, net)
         .setTransitionReynolds(5e5)    // default; set lower to force early transition
         .setForceTurbulent(false)
         .calculate();
 
-// Used by PerformanceCalculator and HeatTransferModel
+// Injector-face mode — BL starts at chamber face (requires FullNozzleGeometry)
+FullNozzleGeometry fullGeom = new FullNozzleGeometry(params).generate();
+BoundaryLayerCorrection blFull = new BoundaryLayerCorrection(params, net)
+        .calculateFromInjectorFace(fullGeom, net.getFlowPoints());
+
+// Throat displacement thickness and Cd corrections
+double deltaStar = blFull.getThroatDisplacementThickness(); // δ* at x ≈ 0, metres
+double blCd      = blFull.getBoundaryLayerCdCorrection();   // (1 − δ*/r_t)²
+double combinedCd = blFull.getCombinedCd();                 // geometric Cd × BL Cd
+
+System.out.printf("δ* at throat : %.4f mm%n", deltaStar * 1000);
+System.out.printf("BL Cd        : %.4f%n",    blCd);
+System.out.printf("Combined Cd  : %.4f%n",    combinedCd);
+
+// Both modes are accepted by PerformanceCalculator and HeatTransferModel
 ```
+
+**New methods (injector-face mode):**
+
+| Method                              | Returns                                                            |
+|-------------------------------------|--------------------------------------------------------------------|
+| `calculateFromInjectorFace(g, pts)` | Run BL from injector face; returns `this`                          |
+| `getThroatDisplacementThickness()`  | δ* at the throat plane (x ≈ 0) in metres                           |
+| `getBoundaryLayerCdCorrection()`    | (1 − δ*/r_t)² — effective area loss factor                         |
+| `getCombinedCd()`                   | `params.dischargeCoefficient()` × `getBoundaryLayerCdCorrection()` |
 
 ### ThermalStressAnalysis
 
@@ -625,15 +787,47 @@ csv.exportAerospikeReport(aero, altitudePressures, Path.of("report_dir/"));
 ### DXFExporter
 
 ```
-new DXFExporter()
-        .setScaleFactor(1000)            // metres → mm
-        .exportContour(contour, Path.of("nozzle.dxf"));
-        // or:
-        .exportRevolutionProfile(contour, Path.of("profile.dxf"));
-        // or:
-        .exportAerospikeContour(aero, Path.of("spike.dxf"));
-// DXF layers: WALL, AXIS (bell); SPIKE, COWL, AXIS (Aerospike)
+DXFExporter dxf = new DXFExporter().setScaleFactor(1000);  // metres → mm
+
+// Divergent section only
+dxf.exportContour(contour, Path.of("nozzle.dxf"));
+// Layers: WALL (polyline), AXIS (centerline)
+
+dxf.exportRevolutionProfile(contour, Path.of("profile.dxf"));
+// Layers: WALL (polyline), AXIS (3 closure lines)
+
+// Full nozzle — injector face → exit (requires FullNozzleGeometry)
+FullNozzleGeometry geom = new FullNozzleGeometry(params).generate();
+
+dxf.exportFullNozzleProfile(geom, Path.of("full_nozzle.dxf"));
+// Layers: WALL (polyline chamber→exit), AXIS (centerline), THROAT (x=0 marker)
+
+dxf.exportFullNozzleRevolutionProfile(geom, Path.of("full_profile.dxf"));
+// Layers: WALL, AXIS (bottom), INLET (left face), OUTLET (right face), THROAT
+// Use this profile as the sketch for a revolve operation in CAD tools.
+
+// Aerospike
+dxf.exportAerospikeContour(aero, Path.of("spike.dxf"));
+// Layers: SPIKE (contour polyline), COWL (annular throat face), AXIS
 ```
+
+**`exportFullNozzleProfile` layers:**
+
+| Layer    | Entity   | Description                               |
+|----------|----------|-------------------------------------------|
+| `WALL`   | POLYLINE | Inner wall from chamber face to exit      |
+| `AXIS`   | LINE     | Centerline from x_chamber to x_exit       |
+| `THROAT` | LINE     | Vertical marker at x = 0 from axis to r_t |
+
+**`exportFullNozzleRevolutionProfile` layers:**
+
+| Layer    | Entity   | Description                                   |
+|----------|----------|-----------------------------------------------|
+| `WALL`   | POLYLINE | Inner wall from chamber face to exit          |
+| `AXIS`   | LINE     | Centerline (bottom closure, x_chamber→x_exit) |
+| `INLET`  | LINE     | Left (chamber) face: axis to wall             |
+| `OUTLET` | LINE     | Right (exit) face: wall to axis               |
+| `THROAT` | LINE     | Throat plane marker at x = 0                  |
 
 ### STEPExporter
 

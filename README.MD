@@ -67,6 +67,17 @@ structural analysis, and multi-format CAD/CFD export.
   parameters
 - **Monte Carlo uncertainty analysis** — 1000-sample sensitivity to input tolerances
 
+### Full Nozzle Geometry
+- **`FullNozzleGeometry`** — assembles the complete internal wall profile from
+  injector face to exit by concatenating a `ConvergentSection` (x < 0) with a
+  `NozzleContour` divergent section (x ≥ 0) into a single, axially monotonic
+  wall-point sequence suitable for CAD/CFD exporters
+
+### Unit Conversion
+- **`Units`** — static utility class providing ~60 named conversion methods for
+  common aerospace units: length, pressure, temperature, force, mass, specific
+  impulse, and specific heat; designed for use at system input/output boundaries
+
 ### Validation
 - **NASA SP-8120 compliance** — automated checks against the NASA design guidelines
   for divergence angle, throat-arc radius, and exit-area ratio bounds
@@ -75,7 +86,7 @@ structural analysis, and multi-format CAD/CFD export.
 | Format                                         | Bell/TIC/Conical | Aerospike   | Dual-Bell |
 |------------------------------------------------|------------------|-------------|-----------|
 | CSV (contour, thermal, stress, altitude sweep) | ✓                | ✓           | ✓         |
-| DXF (2D wall profile + axis)                   | ✓                | ✓           | ✓         |
+| DXF (2D wall profile + axis, full nozzle)      | ✓                | ✓           | ✓         |
 | STEP (ISO 10303-21 revolved solid)             | ✓                | ✓           | ✓         |
 | STL (binary/ASCII revolved mesh)               | ✓                | ✓           | ✓         |
 | OpenFOAM blockMesh (5° wedge)                  | ✓                | ✓ (annular) | ✓         |
@@ -276,11 +287,87 @@ double cd = params.dischargeCoefficient();  // geometric sonic-line Cd
 
 ---
 
+## Full Nozzle Geometry
+
+`FullNozzleGeometry` combines a `ConvergentSection` and a divergent `NozzleContour`
+into a single wall-point list ordered from the injector face (x < 0) to the exit
+(x > 0). All geometry-complete exporters accept this object.
+
+```
+// Default: Rao bell divergent + ConvergentSection derived from params
+FullNozzleGeometry geom = new FullNozzleGeometry(params).generate(50, 100);
+
+List<Point2D> wall = geom.getWallPoints(); // injector face → exit
+System.out.printf("Total length  : %.3f m%n", geom.getTotalLength());
+System.out.printf("Throat radius : %.3f m%n", geom.getThroatRadius());
+System.out.printf("Sonic-line Cd : %.4f%n",   geom.getSonicLineCd());
+
+// MOC-derived divergent section
+CharacteristicNet net = new CharacteristicNet(params).generate();
+FullNozzleGeometry mocGeom = FullNozzleGeometry.fromMOC(params, net).generate(50, 0);
+// pass 0 for numDivergentPoints to keep the MOC wall as-is
+```
+
+Pass a `FullNozzleGeometry` to any of the full-nozzle DXF export methods:
+
+```
+DXFExporter exporter = new DXFExporter().setScaleFactor(1000);
+
+// Profile only (WALL + AXIS + THROAT layers)
+exporter.exportFullNozzleProfile(geom, Path.of("nozzle.dxf"));
+
+// Closed revolution sketch (adds INLET and OUTLET face lines)
+exporter.exportFullNozzleRevolutionProfile(geom, Path.of("profile.dxf"));
+```
+
+---
+
+## Unit Conversion
+
+`Units` provides named static conversion methods for use at system input/output
+boundaries. All internal calculations use SI.
+
+```
+// Length
+double mm  = Units.metersToMillimeters(0.05);    // → 50.0
+double ft  = Units.metersToFeet(0.3048);         // → 1.0
+double m   = Units.inchesToMeters(2.0);          // → 0.0508
+
+// Pressure
+double psi = Units.pascalsToPsi(101_325.0);      // ≈ 14.696
+double pa  = Units.psiToPascals(100.0);          // ≈ 689 476
+
+// Temperature
+double f   = Units.kelvinToFahrenheit(288.15);   // ≈ 59.0
+double k   = Units.fahrenheitToKelvin(59.0);     // → 288.15
+
+// Specific heat (propulsion-specific unit)
+double btu = Units.jPerKgKToBtuPerLbmR(4186.8);  // ≈ 1.0
+double cp  = Units.btuPerLbmRToJPerKgK(0.24);   // ≈ 1005
+
+// Specific impulse
+double s   = Units.lbfSPerLbmToSeconds(300.0);  // → 300.0  (already dimensionless)
+```
+
+---
+
 ## Thermal Analysis
 
 ```
-// Boundary layer and convective heat transfer
+// Boundary layer starting from the throat (divergent section only)
 BoundaryLayerCorrection bl  = new BoundaryLayerCorrection(params, net).calculate();
+
+// Boundary layer starting from the injector face (more accurate throat δ*)
+BoundaryLayerCorrection blFull = new BoundaryLayerCorrection(params, net)
+        .calculateFromInjectorFace(fullGeom, net.getFlowPoints());
+
+System.out.printf("Throat δ*           : %.4f mm%n",
+        blFull.getThroatDisplacementThickness() * 1000);
+System.out.printf("BL Cd correction    : %.4f%n",
+        blFull.getBoundaryLayerCdCorrection());
+System.out.printf("Combined Cd (geo×BL): %.4f%n",
+        blFull.getCombinedCd());
+
 HeatTransferModel       htr = new HeatTransferModel(params, net, bl).calculate();
 
 System.out.printf("Peak wall temperature: %.0f K%n",  htr.getPeakWallTemperature());
@@ -305,9 +392,16 @@ System.out.printf("Fatigue life         : %.0f cycles%n", stress.getFatigueLife(
 
 ### DXF (2D profile)
 ```
-new DXFExporter()
-        .setScaleFactor(1000)        // metres → mm
-        .exportContour(contour, Path.of("nozzle.dxf"));
+DXFExporter dxf = new DXFExporter().setScaleFactor(1000);  // metres → mm
+
+// Divergent section only
+dxf.exportContour(contour, Path.of("nozzle.dxf"));
+
+// Full nozzle (injector face → exit) — requires FullNozzleGeometry
+dxf.exportFullNozzleProfile(fullGeom, Path.of("full_nozzle.dxf"));
+
+// Closed revolution sketch for CAD revolve operations
+dxf.exportFullNozzleRevolutionProfile(fullGeom, Path.of("profile.dxf"));
 ```
 
 ### STEP (3D solid)
@@ -398,25 +492,25 @@ if (warnings.isEmpty()) {
 
 ## Package Overview
 
-| Package                   | Contents                                                                                                                                     |
-|---------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| `com.nozzle.core`         | `NozzleDesignParameters`, `GasProperties`, `PerformanceCalculator`, `FlowSeparationPredictor`                                                |
-| `com.nozzle.moc`          | `CharacteristicNet`, `RaoNozzle`, `AerospikeNozzle`, `DualBellNozzle`, `CharacteristicPoint`                                                 |
-| `com.nozzle.geometry`     | `NozzleContour` (five contour families), `ConvergentSection`, `Point2D`                                                                      |
-| `com.nozzle.chemistry`    | `ChemistryModel`, `OFSweep`, `GibbsMinimizer`, `NasaSpeciesDatabase`                                                                         |
-| `com.nozzle.thermal`      | `HeatTransferModel`, `BoundaryLayerCorrection`, `CoolantChannel`, `ThermalStressAnalysis`, `AblativeNozzleModel`, `RadiationCooledExtension` |
-| `com.nozzle.export`       | `CFDMeshExporter`, `OpenFOAMExporter`, `CSVExporter`, `DXFExporter`, `STEPExporter`, `STLExporter`, `RevolvedMeshExporter`                   |
-| `com.nozzle.optimization` | `AltitudeAdaptiveOptimizer`, `MonteCarloUncertainty`                                                                                         |
-| `com.nozzle.validation`   | `NASASP8120Validator`                                                                                                                        |
-| `com.nozzle.io`           | `NozzleSerializer`, `DesignDocument`                                                                                                         |
+| Package                   | Contents                                                                                                                                          |
+|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| `com.nozzle.core`         | `NozzleDesignParameters`, `GasProperties`, `PerformanceCalculator`, `FlowSeparationPredictor`, `Units`                                            |
+| `com.nozzle.moc`          | `CharacteristicNet`, `RaoNozzle`, `AerospikeNozzle`, `DualBellNozzle`, `CharacteristicPoint`                                                      |
+| `com.nozzle.geometry`     | `NozzleContour` (five contour families), `ConvergentSection`, `FullNozzleGeometry`, `Point2D`                                                     |
+| `com.nozzle.chemistry`    | `ChemistryModel`, `OFSweep`, `GibbsMinimizer`, `NasaSpeciesDatabase`                                                                              |
+| `com.nozzle.thermal`      | `HeatTransferModel`, `BoundaryLayerCorrection`, `CoolantChannel`, `ThermalStressAnalysis`, `AblativeNozzleModel`, `RadiationCooledExtension`      |
+| `com.nozzle.export`       | `CFDMeshExporter`, `OpenFOAMExporter`, `CSVExporter`, `DXFExporter`, `STEPExporter`, `STLExporter`, `RevolvedMeshExporter`                        |
+| `com.nozzle.optimization` | `AltitudeAdaptiveOptimizer`, `MonteCarloUncertainty`                                                                                              |
+| `com.nozzle.validation`   | `NASASP8120Validator`                                                                                                                             |
+| `com.nozzle.io`           | `NozzleSerializer`, `DesignDocument`                                                                                                              |
 
 ---
 
 ## Design Conventions
 
 - **Pure SI throughout** — all inputs and outputs are in SI units (metres, Pascals,
-  Kelvin, Newtons, kg). Unit conversion at system boundaries is the caller's
-  responsibility.
+  Kelvin, Newtons, kg). The `Units` class in `com.nozzle.core` provides static
+  conversion methods for use at imperial/SI system boundaries.
 - **Immutable parameters** — `NozzleDesignParameters` is a Java record; the builder
   produces a new instance and is not re-entrant.
 - **Fluent configuration** — all exporter and solver classes use method chaining for

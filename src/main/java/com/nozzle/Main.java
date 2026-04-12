@@ -27,8 +27,10 @@ import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.core.PerformanceCalculator;
 import com.nozzle.core.ShockExpansionModel;
+import com.nozzle.core.Units;
 import com.nozzle.export.*;
 import com.nozzle.geometry.ConvergentSection;
+import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.AltitudePerformance;
@@ -119,6 +121,9 @@ public class Main {
             demonstrateDualBellNozzle();
             demonstrateThroatCurvatureRatio();
             demonstrateConvergentSection(outputDir);
+            demonstrateUnitsConversion();
+            demonstrateFullNozzleGeometry(outputDir);
+            demonstrateBoundaryLayerFromInjectorFace();
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -1819,11 +1824,11 @@ public class Main {
         System.out.println("\nFixed-Tc (3500 K) vs adiabatic at O/F=2.7  (LOX/RP-1):");
         OFSweep fixedSweep = new OFSweep(OFSweep.Propellant.LOX_RP1, 3500.0, PC, ME, PA);
         OFSweep.OFPoint fixed = fixedSweep.computeAt(2.7);
-        OFSweep.OFPoint adiab = rp1Sweep.computeAt(2.7);
+        OFSweep.OFPoint adiabatic = rp1Sweep.computeAt(2.7);
         System.out.printf("  Fixed-Tc:   Tc=%5.0f K  c*=%6.0f m/s  Isp=%6.1f s%n",
                 fixed.chamberTemperature(), fixed.cStar(), fixed.isp());
         System.out.printf("  Adiabatic:  Tc=%5.0f K  c*=%6.0f m/s  Isp=%6.1f s%n",
-                adiab.chamberTemperature(), adiab.cStar(), adiab.isp());
+                adiabatic.chamberTemperature(), adiabatic.cStar(), adiabatic.isp());
     }
 
     /**
@@ -2083,5 +2088,225 @@ public class Main {
         System.out.println("  section, at the cost of added nozzle mass and length.");
         System.out.println("  Ideal Cf and A/A* are geometry-independent (set by Mach and gamma);");
         System.out.println("  the MOC computed A/A* confirms the solver reaches the design exit Mach.");
+    }
+
+    // =========================================================================
+    // UNITS CONVERSION DEMONSTRATION
+    // =========================================================================
+
+    /**
+     * Demonstrates the {@link Units} conversion utilities.
+     * Shows how to work with imperial inputs/outputs while keeping SI internal.
+     */
+    private static void demonstrateUnitsConversion() {
+        System.out.println("\n--- UNITS CONVERSION UTILITIES ---\n");
+
+        // ── Typical US design inputs → SI ──────────────────────────────────
+        double throatIn   = 2.0;           // 2" throat diameter → radius
+        double chamberPsi = 1000.0;        // 1000 psia
+        double chamberR   = 6300.0;        // 6300 °R combustion temperature
+        double exitDiamIn = 8.0;           // 8" exit diameter
+
+        double throatM  = Units.inchesToMeters(throatIn / 2.0);
+        double chamberPa = Units.psiToPascals(chamberPsi);
+        double chamberK  = Units.rankineToKelvin(chamberR);
+        double exitM     = Units.inchesToMeters(exitDiamIn / 2.0);
+        double areaRatio = (exitM / throatM) * (exitM / throatM);
+
+        System.out.println("Input conversion (US customary → SI):");
+        System.out.printf("  Throat dia   %5.2f in  →  %6.3f mm%n",
+                throatIn, Units.metersToMillimeters(throatM));
+        System.out.printf("  Chamber pres %5.0f psia →  %6.3f MPa%n",
+                chamberPsi, Units.pascalsToMegapascals(chamberPa));
+        System.out.printf("  Chamber temp %5.0f °R   →  %6.1f K%n",
+                chamberR, chamberK);
+        System.out.printf("  Exit dia     %5.2f in  →  %6.1f mm  (A/A*=%.2f)%n",
+                exitDiamIn, Units.metersToMillimeters(exitM), areaRatio);
+
+        // ── SI design output → imperial display ─────────────────────────────
+        NozzleDesignParameters params = NozzleDesignParameters.builder()
+                .throatRadius(throatM)
+                .exitMach(3.0)
+                .chamberPressure(chamberPa)
+                .chamberTemperature(chamberK)
+                .ambientPressure(101325.0)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(30.0)
+                .lengthFraction(0.8)
+                .axisymmetric(true)
+                .build();
+
+        double thrustN    = params.idealThrustCoefficient()
+                            * params.chamberPressure()
+                            * params.throatArea();
+        double mdotKgs    = params.chamberPressure() * params.throatArea()
+                            / params.characteristicVelocity();
+
+        System.out.println("\nOutput conversion (SI → US customary):");
+        System.out.printf("  Throat area  %8.4f m²  →  %8.4f in²%n",
+                params.throatArea(), Units.squareMetersToSquareInches(params.throatArea()));
+        System.out.printf("  Ideal thrust %8.1f N   →  %8.1f lbf%n",
+                thrustN, Units.newtonsToLbf(thrustN));
+        System.out.printf("  Mass flow    %8.2f kg/s →  %8.2f lb/s%n",
+                mdotKgs, Units.kgPerSecToLbPerSec(mdotKgs));
+        System.out.printf("  Ideal Isp    %8.1f s    (same in SI and US customary)%n",
+                params.idealSpecificImpulse());
+        System.out.printf("  Exit temp    %8.1f K   →  %8.1f °R%n",
+                params.exitTemperature(), Units.kelvinToRankine(params.exitTemperature()));
+        System.out.printf("  Exit vel     %8.1f m/s →  %8.1f ft/s%n",
+                params.exitVelocity(), Units.metersPerSecToFeetPerSec(params.exitVelocity()));
+    }
+
+    // =========================================================================
+    // FULL NOZZLE GEOMETRY DEMONSTRATION
+    // =========================================================================
+
+    /**
+     * Demonstrates {@link FullNozzleGeometry}: assembling the complete nozzle
+     * wall from the injector face to the exit and exporting it as a
+     * geometry-complete DXF.
+     *
+     * @param outputDir Directory for exported files
+     */
+    private static void demonstrateFullNozzleGeometry(Path outputDir) throws Exception {
+        System.out.println("\n--- FULL NOZZLE GEOMETRY (CHAMBER FACE → EXIT) ---\n");
+
+        NozzleDesignParameters params = NozzleDesignParameters.builder()
+                .throatRadius(0.05)
+                .exitMach(3.5)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500.0)
+                .ambientPressure(101325.0)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(30)
+                .wallAngleInitialDegrees(30.0)
+                .lengthFraction(0.8)
+                .axisymmetric(true)
+                .contractionRatio(4.0)
+                .upstreamCurvatureRatio(1.5)
+                .convergentHalfAngleDegrees(30.0)
+                .build();
+
+        FullNozzleGeometry fullGeom = new FullNozzleGeometry(params).generate(50, 100);
+
+        System.out.println("Full nozzle geometry (Rao bell divergent section):");
+        System.out.printf("  Chamber radius:     %.2f mm%n",
+                Units.metersToMillimeters(fullGeom.getChamberRadius()));
+        System.out.printf("  Throat radius:      %.2f mm%n",
+                Units.metersToMillimeters(fullGeom.getThroatRadius()));
+        System.out.printf("  Exit radius:        %.2f mm%n",
+                Units.metersToMillimeters(fullGeom.getExitRadius()));
+        System.out.printf("  Chamber face x:     %.2f mm%n",
+                Units.metersToMillimeters(fullGeom.getChamberFaceX()));
+        System.out.printf("  Exit x:             %.2f mm%n",
+                Units.metersToMillimeters(fullGeom.getExitX()));
+        System.out.printf("  Convergent length:  %.2f mm%n",
+                Units.metersToMillimeters(fullGeom.getConvergentLength()));
+        System.out.printf("  Divergent length:   %.2f mm%n",
+                Units.metersToMillimeters(fullGeom.getDivergentLength()));
+        System.out.printf("  Total length:       %.2f mm%n",
+                Units.metersToMillimeters(fullGeom.getTotalLength()));
+        System.out.printf("  Sonic-line Cd:      %.4f%n", fullGeom.getSonicLineCd());
+        System.out.printf("  Total wall points:  %d%n", fullGeom.getWallPoints().size());
+
+        // MOC-derived variant
+        CharacteristicNet net = new CharacteristicNet(params).generate();
+        FullNozzleGeometry mocGeom = FullNozzleGeometry.fromMOC(params, net).generate(50, 0);
+
+        System.out.println("\nMOC-backed full nozzle geometry:");
+        System.out.printf("  Total wall points:  %d (convergent + MOC wall)%n",
+                mocGeom.getWallPoints().size());
+        System.out.printf("  Total length:       %.2f mm%n",
+                Units.metersToMillimeters(mocGeom.getTotalLength()));
+
+        // Export full nozzle geometry to DXF (chamber face → exit)
+        DXFExporter dxf = new DXFExporter();
+        Path fullNozzleDxf  = outputDir.resolve("full_nozzle_rao.dxf");
+        Path fullNozzleRevDxf = outputDir.resolve("full_nozzle_rao_rev.dxf");
+        Path mocDxf         = outputDir.resolve("full_nozzle_moc.dxf");
+
+        dxf.exportFullNozzleProfile(fullGeom, fullNozzleDxf);
+        dxf.exportFullNozzleRevolutionProfile(fullGeom, fullNozzleRevDxf);
+        dxf.exportFullNozzleProfile(mocGeom, mocDxf);
+
+        System.out.printf("%nExported geometry-complete DXF files:%n");
+        System.out.printf("  %s  (Rao bell, profile only)%n", fullNozzleDxf.getFileName());
+        System.out.printf("  %s  (Rao bell, closed revolution sketch)%n", fullNozzleRevDxf.getFileName());
+        System.out.printf("  %s  (MOC divergent + convergent)%n", mocDxf.getFileName());
+        System.out.println("  All three include the convergent section from the injector face.");
+    }
+
+    // =========================================================================
+    // BOUNDARY LAYER FROM INJECTOR FACE DEMONSTRATION
+    // =========================================================================
+
+    /**
+     * Demonstrates the physically correct boundary layer calculation that starts
+     * at the injector face and integrates through both the convergent and
+     * divergent sections.
+     */
+    private static void demonstrateBoundaryLayerFromInjectorFace() {
+        System.out.println("\n--- BOUNDARY LAYER FROM INJECTOR FACE ---\n");
+
+        NozzleDesignParameters params = NozzleDesignParameters.builder()
+                .throatRadius(0.05)
+                .exitMach(3.5)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500.0)
+                .ambientPressure(101325.0)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(30)
+                .wallAngleInitialDegrees(30.0)
+                .lengthFraction(0.8)
+                .axisymmetric(true)
+                .contractionRatio(4.0)
+                .build();
+
+        FullNozzleGeometry fullGeom = new FullNozzleGeometry(params).generate(50, 100);
+
+        // BL from injector face (physically correct: BL grows from chamber inlet)
+        NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+        BoundaryLayerCorrection blcFull = new BoundaryLayerCorrection(params, contour)
+                .setForceTurbulent(true)
+                .calculateFromInjectorFace(fullGeom, null);
+
+        // BL from throat only (previous behavior — starts too late)
+        contour.generate(100);
+        BoundaryLayerCorrection blcThroat = new BoundaryLayerCorrection(params, contour)
+                .setForceTurbulent(true)
+                .calculate(null);
+
+        System.out.println("From-injector-face BL (physically correct):");
+        System.out.printf("  Total wall points:          %d%n",
+                blcFull.getBoundaryLayerProfile().size());
+        System.out.printf("  Running length at exit:     %.1f mm%n",
+                Units.metersToMillimeters(blcFull.getBoundaryLayerProfile().getLast().runningLength()));
+        System.out.printf("  δ* at throat:               %.3f mm%n",
+                Units.metersToMillimeters(blcFull.getThroatDisplacementThickness()));
+        System.out.printf("  δ* at exit:                 %.3f mm%n",
+                Units.metersToMillimeters(blcFull.getExitDisplacementThickness()));
+        System.out.printf("  BL Cd correction:           %.5f%n",
+                blcFull.getBoundaryLayerCdCorrection());
+        System.out.printf("  Geometric Cd:               %.5f%n",
+                params.dischargeCoefficient());
+        System.out.printf("  Combined Cd (geo × BL):     %.5f%n",
+                blcFull.getCombinedCd());
+
+        System.out.println("\nFrom-throat BL (old behaviour, for comparison):");
+        if (!blcThroat.getBoundaryLayerProfile().isEmpty()) {
+            System.out.printf("  Running length at exit:     %.1f mm%n",
+                    Units.metersToMillimeters(blcThroat.getBoundaryLayerProfile().getLast().runningLength()));
+        }
+        System.out.printf("  δ* at exit:                 %.3f mm%n",
+                Units.metersToMillimeters(blcThroat.getExitDisplacementThickness()));
+
+        System.out.println("\nPhysical insight:");
+        System.out.println("  The convergent section arc length (~"
+                + String.format("%.0f", Units.metersToMillimeters(fullGeom.getConvergentLength()))
+                + " mm) is added to the BL");
+        System.out.println("  running length, increasing the throat δ* and reducing the");
+        System.out.println("  effective throat area below what a throat-only calculation predicts.");
+        System.out.println("  Combined Cd accounts for both sonic-line curvature and BL displacement.");
     }
 }

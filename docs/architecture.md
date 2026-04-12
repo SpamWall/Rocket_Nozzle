@@ -15,11 +15,12 @@ used individually or composed into a full design pipeline.
 ```
 com.nozzle
 ├── core          NozzleDesignParameters, GasProperties, PerformanceCalculator,
-│                 FlowSeparationPredictor, ShockExpansionModel
+│                 FlowSeparationPredictor, ShockExpansionModel, Units
 ├── moc           CharacteristicNet, RaoNozzle, DualBellNozzle,
 │                 AerospikeNozzle, AerospikeContour, CharacteristicPoint,
 │                 AltitudePerformance
-├── geometry      NozzleContour (five contour families), Point2D
+├── geometry      NozzleContour (five contour families), ConvergentSection,
+│                 FullNozzleGeometry, Point2D
 ├── chemistry     ChemistryModel, OFSweep, GibbsMinimizer,
 │                 NasaSpeciesDatabase, SpeciesData, PropellantComposition
 ├── thermal       HeatTransferModel, BoundaryLayerCorrection, CoolantChannel,
@@ -58,8 +59,9 @@ for configuration fields set before the export call.
 and pass across thread boundaries.
 
 **Pure SI internally.** Every quantity is stored and returned in SI base units
-(metres, Pascals, Kelvin, Newtons, kg). Unit conversion is the caller's
-responsibility at system boundaries.
+(metres, Pascals, Kelvin, Newtons, kg). The `Units` class in `com.nozzle.core`
+provides static conversion methods for use at system input/output boundaries
+(inches, psi, Rankine, lbf, BTU, etc.).
 
 **Jakarta Validation at boundaries.** `NozzleDesignParameters` uses constraint
 annotations enforced by Hibernate Validator. Parameter violations are reported as
@@ -80,8 +82,12 @@ NozzleDesignParameters               (immutable design intent)
     │        ▼
     │    NozzleContour.fromMOCWallPoints()   (MOC_GENERATED spline)
     │        │
-    │        ▼
-    │    BoundaryLayerCorrection.calculate() ──► List<BoundaryLayerPoint>
+    │    FullNozzleGeometry.fromMOC()        (chamber face → exit wall profile)
+    │        │   (combines ConvergentSection + NozzleContour)
+    │        │
+    │        ├──► BoundaryLayerCorrection.calculate()
+    │        │    or .calculateFromInjectorFace()   ──► List<BoundaryLayerPoint>
+    │        │        (injector-face mode gives more accurate throat δ*)
     │        │
     │        ▼
     │    HeatTransferModel.calculate()       ──► List<WallThermalPoint>
@@ -97,7 +103,9 @@ NozzleDesignParameters               (immutable design intent)
     ├──► NozzleSerializer.save()             ──► JSON checkpoint
     │
     └──► [Exporters]
-             DXFExporter, STEPExporter, STLExporter
+             DXFExporter (exportContour, exportFullNozzleProfile,
+                          exportFullNozzleRevolutionProfile, exportAerospikeContour)
+             STEPExporter, STLExporter
              CFDMeshExporter, OpenFOAMExporter
              CSVExporter
 ```
@@ -120,6 +128,10 @@ GasProperties
             GibbsMinimizer, OFSweep, PerformanceCalculator,
             FlowSeparationPredictor, ShockExpansionModel
 
+Units
+  └─ no dependencies; pure static conversion utilities
+  └─ used at system input/output boundaries only
+
 CharacteristicNet
   └─ depends on NozzleDesignParameters
   └─ produces CharacteristicPoint grid → feeds NozzleContour, BoundaryLayerCorrection
@@ -128,7 +140,25 @@ NozzleContour
   └─ depends on NozzleDesignParameters (all types)
   └─ depends on CharacteristicNet wall points (MOC_GENERATED)
   └─ used by PerformanceCalculator, BoundaryLayerCorrection, HeatTransferModel,
-            all exporters
+            divergent-only exporters
+
+ConvergentSection
+  └─ depends on NozzleDesignParameters
+  └─ generates wall contour from injector face → throat (x < 0)
+  └─ used by FullNozzleGeometry
+
+FullNozzleGeometry
+  └─ depends on NozzleDesignParameters, ConvergentSection, NozzleContour
+  └─ assembles complete wall: injector face → exit (x_min < 0 → x_exit)
+  └─ used by BoundaryLayerCorrection.calculateFromInjectorFace(),
+            DXFExporter.exportFullNozzleProfile(),
+            DXFExporter.exportFullNozzleRevolutionProfile()
+
+BoundaryLayerCorrection
+  └─ depends on NozzleDesignParameters, NozzleContour or CharacteristicNet
+  └─ .calculate() — BL starts at throat
+  └─ .calculateFromInjectorFace(FullNozzleGeometry) — BL starts at chamber face
+  └─ used by PerformanceCalculator, HeatTransferModel
 
 GibbsMinimizer
   └─ depends on NasaSpeciesDatabase, PropellantComposition
@@ -203,3 +233,6 @@ internally. Display helpers in `CharacteristicPoint` return degrees.
 | Angle (internal)   | radians                |
 | Area ratio         | dimensionless          |
 | Thrust coefficient | dimensionless          |
+
+Use `com.nozzle.core.Units` to convert between SI and imperial (inches, psi,
+Rankine, lbf, BTU, lb/ft·s, etc.) at system input/output boundaries.

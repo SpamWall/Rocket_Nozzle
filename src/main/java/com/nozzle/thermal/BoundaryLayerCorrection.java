@@ -22,6 +22,7 @@ package com.nozzle.thermal;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
+import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.CharacteristicPoint;
@@ -79,9 +80,210 @@ public class BoundaryLayerCorrection {
     }
     
     /**
-     * Calculates boundary layer along nozzle wall.
+     * Calculates boundary layer starting from the injector face (chamber inlet)
+     * and integrating through both the convergent and divergent sections.
      *
-     * @param flowPoints Flow field points
+     * <p>Starting the boundary layer at the injector face rather than the throat
+     * produces a physically correct running-length at the throat.  The accumulated
+     * displacement thickness at x = 0 reduces the effective throat area and
+     * supplements the geometric Cd correction from sonic-line curvature:
+     *
+     * <pre>
+     *   r_eff_throat = r_t − δ*(x=0)
+     *   Cd_BL        = (r_eff_throat / r_t)²
+     *   Cd_total     = Cd_geometric × Cd_BL
+     * </pre>
+     *
+     * @param fullGeometry Full nozzle geometry (must have been generated)
+     * @param flowPoints   MOC flow-field points for local conditions; may be
+     *                     {@code null} or empty to use the isentropic estimate
+     * @return This instance for method chaining
+     * @throws IllegalStateException if {@code fullGeometry} has not been generated
+     */
+    public BoundaryLayerCorrection calculateFromInjectorFace(
+            FullNozzleGeometry fullGeometry,
+            List<CharacteristicPoint> flowPoints) {
+
+        if (!fullGeometry.isGenerated()) {
+            throw new IllegalStateException(
+                    "FullNozzleGeometry must be generated before calling calculateFromInjectorFace");
+        }
+
+        blProfile.clear();
+
+        GasProperties gas = parameters.gasProperties();
+        double gamma = gas.gamma();
+
+        List<Point2D> allPoints = fullGeometry.getWallPoints();
+        if (allPoints.isEmpty()) return this;
+
+        double runningLength = 0.0;
+        Point2D prevPoint = allPoints.getFirst();
+
+        for (int i = 0; i < allPoints.size(); i++) {
+            Point2D point = allPoints.get(i);
+
+            if (i > 0) {
+                runningLength += prevPoint.distanceTo(point);
+            }
+            prevPoint = point;
+
+            CharacteristicPoint flow = findNearestFlowPoint(point, flowPoints);
+
+            double mach;
+            double temp;
+            double pressure;
+            double velocity;
+
+            if (flow != null) {
+                mach     = flow.mach();
+                temp     = flow.temperature();
+                pressure = flow.pressure();
+                velocity = flow.velocity();
+            } else {
+                mach     = estimateMachFromFullGeometry(fullGeometry, point.x(), point.y());
+                temp     = parameters.chamberTemperature() * gas.isentropicTemperatureRatio(mach);
+                pressure = parameters.chamberPressure()    * gas.isentropicPressureRatio(mach);
+                velocity = mach * gas.speedOfSound(temp);
+            }
+
+            double density   = pressure / (gas.gasConstant() * temp);
+            double viscosity = gas.calculateViscosity(temp);
+            double Re = runningLength > 0 ? density * velocity * runningLength / viscosity : 0.0;
+
+            boolean isTurbulent = forceTurbulent || Re > turbulentTransitionRe;
+
+            double delta;
+            double deltaStar;
+            double theta;
+
+            if (runningLength < 1e-12) {
+                delta = 0; deltaStar = 0; theta = 0;
+            } else if (isTurbulent) {
+                delta     = 0.37   * runningLength / Math.pow(Re, 0.2);
+                deltaStar = delta  / 8.0;
+                theta     = 7.0 / 72.0 * delta;
+            } else {
+                delta     = 5.0   * runningLength / Math.sqrt(Re + 1.0);
+                deltaStar = 1.72  * runningLength / Math.sqrt(Re + 1.0);
+                theta     = 0.664 * runningLength / Math.sqrt(Re + 1.0);
+            }
+
+            double compCorrection = 1.0 + 0.2 * (gamma - 1.0) * mach * mach;
+            delta     *= compCorrection;
+            deltaStar *= compCorrection;
+            theta     *= compCorrection;
+
+            double cf;
+            if (runningLength < 1e-12 || Re < 1.0) {
+                cf = 0.0;
+            } else if (isTurbulent) {
+                cf = 0.074 / Math.pow(Re, 0.2);
+            } else {
+                cf = 1.328 / Math.sqrt(Re + 1.0);
+            }
+            cf *= 0.9; // Tw/Taw correction
+
+            blProfile.add(new BoundaryLayerPoint(
+                    point.x(), point.y(), runningLength, Re,
+                    delta, deltaStar, theta, cf, isTurbulent, mach));
+        }
+
+        return this;
+    }
+
+    /**
+     * Returns the displacement thickness δ* at the throat (x ≈ 0), computed by
+     * {@link #calculateFromInjectorFace}.  Used to correct the effective throat
+     * area for boundary-layer displacement.
+     *
+     * @return δ* at throat in metres; 0 if no profile has been calculated
+     */
+    public double getThroatDisplacementThickness() {
+        if (blProfile.isEmpty()) return 0.0;
+        double rt = parameters.throatRadius();
+        double tolerance = rt * 0.2;
+        BoundaryLayerPoint nearest = null;
+        double minDist = Double.MAX_VALUE;
+        for (BoundaryLayerPoint p : blProfile) {
+            double d = Math.abs(p.x());
+            if (d < minDist) {
+                minDist = d;
+                nearest = p;
+            }
+            if (d < tolerance) break;
+        }
+        return nearest != null ? nearest.displacementThickness() : 0.0;
+    }
+
+    /**
+     * Returns the boundary-layer discharge-coefficient correction factor.
+     *
+     * <pre>
+     *   Cd_BL = (1 − δ*(x=0) / r_t)²
+     * </pre>
+     *
+     * @return Cd_BL ∈ (0, 1]; 1.0 if no throat BL data is available
+     */
+    public double getBoundaryLayerCdCorrection() {
+        double deltaStar = getThroatDisplacementThickness();
+        if (deltaStar <= 0.0) return 1.0;
+        double rt   = parameters.throatRadius();
+        double rEff = Math.max(rt - deltaStar, rt * 0.5);
+        return (rEff / rt) * (rEff / rt);
+    }
+
+    /**
+     * Returns the combined discharge coefficient including both the geometric
+     * sonic-line curvature correction and the boundary-layer correction:
+     *
+     * <pre>
+     *   Cd_total = Cd_geometric × Cd_BL
+     * </pre>
+     *
+     * <p>Only meaningful after {@link #calculateFromInjectorFace} has been called.
+     *
+     * @return Combined Cd ∈ (0, 1]
+     */
+    public double getCombinedCd() {
+        return parameters.dischargeCoefficient() * getBoundaryLayerCdCorrection();
+    }
+
+    /**
+     * Estimates the local Mach number from the local wall radius for a point
+     * anywhere in the full nozzle (convergent or divergent).
+     *
+     * @param geom Full nozzle geometry
+     * @param x    Axial position in metres
+     * @param y    Radial wall position in metres
+     * @return Estimated Mach number ≥ 0
+     */
+    private double estimateMachFromFullGeometry(FullNozzleGeometry geom,
+                                                 double x, double y) {
+        double rt     = geom.getThroatRadius();
+        double aRatio = (y / rt) * (y / rt);
+        GasProperties gas = parameters.gasProperties();
+        if (x >= 0.0) {
+            return gas.machFromAreaRatio(Math.max(1.0, aRatio));
+        }
+        // Convergent: subsonic bisection
+        if (aRatio <= 1.0) return 1.0;
+        double lo = 0.001, hi = 1.0;
+        for (int iter = 0; iter < 60; iter++) {
+            double mid = 0.5 * (lo + hi);
+            if (gas.areaRatio(mid) > aRatio) lo = mid;
+            else hi = mid;
+        }
+        return 0.5 * (lo + hi);
+    }
+
+    /**
+     * Calculates boundary layer along the divergent nozzle wall only.
+     * The running length starts from the first contour point of the divergent
+     * section; use {@link #calculateFromInjectorFace} for the physically correct
+     * full-nozzle calculation.
+     *
+     * @param flowPoints Flow field points from MOC solution
      * @return This instance
      */
     public BoundaryLayerCorrection calculate(List<CharacteristicPoint> flowPoints) {

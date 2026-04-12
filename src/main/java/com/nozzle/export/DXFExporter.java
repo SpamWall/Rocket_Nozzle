@@ -20,6 +20,7 @@
 
 package com.nozzle.export;
 
+import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
@@ -245,6 +246,124 @@ public class DXFExporter {
                 start.x() * scaleFactor, start.y() * scaleFactor));
         writer.write(String.format("11\n%.6f\n21\n%.6f\n31\n0.0\n",
                 end.x() * scaleFactor, end.y() * scaleFactor));
+    }
+
+    /**
+     * Exports the complete nozzle wall profile — from the injector face through the
+     * convergent section, throat, and full divergent section to the exit — as a DXF
+     * file.
+     *
+     * <p>Three DXF layers are written:
+     * <ul>
+     *   <li>{@code WALL}   — polyline tracing the inner wall from chamber face to exit</li>
+     *   <li>{@code AXIS}   — centerline from the chamber face x to the exit x</li>
+     *   <li>{@code THROAT} — vertical line marking the throat plane at x = 0</li>
+     * </ul>
+     *
+     * <p>The {@code FullNozzleGeometry} must have been generated before calling this
+     * method (see {@link FullNozzleGeometry#generate}).
+     *
+     * @param fullGeometry Full nozzle geometry (chamber face → exit)
+     * @param filePath     Destination DXF file path
+     * @throws IOException              If the file cannot be written
+     * @throws IllegalArgumentException If the geometry has no wall points
+     */
+    public void exportFullNozzleProfile(FullNozzleGeometry fullGeometry, Path filePath)
+            throws IOException {
+        List<Point2D> points = fullGeometry.getWallPoints();
+        if (points.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "FullNozzleGeometry has no wall points — call generate() first");
+        }
+
+        double rt    = fullGeometry.getThroatRadius();
+        double xMin  = points.getFirst().x();
+        double xMax  = points.getLast().x();
+
+        LOG.debug("Exporting full-nozzle DXF: {} wall points, x=[{}, {}] → {}",
+                points.size(),
+                String.format("%.4f", xMin),
+                String.format("%.4f", xMax),
+                filePath);
+
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writer.write(DXF_HEADER);
+
+            // Inner wall profile
+            writePolyline(writer, points, "WALL");
+
+            // Symmetry axis from chamber face to exit
+            writeLine(writer,
+                    new Point2D(xMin, 0),
+                    new Point2D(xMax, 0),
+                    "AXIS");
+
+            // Throat marker
+            writeLine(writer,
+                    new Point2D(0, 0),
+                    new Point2D(0, rt),
+                    "THROAT");
+
+            writer.write(DXF_FOOTER);
+        }
+        LOG.debug("Full-nozzle DXF export complete → {}", filePath);
+    }
+
+    /**
+     * Exports the complete nozzle as a closed revolution-profile cross-section
+     * suitable for use as the sketch for a revolve operation in CAD tools.
+     *
+     * <p>Five DXF entities are written:
+     * <ul>
+     *   <li>{@code WALL}    — inner wall polyline from chamber face to exit</li>
+     *   <li>{@code AXIS}    — centerline from chamber face to exit, closing the bottom</li>
+     *   <li>{@code INLET}   — vertical inlet (chamber) face line from axis to wall</li>
+     *   <li>{@code OUTLET}  — vertical exit face line from wall to axis</li>
+     *   <li>{@code THROAT}  — vertical throat plane marker</li>
+     * </ul>
+     *
+     * @param fullGeometry Full nozzle geometry (must be generated)
+     * @param filePath     Destination DXF file path
+     * @throws IOException              If the file cannot be written
+     * @throws IllegalArgumentException If the geometry has no wall points
+     */
+    public void exportFullNozzleRevolutionProfile(FullNozzleGeometry fullGeometry, Path filePath)
+            throws IOException {
+        List<Point2D> points = fullGeometry.getWallPoints();
+        if (points.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "FullNozzleGeometry has no wall points — call generate() first");
+        }
+
+        double rt     = fullGeometry.getThroatRadius();
+        double xMin   = points.getFirst().x();
+        double xMax   = points.getLast().x();
+        double rInlet = points.getFirst().y();
+        double rExit  = points.getLast().y();
+
+        LOG.debug("Exporting full-nozzle revolution DXF: {} pts → {}", points.size(), filePath);
+
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writer.write(DXF_HEADER);
+
+            // Inner wall
+            writePolyline(writer, points, "WALL");
+
+            // Axis (bottom closure)
+            writeLine(writer, new Point2D(xMin, 0), new Point2D(xMax, 0), "AXIS");
+
+            // Inlet face (left vertical)
+            writeLine(writer, new Point2D(xMin, 0), new Point2D(xMin, rInlet), "INLET");
+
+            // Exit face (right vertical)
+            writeLine(writer, new Point2D(xMax, rExit), new Point2D(xMax, 0), "OUTLET");
+
+            // Throat marker
+            writeLine(writer, new Point2D(0, 0), new Point2D(0, rt), "THROAT");
+
+            writer.write(DXF_FOOTER);
+        }
+        LOG.debug("Full-nozzle revolution DXF export complete → {}", filePath);
     }
 
     /**
