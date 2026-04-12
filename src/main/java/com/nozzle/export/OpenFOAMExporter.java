@@ -22,6 +22,7 @@ package com.nozzle.export;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
+import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.DualBellNozzle;
@@ -208,34 +209,31 @@ public class OpenFOAMExporter {
         if (pts.size() < 2) {
             throw new IllegalArgumentException("Contour must be generated before export");
         }
+        exportCaseFromPoints(params, pts, caseDir);
+    }
 
-        LOG.debug("Exporting OpenFOAM case: {} contour points, axial={} radial={} turbulence={} → {}",
-                pts.size(), axialCells, radialCells, turbulenceEnabled, caseDir);
-
-        Path system   = caseDir.resolve("system");
-        Path constant = caseDir.resolve("constant");
-        Path zero     = caseDir.resolve("0");
-        Files.createDirectories(system);
-        Files.createDirectories(constant);
-        Files.createDirectories(zero);
-
-        writeBlockMeshDict(pts, system.resolve("blockMeshDict"));
-        writeControlDict(system.resolve("controlDict"));
-        writeFvSchemes(system.resolve("fvSchemes"));
-        writeFvSolution(system.resolve("fvSolution"));
-
-        writeThermophysicalProperties(params, constant.resolve("thermophysicalProperties"));
-        writeTurbulenceProperties(constant.resolve("turbulenceProperties"));
-
-        writePressureField(params, zero.resolve("p"));
-        writeTemperatureField(params, zero.resolve("T"));
-        writeVelocityField(zero.resolve("U"));
-        if (turbulenceEnabled) {
-            writeKField(params, zero.resolve("k"));
-            writeOmegaField(params, pts, zero.resolve("omega"));
+    /**
+     * Exports a complete OpenFOAM case covering the full nozzle from injector face
+     * to exit.  The wall-point list from {@link FullNozzleGeometry#getWallPoints()}
+     * spans the convergent section (x &lt; 0) and the divergent section (x ≥ 0), so
+     * the resulting mesh captures the subsonic-to-supersonic transition and is
+     * suitable for rhoCentralFoam simulations that include the combustion chamber
+     * inlet.
+     *
+     * @param params       Nozzle design parameters — used for BCs and thermophysical model
+     * @param fullGeometry Full nozzle geometry (must have been generated)
+     * @param caseDir      Output directory (created if absent)
+     * @throws IllegalStateException If {@code fullGeometry} has not been generated
+     * @throws IOException           On any file write failure
+     */
+    public void exportCase(NozzleDesignParameters params, FullNozzleGeometry fullGeometry,
+                           Path caseDir) throws IOException {
+        List<Point2D> pts = fullGeometry.getWallPoints();
+        if (pts.isEmpty()) {
+            throw new IllegalStateException(
+                    "FullNozzleGeometry has no wall points — call generate() first");
         }
-
-        LOG.debug("OpenFOAM case export complete → {}", caseDir);
+        exportCaseFromPoints(params, pts, caseDir);
     }
 
     /**
@@ -263,6 +261,41 @@ public class OpenFOAMExporter {
         exportCase(nozzle.getParameters(),
                 NozzleContour.fromPoints(nozzle.getParameters(), nozzle.getContourPoints()),
                 caseDir);
+    }
+
+    /**
+     * Common implementation: writes all OpenFOAM case files from a pre-extracted
+     * wall-point list.  Called by all {@code exportCase} overloads.
+     */
+    private void exportCaseFromPoints(NozzleDesignParameters params,
+                                      List<Point2D> pts, Path caseDir) throws IOException {
+        LOG.debug("Exporting OpenFOAM case: {} wall points, axial={} radial={} turbulence={} → {}",
+                pts.size(), axialCells, radialCells, turbulenceEnabled, caseDir);
+
+        Path system   = caseDir.resolve("system");
+        Path constant = caseDir.resolve("constant");
+        Path zero     = caseDir.resolve("0");
+        Files.createDirectories(system);
+        Files.createDirectories(constant);
+        Files.createDirectories(zero);
+
+        writeBlockMeshDict(pts, system.resolve("blockMeshDict"));
+        writeControlDict(system.resolve("controlDict"));
+        writeFvSchemes(system.resolve("fvSchemes"));
+        writeFvSolution(system.resolve("fvSolution"));
+
+        writeThermophysicalProperties(params, constant.resolve("thermophysicalProperties"));
+        writeTurbulenceProperties(constant.resolve("turbulenceProperties"));
+
+        writePressureField(params, zero.resolve("p"));
+        writeTemperatureField(params, zero.resolve("T"));
+        writeVelocityField(zero.resolve("U"));
+        if (turbulenceEnabled) {
+            writeKField(params, zero.resolve("k"));
+            writeOmegaField(params, pts, zero.resolve("omega"));
+        }
+
+        LOG.debug("OpenFOAM case export complete → {}", caseDir);
     }
 
     // -------------------------------------------------------------------------

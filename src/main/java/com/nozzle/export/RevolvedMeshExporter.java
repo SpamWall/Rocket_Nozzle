@@ -20,6 +20,7 @@
 
 package com.nozzle.export;
 
+import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 
@@ -197,6 +198,37 @@ public class RevolvedMeshExporter {
             case PLOT3D            -> exportPlot3D3D(contour, filePath);
         }
         LOG.debug("3D revolved mesh export complete → {}", filePath);
+    }
+
+    /**
+     * Exports the complete nozzle (convergent + divergent) as a full 3-D revolved
+     * mesh in the requested format.  The wall-point list from
+     * {@link FullNozzleGeometry#getWallPoints()} spans the injector face (x &lt; 0)
+     * through the throat to the exit, producing a geometry-complete volumetric mesh
+     * suitable for 3-D CFD simulations.
+     *
+     * @param fullGeometry Full nozzle geometry (must have been generated)
+     * @param filePath     Destination file path
+     * @param format       Target mesh format
+     * @throws IllegalStateException If {@code fullGeometry} has not been generated
+     * @throws IOException           If the file cannot be written
+     */
+    public void export(FullNozzleGeometry fullGeometry, Path filePath, Format format)
+            throws IOException {
+        List<Point2D> pts = fullGeometry.getWallPoints();
+        if (pts.isEmpty()) {
+            throw new IllegalStateException(
+                    "FullNozzleGeometry has no wall points — call generate() first");
+        }
+        LOG.debug("Exporting geometry-complete 3D revolved mesh: format={} {} wall points → {}",
+                format, pts.size(), filePath);
+        NozzleContour contour = NozzleContour.fromPoints(fullGeometry.getParameters(), pts);
+        switch (format) {
+            case OPENFOAM_BLOCKMESH -> exportOpenFOAM3D(contour, filePath);
+            case GMSH_GEO          -> exportGmsh3D(contour, filePath);
+            case PLOT3D            -> exportPlot3D3D(contour, filePath);
+        }
+        LOG.debug("Geometry-complete 3D revolved mesh export complete → {}", filePath);
     }
 
     // -------------------------------------------------------------------------

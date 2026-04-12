@@ -20,6 +20,7 @@
 
 package com.nozzle.export;
 
+import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
@@ -220,6 +221,38 @@ public class CFDMeshExporter {
     public void export(DualBellNozzle nozzle, Path filePath, Format format) throws IOException {
         export(NozzleContour.fromPoints(nozzle.getParameters(), nozzle.getContourPoints()),
                 filePath, format);
+    }
+
+    /**
+     * Exports the complete nozzle (convergent + divergent) as a CFD mesh in the
+     * requested format.  The wall-point list from
+     * {@link FullNozzleGeometry#getWallPoints()} spans the injector face (x &lt; 0)
+     * through the throat to the exit, so the resulting mesh covers the full flow
+     * domain including the subsonic-to-supersonic transition.
+     *
+     * @param fullGeometry Full nozzle geometry (must have been generated)
+     * @param filePath     Destination file path
+     * @param format       Target mesh format
+     * @throws IllegalStateException If {@code fullGeometry} has not been generated
+     * @throws IOException           If the file cannot be written
+     */
+    public void export(FullNozzleGeometry fullGeometry, Path filePath, Format format)
+            throws IOException {
+        List<Point2D> pts = fullGeometry.getWallPoints();
+        if (pts.isEmpty()) {
+            throw new IllegalStateException(
+                    "FullNozzleGeometry has no wall points — call generate() first");
+        }
+        LOG.debug("Exporting geometry-complete CFD mesh: format={} {} wall points → {}",
+                format, pts.size(), filePath);
+        NozzleContour contour = NozzleContour.fromPoints(fullGeometry.getParameters(), pts);
+        switch (format) {
+            case OPENFOAM_BLOCKMESH -> exportOpenFOAM(contour, filePath);
+            case GMSH_GEO          -> exportGmsh(contour, filePath);
+            case PLOT3D            -> exportPlot3D(contour, filePath);
+            case CGNS              -> exportCGNS(contour, filePath);
+        }
+        LOG.debug("Geometry-complete CFD mesh export complete → {}", filePath);
     }
 
     /**

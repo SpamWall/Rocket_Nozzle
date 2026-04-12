@@ -20,6 +20,7 @@
 
 package com.nozzle.export;
 
+import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
@@ -130,6 +131,52 @@ public class STLExporter {
      */
     public void exportInnerSurfaceMesh(NozzleContour contour, Path filePath) throws IOException {
         exportMesh(contour, filePath);
+    }
+
+    /**
+     * Exports the complete nozzle (convergent + divergent) as a revolved STL mesh.
+     * The wall-point list from {@link FullNozzleGeometry#getWallPoints()} spans the
+     * injector face (x &lt; 0) through the throat to the exit, so the resulting solid
+     * includes the full internal flow surface.
+     *
+     * @param fullGeometry Full nozzle geometry (must have been generated)
+     * @param filePath     Destination STL file path
+     * @throws IllegalStateException    If {@code fullGeometry} has not been generated
+     * @throws IllegalArgumentException If the wall contains fewer than 2 points
+     * @throws IOException              If the file cannot be written
+     */
+    public void exportMesh(FullNozzleGeometry fullGeometry, Path filePath) throws IOException {
+        List<Point2D> points = fullGeometry.getWallPoints();
+        if (points.isEmpty()) {
+            throw new IllegalStateException(
+                    "FullNozzleGeometry has no wall points — call generate() first");
+        }
+        if (points.size() < 2) {
+            throw new IllegalArgumentException("Full nozzle wall needs at least 2 points");
+        }
+        LOG.debug("Exporting geometry-complete STL mesh: {} wall points, {} segments, {} → {}",
+                points.size(), circumferentialSegments, binaryFormat ? "binary" : "ASCII", filePath);
+        List<Triangle> triangles = generateTriangles(points);
+        if (binaryFormat) {
+            exportBinarySTL(triangles, filePath);
+        } else {
+            exportAsciiSTL(triangles, filePath);
+        }
+        LOG.debug("Geometry-complete STL export complete: {} triangles → {}", triangles.size(), filePath);
+    }
+
+    /**
+     * Exports the complete nozzle inner flow surface (convergent + divergent) as a
+     * revolved STL mesh.  Equivalent to {@link #exportMesh(FullNozzleGeometry, Path)};
+     * provided for API symmetry with {@link #exportInnerSurfaceMesh(NozzleContour, Path)}.
+     *
+     * @param fullGeometry Full nozzle geometry (must have been generated)
+     * @param filePath     Destination STL file path
+     * @throws IOException If the file cannot be written
+     */
+    public void exportInnerSurfaceMesh(FullNozzleGeometry fullGeometry, Path filePath)
+            throws IOException {
+        exportMesh(fullGeometry, filePath);
     }
     
     /**

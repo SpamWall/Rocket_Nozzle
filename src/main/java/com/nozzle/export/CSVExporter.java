@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nozzle.core.NozzleDesignParameters;
+import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
@@ -146,6 +147,61 @@ public class CSVExporter {
         }
     }
     
+    /**
+     * Exports the complete nozzle wall contour (convergent + divergent) to CSV.
+     *
+     * <p>Each row contains the axial position, wall radius, an approximate wall
+     * angle (degrees), and a section label ({@code convergent} for x &lt; 0,
+     * {@code throat} at x = 0, {@code divergent} for x &gt; 0).  The wall angle is
+     * estimated by a centred finite difference over the adjacent wall points; at
+     * the end points a one-sided difference is used.
+     *
+     * @param fullGeometry Full nozzle geometry (must have been generated)
+     * @param filePath     Destination CSV file path
+     * @throws IllegalStateException If {@code fullGeometry} has not been generated
+     * @throws IOException           If the file cannot be written
+     */
+    public void exportContour(FullNozzleGeometry fullGeometry, Path filePath) throws IOException {
+        List<Point2D> points = fullGeometry.getWallPoints();
+        if (points.isEmpty()) {
+            throw new IllegalStateException(
+                    "FullNozzleGeometry has no wall points — call generate() first");
+        }
+        LOG.debug("Exporting geometry-complete CSV contour: {} wall points → {}",
+                points.size(), filePath);
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writer.write("x,y,angle_deg,section");
+            writer.write(NEWLINE);
+            int n = points.size();
+            for (int i = 0; i < n; i++) {
+                Point2D p = points.get(i);
+                // Centred FD angle; forward/backward at the ends
+                double dx, dy;
+                if (i == 0) {
+                    dx = points.get(1).x() - p.x();
+                    dy = points.get(1).y() - p.y();
+                } else if (i == n - 1) {
+                    dx = p.x() - points.get(n - 2).x();
+                    dy = p.y() - points.get(n - 2).y();
+                } else {
+                    dx = points.get(i + 1).x() - points.get(i - 1).x();
+                    dy = points.get(i + 1).y() - points.get(i - 1).y();
+                }
+                double angleDeg = Math.toDegrees(Math.atan2(dy, dx));
+                String section = p.x() < 0.0 ? "convergent"
+                               : p.x() == 0.0 ? "throat"
+                               : "divergent";
+                writer.write(String.format("%.8f%s%.8f%s%.4f%s%s",
+                        p.x(), DELIMITER,
+                        p.y(), DELIMITER,
+                        angleDeg, DELIMITER,
+                        section));
+                writer.write(NEWLINE);
+            }
+        }
+        LOG.debug("Geometry-complete CSV contour export complete → {}", filePath);
+    }
+
     /**
      * Exports thermal profile to CSV.
      *

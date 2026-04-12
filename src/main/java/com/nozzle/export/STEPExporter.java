@@ -20,6 +20,7 @@
 
 package com.nozzle.export;
 
+import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
@@ -108,6 +109,34 @@ public class STEPExporter {
             writeFooter(writer);
         }
         LOG.debug("STEP export complete → {}", filePath);
+    }
+
+    /**
+     * Exports the complete nozzle (convergent + divergent) as a revolved solid to
+     * STEP format.  The wall-point list from {@link FullNozzleGeometry#getWallPoints()}
+     * spans the injector face (x &lt; 0) through the throat to the exit, producing a
+     * geometry-complete solid suitable for manufacturing drawings or FEA models.
+     *
+     * @param fullGeometry Full nozzle geometry (must have been generated)
+     * @param filePath     Destination STEP file path
+     * @throws IllegalStateException If {@code fullGeometry} has not been generated
+     * @throws IOException           If the file cannot be written
+     */
+    public void exportRevolvedSolid(FullNozzleGeometry fullGeometry, Path filePath)
+            throws IOException {
+        List<Point2D> points = fullGeometry.getWallPoints();
+        if (points.isEmpty()) {
+            throw new IllegalStateException(
+                    "FullNozzleGeometry has no wall points — call generate() first");
+        }
+        LOG.debug("Exporting geometry-complete STEP revolved solid: {} wall points → {}",
+                points.size(), filePath);
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writeHeader(writer);
+            writeData(writer, points);
+            writeFooter(writer);
+        }
+        LOG.debug("Geometry-complete STEP export complete → {}", filePath);
     }
     
     /**
@@ -281,6 +310,52 @@ public class STEPExporter {
             writeFooter(writer);
         }
         LOG.debug("Aerospike STEP export complete → {}", filePath);
+    }
+
+    /**
+     * Exports the complete nozzle profile curve (convergent + divergent) to STEP
+     * format as a B-spline curve.  Equivalent to
+     * {@link #exportProfileCurve(NozzleContour, Path)} but uses the geometry-complete
+     * wall-point list from {@link FullNozzleGeometry}.
+     *
+     * @param fullGeometry Full nozzle geometry (must have been generated)
+     * @param filePath     Destination STEP file path
+     * @throws IllegalStateException If {@code fullGeometry} has not been generated
+     * @throws IOException           If the file cannot be written
+     */
+    public void exportProfileCurve(FullNozzleGeometry fullGeometry, Path filePath)
+            throws IOException {
+        List<Point2D> points = fullGeometry.getWallPoints();
+        if (points.isEmpty()) {
+            throw new IllegalStateException(
+                    "FullNozzleGeometry has no wall points — call generate() first");
+        }
+        LOG.debug("Exporting geometry-complete STEP profile curve: {} wall points → {}",
+                points.size(), filePath);
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writeHeader(writer);
+            writer.write("DATA;\n");
+            int entityId = 1;
+            List<Integer> pointIds = new ArrayList<>();
+            for (Point2D point : points) {
+                writer.write(String.format("#%d=CARTESIAN_POINT('',(%.8f,%.8f,0.0));\n",
+                        entityId, point.x() * scaleFactor, point.y() * scaleFactor));
+                pointIds.add(entityId);
+                entityId++;
+            }
+            StringBuilder ctrlPts = new StringBuilder();
+            for (int i = 0; i < pointIds.size(); i++) {
+                if (i > 0) ctrlPts.append(",");
+                ctrlPts.append("#").append(pointIds.get(i));
+            }
+            int degree = Math.min(3, pointIds.size() - 1);
+            writer.write(String.format(
+                    "#%d=B_SPLINE_CURVE_WITH_KNOTS('Profile',%d,(%s),.UNSPECIFIED.,.F.,.F.,(),(),.UNSPECIFIED.);\n",
+                    entityId, degree, ctrlPts));
+            writer.write("ENDSEC;\n");
+            writeFooter(writer);
+        }
+        LOG.debug("Geometry-complete STEP profile curve export complete → {}", filePath);
     }
 
     /**
