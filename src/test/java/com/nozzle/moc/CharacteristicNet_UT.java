@@ -460,6 +460,120 @@ class CharacteristicNet_UT {
     }
 
     // -----------------------------------------------------------------------
+    // Sonic-line curvature correction (Hall 1962) — verify initial data line
+    // placement uses the curved sonic line, not a flat plane at x ≈ 0.
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Sonic Line Curvature Tests")
+    class SonicLineCurvatureTests {
+
+        /** Recomputes sonicLineX(rt) from the public parameters — mirrors the private method. */
+        private double expectedWallSonicX(NozzleDesignParameters p, boolean axisymmetric) {
+            double gamma = p.gasProperties().gamma();
+            double rt  = p.throatRadius();
+            double rcd = p.throatCurvatureRatio()  * rt;
+            double rcu = p.upstreamCurvatureRatio() * rt;
+            double coeff = axisymmetric ? (gamma + 1.0) / 12.0 : (gamma + 1.0) / 6.0;
+            return coeff * rt * rt * (1.0 / rcd + 1.0 / (3.0 * rcu));
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Initial data line wall point x matches Hall sonic-line formula")
+        void wallPointXMatchesSonicLineFormula() {
+            CharacteristicNet net = new CharacteristicNet(params).generate();
+            List<CharacteristicPoint> initLine = net.getNetPoints().getFirst();
+            CharacteristicPoint wallPt = initLine.getLast();
+
+            double expected = expectedWallSonicX(params, true);
+            assertThat(wallPt.x()).isCloseTo(expected, within(expected * 1e-9));
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Initial data line centerline point x ≈ 0 (sonic line passes through axis)")
+        void centerlinePointXIsNearZero() {
+            CharacteristicNet net = new CharacteristicNet(params).generate();
+            List<CharacteristicPoint> initLine = net.getNetPoints().getFirst();
+            CharacteristicPoint axisPt = initLine.getFirst();
+
+            // y ≈ rt * 0.01 → x_s ≈ coeff * (0.01*rt)² * (...) ≈ 1e-4 * wallX ≈ 0
+            double wallX = expectedWallSonicX(params, true);
+            assertThat(axisPt.x()).isLessThan(wallX * 1e-3);
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Tighter downstream curvature (R_cd = 0.2·r_t) gives larger sonic-line offset than default (0.382)")
+        void tighterDownstreamCurvatureGivesLargerOffset() {
+            NozzleDesignParameters tight = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(2.5)
+                    .chamberPressure(7e6).chamberTemperature(3500)
+                    .ambientPressure(101325).gasProperties(GasProperties.AIR)
+                    .numberOfCharLines(10).wallAngleInitialDegrees(25)
+                    .lengthFraction(0.8).axisymmetric(true)
+                    .throatCurvatureRatio(0.2)
+                    .build();
+
+            double xTight = new CharacteristicNet(tight).generate()
+                    .getNetPoints().getFirst().getLast().x();
+            double xDefault = new CharacteristicNet(params).generate()
+                    .getNetPoints().getFirst().getLast().x();
+
+            assertThat(xTight).isGreaterThan(xDefault);
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Tighter upstream curvature (R_cu = 0.3·r_t) gives larger sonic-line offset than default (1.5)")
+        void tighterUpstreamCurvatureGivesLargerOffset() {
+            NozzleDesignParameters tight = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(2.5)
+                    .chamberPressure(7e6).chamberTemperature(3500)
+                    .ambientPressure(101325).gasProperties(GasProperties.AIR)
+                    .numberOfCharLines(10).wallAngleInitialDegrees(25)
+                    .lengthFraction(0.8).axisymmetric(true)
+                    .upstreamCurvatureRatio(0.3)
+                    .build();
+
+            double xTight = new CharacteristicNet(tight).generate()
+                    .getNetPoints().getFirst().getLast().x();
+            double xDefault = new CharacteristicNet(params).generate()
+                    .getNetPoints().getFirst().getLast().x();
+
+            assertThat(xTight).isGreaterThan(xDefault);
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Planar sonic-line x-offset is exactly 2× axisymmetric (factor difference in Hall formula)")
+        void planarOffsetIsTwiceAxisymmetric() {
+            NozzleDesignParameters planar = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(2.5)
+                    .chamberPressure(7e6).chamberTemperature(3500)
+                    .ambientPressure(101325).gasProperties(GasProperties.AIR)
+                    .numberOfCharLines(10).wallAngleInitialDegrees(25)
+                    .lengthFraction(0.8).axisymmetric(false)
+                    .build();
+
+            double xAxisym = new CharacteristicNet(params).generate()
+                    .getNetPoints().getFirst().getLast().x();
+            double xPlanar = new CharacteristicNet(planar).generate()
+                    .getNetPoints().getFirst().getLast().x();
+
+            assertThat(xPlanar).isCloseTo(2.0 * xAxisym, within(2.0 * xAxisym * 1e-9));
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Net with sonic-line placement is still valid (wall monotonic, all M ≥ 1)")
+        void netWithSonicLinePlacementIsValid() {
+            assertThat(new CharacteristicNet(params).generate().validate()).isTrue();
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // computeRaoExitAngle() length-fraction branches (L282/L284)
     //   lf >= 0.8 TRUE  → already covered by default params (lf=0.8)
     //   lf >= 0.8 FALSE, lf >= 0.6 TRUE  → lf=0.7

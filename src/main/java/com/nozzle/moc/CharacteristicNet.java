@@ -89,21 +89,34 @@ public class CharacteristicNet {
      *
      * <p>The algorithm proceeds in three stages:
      * <ol>
-     *   <li><b>Initial data line</b> — a vertical line at {@code x ≈ 0} is
-     *       seeded with {@code n + 1} points
-     *       ({@link NozzleDesignParameters#numberOfCharLines()} {@code + 1}),
-     *       whose flow angles ramp linearly from {@code θ = 0} at the centerline
-     *       to {@code θ = θ_max} ({@link NozzleDesignParameters#wallAngleInitial()})
-     *       at the wall.  Mach number at each point is obtained by inverting the
-     *       Prandtl-Meyer function with {@code ν = ν(M_start) + θ}.</li>
+     *   <li><b>Initial data line</b> — seeded with {@code n + 1} points
+     *       ({@link NozzleDesignParameters#numberOfCharLines()} {@code + 1})
+     *       placed on the <em>curved</em> sonic line computed by
+     *       {@link #sonicLineX(double)}.  Flow angles ramp linearly from
+     *       {@code θ = 0} at the centerline to {@code θ = θ_max}
+     *       ({@link NozzleDesignParameters#wallAngleInitial()}) at the wall.
+     *       Mach number at each point is obtained by inverting the Prandtl-Meyer
+     *       function with {@code ν = ν(M_start) + θ}.
      *
-     *   <li><b>Rao wall profile</b> — a quadratic Bézier curve is computed once
+     *       <p>The sonic-line shape follows the Hall (1962) transonic result:
+     *       the M = 1 surface bows downstream near the wall by
+     *       {@code x_s(r) = coeff · r² · (1/R_cd + 1/(3·R_cu))}, where
+     *       {@code coeff = (γ+1)/12} for axisymmetric flow and {@code (γ+1)/6}
+     *       for planar 2-D, {@code R_cd = throatCurvatureRatio × r_t} is the
+     *       downstream throat-arc radius, and
+     *       {@code R_cu = upstreamCurvatureRatio × r_t} is the upstream
+     *       throat-arc radius.  Using a flat plane ({@code x ≡ 0}) as the
+     *       initial data line introduces error in the first few characteristic
+     *       rows proportional to the throat curvature; the curved placement
+     *       removes this leading-order bias.</li>
+     *
+     *   <li><b>Rao wall profile</b> — a cubic Bézier curve is computed once
      *       via {@link #buildRaoWallProfile()} before the propagation loop.  The
      *       curve runs from {@code (x₀, r_t)} with slope {@code tan(θ_max)} to
-     *       {@code (x_exit, r_e)} with slope {@code tan(θ_E)}, where {@code θ_E}
-     *       is the Rao empirical exit angle from {@link #computeRaoExitAngle()}.
-     *       It is sampled uniformly at 501 Bézier-parameter values, giving
-     *       500 wall segments.</li>
+     *       {@code (x_exit, r_e)} with slope {@code tan(θ_E)}, where {@code x₀
+     *       = sonicLineX(r_t)} and {@code θ_E} is the Rao empirical exit angle
+     *       from {@link #computeRaoExitAngle()}.  It is sampled uniformly at
+     *       501 Bézier-parameter values, giving 500 wall segments.</li>
      *
      *   <li><b>Propagation loop</b> — iterates over the 500 wall segments
      *       ({@code wallIdx = 1 … 500}).  On each iteration:
@@ -162,8 +175,8 @@ public class CharacteristicNet {
             double mach = gas.machFromPrandtlMeyer(nu);
             double mu = gas.machAngle(mach);
             
-            // x position: small offset, increases slightly with y to give C+ slope
-            double x = rt * 0.01 * (1 + fraction);
+            // x position: on the curved sonic line (Hall 1962 + upstream correction)
+            double x = sonicLineX(y);
             
             // Thermodynamic properties
             double T = parameters.chamberTemperature() * gas.isentropicTemperatureRatio(mach);
@@ -273,6 +286,42 @@ public class CharacteristicNet {
     }
     
     /**
+     * Returns the axial position of the curved sonic line at radial coordinate
+     * {@code r}, using the Hall (1962) transonic solution with a combined
+     * downstream/upstream curvature correction.
+     *
+     * <p>For an axisymmetric nozzle, the M&nbsp;=&nbsp;1 surface bows downstream
+     * near the wall according to:
+     * <pre>
+     *   x_s(r) = (γ+1)/12 · r² · (1/R_cd + 1/(3·R_cu))   [axisymmetric]
+     *   x_s(r) = (γ+1)/6  · r² · (1/R_cd + 1/(3·R_cu))   [planar 2-D]
+     * </pre>
+     * where {@code R_cd = throatCurvatureRatio × r_t} is the downstream
+     * throat-arc radius and {@code R_cu = upstreamCurvatureRatio × r_t} is
+     * the upstream throat-arc radius.  The dominant term is the Hall result
+     * {@code (γ+1)/coeff · r²/R_cd}; the {@code R_cu} contribution is a
+     * secondary correction that pushes the sonic surface slightly further
+     * downstream when the upstream geometry is tightly curved.
+     *
+     * <p>At the axis ({@code r = 0}) this correctly returns zero (the sonic point
+     * is always at the geometric throat on the centreline).  Near the wall
+     * ({@code r = r_t}) the displacement grows as the square of the throat
+     * radius and inversely with the curvature radii.
+     *
+     * @param r Radial coordinate in metres; should satisfy {@code 0 ≤ r ≤ r_t}
+     * @return Axial displacement of the sonic line at {@code r}, in metres
+     */
+    private double sonicLineX(double r) {
+        double gamma = parameters.gasProperties().gamma();
+        double rt  = parameters.throatRadius();
+        double rcd = parameters.throatCurvatureRatio()  * rt;
+        double rcu = parameters.upstreamCurvatureRatio() * rt;
+        // Hall (1962): axisymmetric factor (γ+1)/12, planar 2-D factor (γ+1)/6
+        double coeff = axisymmetric ? (gamma + 1.0) / 12.0 : (gamma + 1.0) / 6.0;
+        return coeff * r * r * (1.0 / rcd + 1.0 / (3.0 * rcu));
+    }
+
+    /**
      * Estimates the axial position of the nozzle exit plane.
      * Uses the 15° reference cone length scaled by {@link NozzleDesignParameters#lengthFraction()}.
      *
@@ -307,14 +356,25 @@ public class CharacteristicNet {
     }
 
     /**
-     * Builds the Rao bell nozzle wall profile as a quadratic Bézier curve.
+     * Builds the Rao bell nozzle wall profile as a cubic Bézier curve.
      *
-     * <p>The curve runs from {@code (0, r_t)} with slope {@code tan(θ_max)} at
+     * <p>The curve runs from {@code (x₀, r_t)} with slope {@code tan(θ_max)} at
      * the throat to {@code (x_exit, r_e)} with slope {@code tan(θ_E)} at the
-     * exit, where {@code θ_E} is the Rao exit angle from
-     * {@link #computeRaoExitAngle()} and {@code x_exit} is from
-     * {@link #estimateExitX()}.  The single quadratic Bézier control point is
-     * placed at the intersection of the two endpoint tangent lines.
+     * exit, where {@code x₀ = sonicLineX(r_t)}, {@code θ_E} is the Rao exit
+     * angle from {@link #computeRaoExitAngle()}, and {@code x_exit} is from
+     * {@link #estimateExitX()}.
+     *
+     * <p>A cubic Bézier is used so that the profile is guaranteed x-monotone
+     * regardless of the magnitude of the sonic-line offset {@code x₀}.  The two
+     * inner control points are placed at one-third and two-thirds of the axial
+     * span ({@code span = x_exit − x₀}):
+     * <pre>
+     *   P₁ = (x₀ + span/3,   r_t + (span/3) · tan θ_max)
+     *   P₂ = (x_exit − span/3, r_e − (span/3) · tan θ_E)
+     * </pre>
+     * Because {@code x₀ &lt; P₁.x &lt; P₂.x &lt; x_exit}, the axial
+     * derivative {@code dx/dt > 0} for all {@code t ∈ [0, 1]}, guaranteeing
+     * strict monotonicity.
      *
      * @return Array of {@code {x, radius, angle}} triples uniformly sampled in
      *         Bézier parameter {@code t ∈ [0, 1]}; 500 intervals
@@ -326,35 +386,38 @@ public class CharacteristicNet {
         double thetaE = computeRaoExitAngle();
         double exitX = estimateExitX();
 
-        // Ensure the exit angle is strictly less than the entry angle so the Bézier
-        // control point lies within the nozzle (positive x).  For degenerate inputs
-        // where thetaMax is very small, clamp thetaE to 90 % of thetaMax.
+        // Guard: exit angle must be strictly less than the entry angle for a
+        // converging bell contour.  Clamp to 90 % of thetaMax for degenerate inputs.
         thetaE = Math.min(thetaE, thetaMax * 0.9);
 
         double slope0 = Math.tan(thetaMax);
         double slopeE = Math.tan(thetaE);
 
-        // Start the profile at x0 = rt*0.02 to match the initial-data-line wall point
-        // (initialLine.get(n).x = rt * 0.01 * (1 + 1) = rt * 0.02).  This ensures
-        // every subsequent Rao profile point has x > wallPoints.get(0).x, keeping
-        // the wall x-sequence strictly monotonically increasing.
-        double x0 = rt * 0.02;
+        // Start the Rao profile at the wall point on the curved sonic line, matching
+        // initialLine.get(n).x = sonicLineX(rt).  This ensures every subsequent
+        // Rao profile point has x ≥ wallPoints.get(0).x, keeping the wall
+        // x-sequence strictly monotonically increasing.
+        double x0 = sonicLineX(rt);
 
-        // Quadratic Bézier control point at the intersection of the two endpoint tangents:
-        //   from (x0, rt) with slope slope0  and  from (exitX, re) with slope slopeE
-        double px1 = (re - rt + slope0 * x0 - slopeE * exitX) / (slope0 - slopeE);
-        double py1 = rt + slope0 * (px1 - x0);
+        // Cubic Bézier control points at 1/3 and 2/3 of the axial span.
+        // Both lie strictly between x0 and exitX → curve is x-monotonic for
+        // any physically valid x0 (no risk of the Bézier looping back).
+        double span = exitX - x0;
+        double cx1 = x0    + span / 3.0;
+        double cy1 = rt    + (span / 3.0) * slope0;
+        double cx2 = exitX - span / 3.0;
+        double cy2 = re    - (span / 3.0) * slopeE;
 
         int nSeg = 500;
         double[][] profile = new double[nSeg + 1][3];
         for (int i = 0; i <= nSeg; i++) {
             double t = (double) i / nSeg;
             double u = 1.0 - t;
-            double x = u * u * x0   + 2.0 * u * t * px1 + t * t * exitX;
-            double y = u * u * rt   + 2.0 * u * t * py1 + t * t * re;
-            // Bézier tangent direction
-            double dxdt = 2.0 * (u * (px1 - x0)  + t * (exitX - px1));
-            double dydt = 2.0 * (u * (py1 - rt)   + t * (re   - py1));
+            double x = u*u*u * x0  + 3.0*u*u*t * cx1 + 3.0*u*t*t * cx2 + t*t*t * exitX;
+            double y = u*u*u * rt  + 3.0*u*u*t * cy1 + 3.0*u*t*t * cy2 + t*t*t * re;
+            // Cubic Bézier tangent direction
+            double dxdt = 3.0*(u*u*(cx1-x0) + 2.0*u*t*(cx2-cx1) + t*t*(exitX-cx2));
+            double dydt = 3.0*(u*u*(cy1-rt)  + 2.0*u*t*(cy2-cy1) + t*t*(re  -cy2));
             double angle = Math.atan2(dydt, dxdt);
             profile[i][0] = x;
             profile[i][1] = y;
