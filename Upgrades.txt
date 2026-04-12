@@ -102,15 +102,13 @@ High value — currently missing or approximate
   - Geometry-complete CFD/CAD export. Every exporter today outputs only the divergent section. A real blockMesh or STEP file needs the full nozzle from injector face to exit. The convergent section is required geometry, not optional.
   The geometry-complete export case alone is probably sufficient justification — it's a gap that affects every user who
    takes output into a CFD or CAD tool.
-
-  - Boundary layer growth. BoundaryLayerCorrection currently starts at the throat. The BL actually begins at the injector face and grows through the converging section, thickening the displacement body and reducing the effective throat area (the discharge coefficient Cd). Ignoring this understates the BL
-  displacement thickness at the throat.
-
+       97 +| OpenFOAM rhoCentralFoam case                   | ✓                | —           | ✓         | ✓                      |
+       98 +| OpenFOAM blockMesh (full 3-D revolved)         | ✓                | —           | —         | ✓                      |
+       99 +| Gmsh .geo (full 3-D revolved)                  | ✓                | —           | —         | ✓                      |
+      100 +| Plot3D .xyz (full 3-D revolved)                | ✓                | —           | —         | ✓
 
   Moderate value
 
-  - Heat transfer peak location. The throat heat flux peak is sensitive to the local wall curvature on both sides. The
-  upstream r_cu affects how sharply the flow accelerates, which shifts where the peak occurs.
   - MOC initial data line accuracy. The library's initial data line assumes a flat sonic plane. Accounting for sonic
   line curvature (a function of r_cu and r_cd together) would improve the accuracy of the first few characteristic rows.
 
@@ -132,15 +130,9 @@ High value — currently missing or approximate
 
   Infrastructure
 
-  - Units class  — imperial/SI conversion at system boundaries; the library is pure SI internally which is correct, but callers always need this.
-  - Unit conversion utilities — the library mixes SI throughout but users often work in imperial (lbf, inches, psia). A Units class would help at system boundaries.
-
   ---
   Lower Impact — Nice to Have
 
   - CGNS binary export — currently just delegates to Plot3D. True CGNS would be compatible with more CFD solvers.
-
-
-  Lower priority:
 
   - A nozzle-type decision guide ("when to choose Aerospike vs. dual-bell vs. bell") — partially covered in tutorial.md already.

@@ -334,7 +334,7 @@ service at that condition. Options:
 
 ## 5. Thermal analysis problems
 
-### `HeatTransferModel.getPeakWallTemperature()` is unrealistically high (> 3000 K)
+### `HeatTransferModel.getMaxWallTemperature()` is unrealistically high (> 3000 K)
 
 **Cause:** The wall conductivity or thickness was not set, so the model used its
 defaults, which may not match your material. The wall temperature depends

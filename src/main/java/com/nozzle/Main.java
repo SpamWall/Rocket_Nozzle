@@ -81,6 +81,10 @@ import java.util.List;
  * - Throat curvature ratio sweep: effect of r_cd/r_t on exit area ratio and Cf across Rao, MOC, and conical contours
  * - Convergent section: full nozzle geometry (chamber face to exit), sonic-line Cd correction, upstream BL extension,
  *   geometry-complete exports
+ * - Geometry-complete export for all seven exporters: STEPExporter, STLExporter, CFDMeshExporter,
+ *   OpenFOAMExporter, RevolvedMeshExporter, CSVExporter now all accept FullNozzleGeometry
+ * - Heat flux peak location: calculateFullProfile() covering convergent + divergent, parametric throat-arc curvature
+ *   correction, getPeakFluxPoint() / getPeakFluxX() showing how r_cu shifts the peak
  */
 public class Main {
 
@@ -124,6 +128,7 @@ public class Main {
             demonstrateUnitsConversion();
             demonstrateFullNozzleGeometry(outputDir);
             demonstrateBoundaryLayerFromInjectorFace();
+            demonstrateHeatFluxPeakLocation();
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -819,52 +824,75 @@ public class Main {
         CharacteristicNet net = new CharacteristicNet(params).generate();
         NozzleContour contour = NozzleContour.fromMOCWallPoints(params, net.getWallPoints());
         contour.generate(100);
-        
-        // DXF Export
+
+        // Full nozzle geometry (convergent + divergent) for geometry-complete exports
+        NozzleDesignParameters fullParams = NozzleDesignParameters.builder()
+                .throatRadius(0.05).exitMach(3.0).chamberPressure(7e6)
+                .chamberTemperature(3500).ambientPressure(101325)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20).wallAngleInitialDegrees(30)
+                .lengthFraction(0.8).axisymmetric(true).contractionRatio(4.0).build();
+        FullNozzleGeometry fullGeom = new FullNozzleGeometry(fullParams).generate(40, 100);
+
+        // DXF Export — divergent only and geometry-complete
         DXFExporter dxfExporter = new DXFExporter().setScaleFactor(1000);
         dxfExporter.exportContour(contour, outputDir.resolve("nozzle_contour.dxf"));
         dxfExporter.exportRevolutionProfile(contour, outputDir.resolve("nozzle_revolution.dxf"));
-        System.out.println("Exported DXF files");
-        
-        // STEP Export
+        dxfExporter.exportFullNozzleProfile(fullGeom, outputDir.resolve("nozzle_full.dxf"));
+        dxfExporter.exportFullNozzleRevolutionProfile(fullGeom, outputDir.resolve("nozzle_full_rev.dxf"));
+        System.out.println("Exported DXF files (divergent + geometry-complete)");
+
+        // STEP Export — divergent only and geometry-complete
         STEPExporter stepExporter = new STEPExporter();
         stepExporter.exportRevolvedSolid(contour, outputDir.resolve("nozzle.step"));
-        System.out.println("Exported STEP file");
-        
-        // STL Export
+        stepExporter.exportRevolvedSolid(fullGeom, outputDir.resolve("nozzle_full.step"));
+        System.out.println("Exported STEP files (divergent + geometry-complete)");
+
+        // STL Export — divergent only and geometry-complete
         STLExporter stlExporter = new STLExporter()
                 .setCircumferentialSegments(72)
                 .setScaleFactor(1000)
                 .setBinaryFormat(true);
         stlExporter.exportMesh(contour, outputDir.resolve("nozzle.stl"));
-        System.out.printf("Exported STL mesh (%d triangles)%n", stlExporter.estimateTriangleCount(100));
-        
-        // CFD Mesh Export
+        stlExporter.exportMesh(fullGeom, outputDir.resolve("nozzle_full.stl"));
+        System.out.printf("Exported STL meshes (divergent %d tri, full nozzle %d tri)%n",
+                stlExporter.estimateTriangleCount(100),
+                stlExporter.estimateTriangleCount(fullGeom.getWallPoints().size()));
+
+        // CSV contour export — divergent only and geometry-complete
+        CSVExporter csvExporter = new CSVExporter();
+        csvExporter.exportContour(contour, outputDir.resolve("contour_div.csv"));
+        csvExporter.exportContour(fullGeom, outputDir.resolve("contour_full.csv"));
+        System.out.println("Exported CSV contour files (divergent + geometry-complete)");
+
+        // CFD Mesh Export — divergent only and geometry-complete
         CFDMeshExporter cfdExporter = new CFDMeshExporter()
                 .setAxialCells(100)
                 .setRadialCells(50)
                 .setExpansionRatio(1.2);
-        
-        cfdExporter.export(contour, outputDir.resolve("blockMeshDict"), CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
+        cfdExporter.export(contour, outputDir.resolve("blockMeshDict"),
+                CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
+        cfdExporter.export(fullGeom, outputDir.resolve("blockMeshDict_full"),
+                CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
         cfdExporter.export(contour, outputDir.resolve("nozzle.geo"), CFDMeshExporter.Format.GMSH_GEO);
-        System.out.println("Exported CFD mesh files (OpenFOAM, Gmsh)");
+        cfdExporter.export(fullGeom, outputDir.resolve("nozzle_full.geo"),
+                CFDMeshExporter.Format.GMSH_GEO);
+        System.out.println("Exported CFD mesh files (divergent + geometry-complete)");
 
-        // OpenFOAM complete case export (rhoCentralFoam)
-        Path foamCase = outputDir.resolve("openfoam_case");
+        // OpenFOAM complete case export — divergent only and geometry-complete
+        Path foamCase     = outputDir.resolve("openfoam_case");
+        Path foamCaseFull = outputDir.resolve("openfoam_case_full");
         new OpenFOAMExporter()
-                .setAxialCells(300)
-                .setRadialCells(100)
-                .setRadialGrading(5.0)
-                .setTurbulenceIntensity(0.05)
+                .setAxialCells(300).setRadialCells(100)
+                .setRadialGrading(5.0).setTurbulenceIntensity(0.05)
                 .exportCase(params, contour, foamCase);
-        System.out.printf("Exported OpenFOAM case → %s%n", foamCase.toAbsolutePath());
+        new OpenFOAMExporter()
+                .setAxialCells(300).setRadialCells(100)
+                .setRadialGrading(5.0).setTurbulenceIntensity(0.05)
+                .exportCase(fullParams, fullGeom, foamCaseFull);
+        System.out.printf("Exported OpenFOAM cases → %s / %s%n",
+                foamCase.getFileName(), foamCaseFull.getFileName());
         System.out.println("  Run with: blockMesh && rhoCentralFoam");
-        System.out.printf("  Files: %s%n",
-                String.join(", ",
-                        "system/blockMeshDict", "system/controlDict",
-                        "system/fvSchemes",     "system/fvSolution",
-                        "constant/thermophysicalProperties", "constant/turbulenceProperties",
-                        "0/p", "0/T", "0/U", "0/k", "0/omega"));
 
         System.out.println("\nAll export files saved to: " + outputDir.toAbsolutePath());
     }
@@ -1626,6 +1654,23 @@ public class Main {
                 .setFirstLayerThickness(y1)
                 .export(contour, bmd3dYPlus, RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
         System.out.printf("  y⁺-graded mesh written → %s%n", bmd3dYPlus.getFileName());
+
+        // ---- Geometry-complete 3-D revolved mesh (convergent + divergent) ----
+        NozzleDesignParameters fullParams = NozzleDesignParameters.builder()
+                .throatRadius(0.05).exitMach(3.0).chamberPressure(7e6)
+                .chamberTemperature(3500).ambientPressure(101325)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20).wallAngleInitialDegrees(30)
+                .lengthFraction(0.8).axisymmetric(true).contractionRatio(4.0).build();
+        FullNozzleGeometry fullGeom = new FullNozzleGeometry(fullParams).generate(40, 100);
+
+        Path bmd3dFull = outputDir.resolve("blockMeshDict_3d_full");
+        new RevolvedMeshExporter()
+                .setAxialCells(axial).setRadialCells(radial).setAzimuthalCells(azimuthal)
+                .export(fullGeom, bmd3dFull, RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
+        System.out.printf("%nGeometry-complete 3-D mesh (%d wall points, conv + div):%n",
+                fullGeom.getWallPoints().size());
+        System.out.printf("  Written → %s%n", bmd3dFull.getFileName());
     }
 
     /**
@@ -2308,5 +2353,119 @@ public class Main {
         System.out.println("  running length, increasing the throat δ* and reducing the");
         System.out.println("  effective throat area below what a throat-only calculation predicts.");
         System.out.println("  Combined Cd accounts for both sonic-line curvature and BL displacement.");
+    }
+
+    /**
+     * Demonstrates heat-flux peak location tracking in {@link HeatTransferModel}.
+     *
+     * <p>The Bartz curvature correction (D_t/r_c)^0.1 now uses the parametric
+     * throat-arc radii (r_cd downstream, r_cu upstream) instead of finite differences
+     * in the arc zone, so the predicted peak location shifts correctly with the
+     * upstream curvature ratio.  {@code calculateFullProfile()} covers the full
+     * wall (convergent + divergent), allowing the peak to be identified even when
+     * it falls on the convergent side of the throat.
+     */
+    private static void demonstrateHeatFluxPeakLocation() {
+        System.out.println("\n--- HEAT FLUX PEAK LOCATION ---\n");
+
+        // Standard Rao geometry: r_cd = 0.382·r_t, r_cu = 1.5·r_t.
+        // Bartz correction (D_t/r_c)^0.1:
+        //   divergent side  (2/0.382)^0.1 ≈ 1.18 — larger
+        //   convergent side (2/1.5  )^0.1 ≈ 1.03
+        // → peak sits downstream of the throat (x > 0).
+        NozzleDesignParameters standardParams = NozzleDesignParameters.builder()
+                .throatRadius(0.05)
+                .exitMach(3.0)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500.0)
+                .ambientPressure(101325.0)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(25.0)
+                .lengthFraction(0.8)
+                .axisymmetric(true)
+                .throatCurvatureRatio(0.382)    // r_cd/r_t — classical Rao value
+                .upstreamCurvatureRatio(1.5)    // r_cu/r_t — standard Rao value
+                .contractionRatio(4.0)
+                .build();
+
+        // Tight upstream: r_cu = 0.2·r_t < r_cd = 0.382·r_t.
+        // Bartz correction:
+        //   convergent side (2/0.2)^0.1 = 10^0.1 ≈ 1.26 — larger
+        //   divergent side  (2/0.382)^0.1 ≈ 1.18
+        // → peak shifts to the convergent side (x < 0) when using the full profile.
+        NozzleDesignParameters tightUpstreamParams = NozzleDesignParameters.builder()
+                .throatRadius(0.05)
+                .exitMach(3.0)
+                .chamberPressure(7e6)
+                .chamberTemperature(3500.0)
+                .ambientPressure(101325.0)
+                .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                .numberOfCharLines(20)
+                .wallAngleInitialDegrees(25.0)
+                .lengthFraction(0.8)
+                .axisymmetric(true)
+                .throatCurvatureRatio(0.382)
+                .upstreamCurvatureRatio(0.2)    // tighter upstream arc
+                .contractionRatio(4.0)
+                .build();
+
+        NozzleContour standardContour =
+                new NozzleContour(NozzleContour.ContourType.RAO_BELL, standardParams);
+        standardContour.generate(80);
+
+        NozzleContour tightContour =
+                new NozzleContour(NozzleContour.ContourType.RAO_BELL, tightUpstreamParams);
+        tightContour.generate(80);
+
+        // --- Divergent-only calculate() for standard params ---
+        HeatTransferModel stdDivOnly = new HeatTransferModel(standardParams, standardContour)
+                .setWallProperties(20.0, 0.003)
+                .setCoolantProperties(300.0, 5000.0)
+                .calculate(null);
+
+        System.out.println("Divergent-section calculate() — standard Rao params:");
+        System.out.printf("  Peak x position : %+.3f mm  (positive = downstream of throat)%n",
+                Units.metersToMillimeters(stdDivOnly.getPeakFluxX()));
+        System.out.printf("  Peak heat flux  : %.3e W/m²%n",
+                stdDivOnly.getPeakFluxPoint().totalHeatFlux());
+        System.out.printf("  Peak wall temp  : %.0f K%n",
+                stdDivOnly.getPeakFluxPoint().wallTemperature());
+        System.out.printf("  Max wall temp   : %.0f K%n", stdDivOnly.getMaxWallTemperature());
+
+        // --- Full-profile calculateFullProfile() — standard params ---
+        FullNozzleGeometry stdFullGeom = new FullNozzleGeometry(standardParams).generate(40, 80);
+        HeatTransferModel stdFull = new HeatTransferModel(standardParams, standardContour)
+                .setWallProperties(20.0, 0.003)
+                .setCoolantProperties(300.0, 5000.0)
+                .calculateFullProfile(stdFullGeom, null);
+
+        System.out.println("\nFull-profile calculateFullProfile() — standard Rao params:");
+        System.out.printf("  Wall points     : %d (conv + div)%n",
+                stdFull.getWallThermalProfile().size());
+        System.out.printf("  Peak x position : %+.3f mm%n",
+                Units.metersToMillimeters(stdFull.getPeakFluxX()));
+        System.out.printf("  Peak heat flux  : %.3e W/m²%n",
+                stdFull.getPeakFluxPoint().totalHeatFlux());
+
+        // --- Full-profile — tight upstream curvature ---
+        FullNozzleGeometry tightFullGeom = new FullNozzleGeometry(tightUpstreamParams).generate(40, 80);
+        HeatTransferModel tightFull = new HeatTransferModel(tightUpstreamParams, tightContour)
+                .setWallProperties(20.0, 0.003)
+                .setCoolantProperties(300.0, 5000.0)
+                .calculateFullProfile(tightFullGeom, null);
+
+        System.out.println("\nFull-profile calculateFullProfile() — tight upstream (r_cu = 0.2·r_t):");
+        System.out.printf("  Peak x position : %+.3f mm  (negative = on convergent side)%n",
+                Units.metersToMillimeters(tightFull.getPeakFluxX()));
+        System.out.printf("  Peak heat flux  : %.3e W/m²%n",
+                tightFull.getPeakFluxPoint().totalHeatFlux());
+
+        System.out.println("\nPhysical insight:");
+        System.out.println("  The Bartz curvature correction (D_t/r_c)^0.1 is evaluated using");
+        System.out.println("  the parametric throat-arc radii r_cd (downstream) and r_cu (upstream)");
+        System.out.println("  rather than finite differences on the contour.  When r_cu < r_cd the");
+        System.out.println("  upstream correction factor exceeds the downstream value and the peak");
+        System.out.println("  shifts to the convergent side — visible only with calculateFullProfile().");
     }
 }

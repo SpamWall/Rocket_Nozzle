@@ -21,6 +21,7 @@ All quantities are SI throughout (metres, Pascals, Kelvin, Newtons, kg).
 8. [Tutorial 7 — Saving and reloading design checkpoints](#8-tutorial-7--saving-and-reloading-design-checkpoints)
 9. [Tutorial 8 — CFD and CAD export](#9-tutorial-8--cfd-and-cad-export)
 10. [Tutorial 9 — Full nozzle geometry, boundary layer, and unit conversion](#10-tutorial-9--full-nozzle-geometry-boundary-layer-and-unit-conversion)
+11. [Tutorial 10 — Heat flux peak location](#11-tutorial-10--heat-flux-peak-location)
 
 ---
 
@@ -349,8 +350,9 @@ HeatTransferModel htr = new HeatTransferModel(params, contour)
         .setEmissivity(0.6)               // oxidised copper surface
         .calculate();
 
-System.out.printf("Peak wall temp : %.0f K%n",    htr.getPeakWallTemperature());
-System.out.printf("Peak heat flux : %.2e W/m²%n", htr.getPeakHeatFlux());
+System.out.printf("Max wall temp  : %.0f K%n",    htr.getMaxWallTemperature());
+System.out.printf("Max heat flux  : %.2e W/m²%n", htr.getMaxHeatFlux());
+System.out.printf("Peak at x      : %+.3f mm%n",  htr.getPeakFluxX() * 1000);
 System.out.printf("Total heat load: %.1f kW%n",   htr.getTotalHeatLoad() / 1000);
 ```
 
@@ -361,10 +363,10 @@ is highest. For a 7 MPa LOX/RP-1 combustor expect peak fluxes on the order of
 ### Step 2 — Print the axial thermal profile
 
 ```
-for (HeatTransferModel.WallThermalPoint p : htr.getWallProfile()) {
+for (HeatTransferModel.WallThermalPoint p : htr.getWallThermalProfile()) {
     System.out.printf("x=%6.3f m  T_wall=%5.0f K  q_conv=%6.2e  q_rad=%6.2e%n",
             p.x(), p.wallTemperature(),
-            p.convectiveFlux(), p.radiativeFlux());
+            p.convectiveHeatFlux(), p.radiativeHeatFlux());
 }
 ```
 
@@ -1114,3 +1116,162 @@ System.out.printf("Ideal Isp:    %.1f s  (same in SI and US customary)%n",
 
 Specific impulse in seconds is numerically identical in both systems because g₀
 cancels, so no conversion is needed.
+
+---
+
+## 11. Tutorial 10 — Heat flux peak location
+
+### Goal
+
+Find exactly where on the nozzle wall the heat flux peaks, and understand how
+the upstream throat curvature ratio `upstreamCurvatureRatio` shifts that peak.
+The peak location matters for cooling-jacket design: the cooling channel must
+deliver maximum heat removal at that axial station.
+
+---
+
+### Background
+
+The Bartz equation includes a curvature correction factor `(D_t/r_c)^0.1` where
+`r_c` is the local wall radius of curvature.  In the throat arc zone the wall
+geometry is a known circular arc, so `r_c` is exact:
+
+- **Downstream arc** (x ∈ [0, r_cd]):  r_cd = `throatCurvatureRatio × r_t`
+- **Upstream arc** (x ∈ [−r_cu, 0)): r_cu = `upstreamCurvatureRatio × r_t`
+
+For standard Rao values (`r_cd = 0.382·r_t`, `r_cu = 1.5·r_t`), the downstream
+correction factor `(D_t/r_cd)^0.1 ≈ 1.18` exceeds the upstream factor
+`(D_t/r_cu)^0.1 ≈ 1.03`, so the peak sits a short distance downstream of the
+throat.
+
+When `upstreamCurvatureRatio` is reduced to 0.2, the upstream arc becomes very
+tight (`r_cu = 0.01 m` for a 50 mm-radius throat), the upstream correction rises
+to `≈ 1.26`, and the peak shifts to the **convergent side** (x < 0).  This is
+only visible with `calculateFullProfile()`, because `calculate()` covers only the
+divergent section.
+
+---
+
+### Step 1 — Define two designs with different upstream curvature
+
+```
+// Standard Rao: r_cu = 1.5·r_t → peak downstream
+NozzleDesignParameters standardParams = NozzleDesignParameters.builder()
+        .throatRadius(0.05)
+        .exitMach(3.0)
+        .chamberPressure(7e6)
+        .chamberTemperature(3500.0)
+        .ambientPressure(101_325.0)
+        .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+        .numberOfCharLines(20)
+        .wallAngleInitialDegrees(25.0)
+        .lengthFraction(0.8)
+        .axisymmetric(true)
+        .throatCurvatureRatio(0.382)
+        .upstreamCurvatureRatio(1.5)
+        .contractionRatio(4.0)
+        .build();
+
+// Tight upstream: r_cu = 0.2·r_t → peak shifts to convergent side
+NozzleDesignParameters tightParams = NozzleDesignParameters.builder()
+        // ... same as above ...
+        .throatCurvatureRatio(0.382)
+        .upstreamCurvatureRatio(0.2)   // tighter upstream arc
+        .build();
+```
+
+---
+
+### Step 2 — Divergent-only calculation (standard mode)
+
+`calculate()` processes only the divergent section (x ≥ 0) and is the fastest
+path for cases where the peak is known to be downstream.
+
+```
+NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, standardParams);
+contour.generate(80);
+
+HeatTransferModel htr = new HeatTransferModel(standardParams, contour)
+        .setWallProperties(20.0, 0.003)      // Inconel, 3 mm
+        .setCoolantProperties(300.0, 5000.0) // RP-1 at 300 K
+        .calculate(null);
+
+// Peak is always at x ≥ 0 because only the divergent section is processed.
+System.out.printf("Peak x : %+.3f mm%n", htr.getPeakFluxX() * 1000);
+System.out.printf("Peak q : %.3e W/m²%n", htr.getPeakFluxPoint().totalHeatFlux());
+System.out.printf("Peak Tw: %.0f K%n",    htr.getPeakFluxPoint().wallTemperature());
+```
+
+---
+
+### Step 3 — Full-profile calculation
+
+`calculateFullProfile()` processes the entire wall from chamber face to exit.
+For convergent-section points (x < 0) the local Mach number is estimated from
+the isentropic area-Mach relation instead of relying on MOC flow points, which
+are only defined in the divergent section.
+
+```
+import com.nozzle.geometry.FullNozzleGeometry;
+
+FullNozzleGeometry fullGeom = new FullNozzleGeometry(standardParams).generate(50, 80);
+
+HeatTransferModel htrFull = new HeatTransferModel(standardParams, contour)
+        .setWallProperties(20.0, 0.003)
+        .setCoolantProperties(300.0, 5000.0)
+        .calculateFullProfile(fullGeom, null);
+
+HeatTransferModel.WallThermalPoint peak = htrFull.getPeakFluxPoint();
+System.out.printf("Total wall points : %d (convergent + divergent)%n",
+        htrFull.getWallThermalProfile().size());
+System.out.printf("Peak x position   : %+.3f mm%n", peak.x() * 1000);
+System.out.printf("Peak heat flux    : %.3e W/m²%n", peak.totalHeatFlux());
+System.out.printf("Peak wall temp    : %.0f K%n",    peak.wallTemperature());
+```
+
+For standard Rao params the peak is a short distance downstream of the throat
+(x > 0).
+
+---
+
+### Step 4 — Observe the peak shift with tight upstream curvature
+
+```
+NozzleContour tightContour =
+        new NozzleContour(NozzleContour.ContourType.RAO_BELL, tightParams);
+FullNozzleGeometry tightGeom = new FullNozzleGeometry(tightParams).generate(50, 80);
+
+HeatTransferModel htrTight = new HeatTransferModel(tightParams, tightContour)
+        .setWallProperties(20.0, 0.003)
+        .setCoolantProperties(300.0, 5000.0)
+        .calculateFullProfile(tightGeom, null);
+
+System.out.printf("Tight-upstream peak x : %+.3f mm%n",
+        htrTight.getPeakFluxX() * 1000);
+// Prints a negative value — the peak is on the convergent side.
+```
+
+The convergent-side peak is invisible to `calculate()` because that method only
+processes x ≥ 0.  Always use `calculateFullProfile()` when the design has a
+tighter upstream arc than the downstream arc (`upstreamCurvatureRatio < throatCurvatureRatio`).
+
+---
+
+### Step 5 — Use the peak location for cooling-channel design
+
+The peak point tells you where to concentrate regenerative cooling capacity.
+
+```
+HeatTransferModel.WallThermalPoint peakPoint = htrFull.getPeakFluxPoint();
+
+System.out.printf("Peak station (x)    : %+.1f mm%n",  peakPoint.x()  * 1000);
+System.out.printf("Peak station (r)    : %.1f mm%n",   peakPoint.y()  * 1000);
+System.out.printf("Recovery temp       : %.0f K%n",    peakPoint.recoveryTemperature());
+System.out.printf("Gas-side h          : %.0f W/(m²·K)%n", peakPoint.heatTransferCoeff());
+System.out.printf("Total heat flux     : %.3e W/m²%n", peakPoint.totalHeatFlux());
+System.out.printf("Convective flux     : %.3e W/m²%n", peakPoint.convectiveHeatFlux());
+System.out.printf("Wall temperature    : %.0f K%n",    peakPoint.wallTemperature());
+```
+
+These values can be passed directly to `CoolantChannel` to size the channel at
+the critical station.

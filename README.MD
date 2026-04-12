@@ -46,7 +46,9 @@ structural analysis, and multi-format CAD/CFD export.
 - **Boundary layer correction** — displacement and momentum thickness,
   skin-friction loss
 - **Heat transfer model** — Bartz/Eckert convective correlation plus radiation;
-  wall temperature and heat-flux profiles along the contour
+  wall temperature and heat-flux profiles along the contour; `calculateFullProfile()`
+  covers the complete wall (convergent + divergent) and reports the heat-flux peak
+  location, which shifts with upstream curvature ratio `r_cu`
 - **Regenerative coolant channel** — hydraulics, coolant-side heat transfer,
   temperature rise along channel length
 - **Ablative liner model** — Arrhenius char-rate, mechanical erosion supplement,
@@ -83,16 +85,22 @@ structural analysis, and multi-format CAD/CFD export.
   for divergence angle, throat-arc radius, and exit-area ratio bounds
 
 ### Export
-| Format                                         | Bell/TIC/Conical | Aerospike   | Dual-Bell |
-|------------------------------------------------|------------------|-------------|-----------|
-| CSV (contour, thermal, stress, altitude sweep) | ✓                | ✓           | ✓         |
-| DXF (2D wall profile + axis, full nozzle)      | ✓                | ✓           | ✓         |
-| STEP (ISO 10303-21 revolved solid)             | ✓                | ✓           | ✓         |
-| STL (binary/ASCII revolved mesh)               | ✓                | ✓           | ✓         |
-| OpenFOAM blockMesh (5° wedge)                  | ✓                | ✓ (annular) | ✓         |
-| Gmsh .geo transfinite mesh                     | ✓                | ✓           | ✓         |
-| Plot3D / CGNS structured grid                  | ✓                | ✓           | ✓         |
-| OpenFOAM rhoCentralFoam case                   | ✓                | —           | ✓         |
+| Format                                         | Bell/TIC/Conical | Aerospike   | Dual-Bell | Full nozzle (conv+div) |
+|------------------------------------------------|------------------|-------------|-----------|------------------------|
+| CSV (contour, thermal, stress, altitude sweep) | ✓                | ✓           | ✓         | ✓                      |
+| DXF (2D wall profile + axis, full nozzle)      | ✓                | ✓           | ✓         | ✓                      |
+| STEP (ISO 10303-21 revolved solid)             | ✓                | ✓           | ✓         | ✓                      |
+| STL (binary/ASCII revolved mesh)               | ✓                | ✓           | ✓         | ✓                      |
+| OpenFOAM blockMesh (5° wedge)                  | ✓                | ✓ (annular) | ✓         | ✓                      |
+| Gmsh .geo transfinite mesh                     | ✓                | ✓           | ✓         | ✓                      |
+| Plot3D / CGNS structured grid                  | ✓                | ✓           | ✓         | ✓ (Plot3D)             |
+| OpenFOAM rhoCentralFoam case                   | ✓                | —           | ✓         | ✓                      |
+| OpenFOAM blockMesh (full 3-D revolved)         | ✓                | —           | —         | ✓                      |
+| Gmsh .geo (full 3-D revolved)                  | ✓                | —           | —         | ✓                      |
+| Plot3D .xyz (full 3-D revolved)                | ✓                | —           | —         | ✓                      |
+
+Every exporter accepts a `FullNozzleGeometry` overload that covers the complete
+internal wall from injector face (x < 0) to nozzle exit (x > 0).
 
 ---
 
@@ -368,13 +376,36 @@ System.out.printf("BL Cd correction    : %.4f%n",
 System.out.printf("Combined Cd (geo×BL): %.4f%n",
         blFull.getCombinedCd());
 
-HeatTransferModel       htr = new HeatTransferModel(params, net, bl).calculate();
+// Divergent-only heat transfer (fast; peak is always in the divergent section)
+NozzleContour contour = NozzleContour.fromMOCWallPoints(params, net.getWallPoints());
+HeatTransferModel htr = new HeatTransferModel(params, contour)
+        .setWallProperties(20.0, 0.003)
+        .setCoolantProperties(300.0, 5000.0)
+        .calculate(net.getAllPoints());
 
-System.out.printf("Peak wall temperature: %.0f K%n",  htr.getPeakWallTemperature());
-System.out.printf("Peak heat flux       : %.2e W/m²%n", htr.getPeakHeatFlux());
+System.out.printf("Max wall temp  : %.0f K%n",     htr.getMaxWallTemperature());
+System.out.printf("Max heat flux  : %.2e W/m²%n",  htr.getMaxHeatFlux());
+System.out.printf("Peak at x      : %+.3f mm%n",   htr.getPeakFluxX() * 1000);
+
+// Full-profile heat transfer — covers convergent section (x < 0) as well,
+// so the peak can be identified even when it sits upstream of the throat.
+// The Bartz curvature correction uses parametric r_cd / r_cu in the arc zone.
+FullNozzleGeometry fullGeom = new FullNozzleGeometry(params).generate(50, 100);
+HeatTransferModel htrFull = new HeatTransferModel(params, contour)
+        .setWallProperties(20.0, 0.003)
+        .setCoolantProperties(300.0, 5000.0)
+        .calculateFullProfile(fullGeom, net.getAllPoints());
+
+HeatTransferModel.WallThermalPoint peak = htrFull.getPeakFluxPoint();
+System.out.printf("Peak location  : %+.3f mm (+ = downstream of throat)%n",
+        peak.x() * 1000);
+System.out.printf("Peak heat flux : %.2e W/m²%n", peak.totalHeatFlux());
+System.out.printf("Peak wall temp : %.0f K%n",    peak.wallTemperature());
 
 // Regenerative coolant channel
-CoolantChannel channel = new CoolantChannel(params, htr, CoolantChannel.Coolant.RP1)
+CoolantChannel channel = new CoolantChannel(contour)
+        .setChannelGeometry(120, 0.003, 0.005, 0.001)
+        .setCoolant(CoolantChannel.CoolantProperties.RP1, 2.0, 300.0, 8.5e6)
         .calculate();
 
 // Thermal stress and fatigue
@@ -390,69 +421,94 @@ System.out.printf("Fatigue life         : %.0f cycles%n", stress.getFatigueLife(
 
 ## CAD and CFD Export
 
+All exporters accept either a divergent-only `NozzleContour` or a geometry-complete
+`FullNozzleGeometry`.  When `FullNozzleGeometry` is passed the exported file covers
+the full internal wall from injector face to exit.
+
 ### DXF (2D profile)
 ```
-DXFExporter dxf = new DXFExporter().setScaleFactor(1000);  // metres → mm
+FullNozzleGeometry fullGeom = new FullNozzleGeometry(params).generate(50, 100);
+DXFExporter dxf = new DXFExporter().setScaleFactor(1000);
 
 // Divergent section only
 dxf.exportContour(contour, Path.of("nozzle.dxf"));
 
-// Full nozzle (injector face → exit) — requires FullNozzleGeometry
+// Full nozzle (injector face → exit)
 dxf.exportFullNozzleProfile(fullGeom, Path.of("full_nozzle.dxf"));
-
-// Closed revolution sketch for CAD revolve operations
-dxf.exportFullNozzleRevolutionProfile(fullGeom, Path.of("profile.dxf"));
+dxf.exportFullNozzleRevolutionProfile(fullGeom, Path.of("full_nozzle_rev.dxf"));
 ```
 
-### STEP (3D solid)
+### CSV (wall contour)
 ```
-new STEPExporter()
-        .setScaleFactor(1000)
-        .setAuthor("YOUR NAME HERE")
-        .exportRevolvedSolid(contour, Path.of("nozzle.step"));
+CSVExporter csv = new CSVExporter();
+
+csv.exportContour(contour,   Path.of("contour_div.csv")); // x, y, angle_deg
+csv.exportContour(fullGeom,  Path.of("contour_full.csv")); // + section column
 ```
 
-### STL (3D mesh)
+### STEP (3D revolved solid)
 ```
-new STLExporter()
-        .setCircumferentialSegments(72)
-        .setBinaryFormat(true)
-        .exportMesh(contour, Path.of("nozzle.stl"));
+STEPExporter step = new STEPExporter().setScaleFactor(1000).setAuthor("Me");
+
+step.exportRevolvedSolid(contour,  Path.of("nozzle.step"));      // divergent only
+step.exportRevolvedSolid(fullGeom, Path.of("nozzle_full.step")); // full nozzle
+step.exportProfileCurve(fullGeom,  Path.of("profile_full.step")); // curve only
 ```
 
-### CFD mesh files
+### STL (3D revolved mesh)
+```
+STLExporter stl = new STLExporter().setCircumferentialSegments(72).setBinaryFormat(true);
+
+stl.exportMesh(contour,  Path.of("nozzle.stl"));      // divergent only
+stl.exportMesh(fullGeom, Path.of("nozzle_full.stl")); // full nozzle
+```
+
+### CFD mesh files (2D axisymmetric)
 ```
 CFDMeshExporter cfd = new CFDMeshExporter()
-        .setAxialCells(200)
-        .setRadialCells(80)
-        .setFirstLayerThickness(1e-5);   // y⁺-controlled grading
+        .setAxialCells(200).setRadialCells(80).setFirstLayerThickness(1e-5);
 
+// Divergent only
 cfd.export(contour, Path.of("blockMeshDict"), CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
-cfd.export(contour, Path.of("nozzle.geo"),   CFDMeshExporter.Format.GMSH_GEO);
-cfd.export(contour, Path.of("nozzle.xyz"),   CFDMeshExporter.Format.PLOT3D);
+cfd.export(contour, Path.of("nozzle.geo"),    CFDMeshExporter.Format.GMSH_GEO);
 
-// Or pass a nozzle object directly
-cfd.export(new RaoNozzle(params).generate(), Path.of("blockMeshDict"),
-        CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
+// Geometry-complete (convergent + divergent — captures the transonic throat)
+cfd.export(fullGeom, Path.of("blockMeshDict_full"), CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
+cfd.export(fullGeom, Path.of("nozzle_full.geo"),    CFDMeshExporter.Format.GMSH_GEO);
+cfd.export(fullGeom, Path.of("nozzle_full.xyz"),    CFDMeshExporter.Format.PLOT3D);
 ```
 
 ### Complete OpenFOAM case (rhoCentralFoam)
 ```
+// Divergent only
 new OpenFOAMExporter()
-        .setAxialCells(300)
-        .setRadialCells(100)
-        .setTurbulenceEnabled(true)
-        .setFirstLayerThickness(1e-5)
+        .setAxialCells(300).setRadialCells(100)
+        .setTurbulenceEnabled(true).setFirstLayerThickness(1e-5)
         .exportCase(params, contour, Path.of("nozzle_case"));
 
-// Or pass a nozzle object directly
-new OpenFOAMExporter().exportCase(new DualBellNozzle(params).generate(),
-        Path.of("dualbell_case"));
+// Geometry-complete (inlet is at the injector face)
+new OpenFOAMExporter()
+        .setAxialCells(300).setRadialCells(100).setTurbulenceEnabled(true)
+        .exportCase(params, fullGeom, Path.of("nozzle_case_full"));
 ```
 
 The exported case is ready to run with:
 ```bash
 blockMesh && rhoCentralFoam
+```
+
+### Full 3-D revolved mesh
+```
+RevolvedMeshExporter rev = new RevolvedMeshExporter()
+        .setAxialCells(100).setRadialCells(40).setAzimuthalCells(16);
+
+// Divergent only
+rev.export(contour,  Path.of("blockMeshDict_3d"), RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
+
+// Geometry-complete
+rev.export(fullGeom, Path.of("blockMeshDict_3d_full"), RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
+rev.export(fullGeom, Path.of("nozzle_3d_full.geo"),    RevolvedMeshExporter.Format.GMSH_GEO);
+rev.export(fullGeom, Path.of("nozzle_3d_full.xyz"),    RevolvedMeshExporter.Format.PLOT3D);
 ```
 
 ---

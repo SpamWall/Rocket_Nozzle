@@ -132,7 +132,7 @@ wall
 }
 ```
 
-Use `HeatTransferModel.getPeakWallTemperature()` from the library as a guide
+Use `HeatTransferModel.getMaxWallTemperature()` from the library as a guide
 for setting this value. Running with a fixed wall temperature is more physically
 realistic but more sensitive to getting the value right.
 

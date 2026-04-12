@@ -160,6 +160,16 @@ BoundaryLayerCorrection
   └─ .calculateFromInjectorFace(FullNozzleGeometry) — BL starts at chamber face
   └─ used by PerformanceCalculator, HeatTransferModel
 
+HeatTransferModel
+  └─ depends on NozzleDesignParameters, NozzleContour
+  └─ .calculate(flowPoints) — Bartz/Eckert over divergent section (x ≥ 0)
+  └─ .calculateFullProfile(FullNozzleGeometry, flowPoints) — full wall (x_min → x_exit);
+     convergent points use isentropic area-Mach Mach estimation
+  └─ curvature correction uses parametric r_cd / r_cu in the throat arc zones
+     rather than finite differences, making peak location sensitive to both ratios
+  └─ .getPeakFluxPoint() / .getPeakFluxX() — heat-flux peak location
+  └─ used by ThermalStressAnalysis, CoolantChannel, PerformanceCalculator
+
 GibbsMinimizer
   └─ depends on NasaSpeciesDatabase, PropellantComposition
   └─ called by ChemistryModel.calculateEquilibrium()
