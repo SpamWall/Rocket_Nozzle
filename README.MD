@@ -9,7 +9,10 @@ structural analysis, and multi-format CAD/CFD export.
 ## Features
 
 ### Nozzle Design
-- **MOC solver** — full axisymmetric characteristic net with axisymmetric correction
+- **MOC solver** — full axisymmetric characteristic net; initial data line placed on the
+  curved sonic surface (Hall 1962: x_s(r) = coeff·r²·(1/R_cd + 1/(3·R_cu))) rather than
+  a flat plane, removing leading-order bias from the first few characteristic rows;
+  axisymmetric source-term correction applied throughout
 - **Contour families** — Rao optimum bell, conical, Truncated Ideal Contour (TIC),
   MOC-generated, and custom cubic spline
 - **Rao bell nozzle** — empirical optimum bell with length fraction control and

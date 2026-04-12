@@ -170,17 +170,28 @@ public class Main {
         System.out.printf("  Ideal Cf:           %.4f%n", params.idealThrustCoefficient());
         System.out.printf("  Ideal Isp:          %.1f s%n", params.idealSpecificImpulse());
         
+        // Compute the sonic-line wall offset to show it in the output
+        double gamma   = params.gasProperties().gamma();
+        double rt      = params.throatRadius();
+        double rcd     = params.throatCurvatureRatio()  * rt;
+        double rcu     = params.upstreamCurvatureRatio() * rt;
+        double sonicWallX = (gamma + 1.0) / 12.0 * rt * rt * (1.0 / rcd + 1.0 / (3.0 * rcu));
+
         // Generate characteristic net
-        System.out.println("\nGenerating characteristic net (using virtual threads)...");
+        System.out.println("\nGenerating characteristic net...");
+        System.out.printf("  Sonic-line wall offset x_s(r_t): %.4f m  (Hall 1962; R_cd=%.3f m, R_cu=%.3f m)%n",
+                sonicWallX, rcd, rcu);
         long startTime = System.currentTimeMillis();
-        
+
         CharacteristicNet net = new CharacteristicNet(params).generate();
-        
+
         long elapsed = System.currentTimeMillis() - startTime;
         System.out.printf("  Completed in %d ms%n", elapsed);
         System.out.printf("  Total points: %d%n", net.getTotalPointCount());
         System.out.printf("  Wall points:  %d%n", net.getWallPoints().size());
         System.out.printf("  Computed A/A*: %.2f%n", net.calculateExitAreaRatio());
+        System.out.printf("  Initial data line wall x: %.4f m (on curved sonic surface)%n",
+                net.getNetPoints().getFirst().getLast().x());
         
         // Calculate performance
         PerformanceCalculator perf = PerformanceCalculator.simple(params).calculate();

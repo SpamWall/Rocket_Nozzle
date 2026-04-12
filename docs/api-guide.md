@@ -354,6 +354,22 @@ p.type()        // INITIAL, INTERIOR, WALL, CENTERLINE, EXIT
 CharacteristicNet net = new CharacteristicNet(params, 1e-10, 200).generate();
 ```
 
+**Sonic-line initial data line (Hall 1962):**
+
+The initial data line is placed on the *curved* M = 1 surface, not a flat plane
+at x = 0.  The sonic surface bows downstream near the wall according to
+
+```
+x_s(r) = coeff · r² · (1/R_cd + 1/(3·R_cu))
+```
+
+where `coeff = (γ+1)/12` for axisymmetric flow (`(γ+1)/6` for planar 2-D),
+`R_cd = throatCurvatureRatio × r_t` is the downstream throat-arc radius, and
+`R_cu = upstreamCurvatureRatio × r_t` is the upstream throat-arc radius.  Using
+the flat plane introduces a leading-order error in the first few characteristic
+rows that grows with throat curvature; the curved placement removes it.  The Rao
+wall profile starts at the same `x_s(r_t)` so the wall sequence is consistent.
+
 `numberOfCharLines` in the design parameters controls the grid density. Values
 between 20 and 100 are typical; higher values improve accuracy at the cost of
 computation time (O(n²) points).

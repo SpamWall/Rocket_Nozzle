@@ -134,6 +134,9 @@ Units
 
 CharacteristicNet
   └─ depends on NozzleDesignParameters
+  └─ initial data line on curved sonic surface (Hall 1962):
+     x_s(r) = coeff·r²·(1/R_cd + 1/(3·R_cu)), coeff=(γ+1)/12 axisymmetric
+  └─ Rao wall profile uses cubic Bézier (guaranteed x-monotone for any sonic-line offset)
   └─ produces CharacteristicPoint grid → feeds NozzleContour, BoundaryLayerCorrection
 
 NozzleContour
