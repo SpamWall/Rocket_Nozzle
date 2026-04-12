@@ -338,18 +338,6 @@ public class HeatTransferModel {
     }
 
     /**
-     * Returns the local wall radius of curvature at axial position {@code x}, using
-     * the divergent contour's point list.
-     *
-     * @param x Axial position in metres
-     * @return Local radius of curvature in metres
-     * @see #localRadiusOfCurvature(double, List)
-     */
-    private double localRadiusOfCurvature(double x) {
-        return localRadiusOfCurvature(x, contour.getContourPoints());
-    }
-
-    /**
      * Estimates the local wall radius of curvature at axial position {@code x}.
      *
      * <p>In the downstream throat arc zone ({@code x ∈ [0, r_cd]}) the parametric
