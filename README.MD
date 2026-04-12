@@ -97,7 +97,7 @@ structural analysis, and multi-format CAD/CFD export.
 | OpenFOAM blockMesh (5° wedge)                  | ✓                | ✓ (annular) | ✓         | ✓                      |
 | Gmsh .geo transfinite mesh                     | ✓                | ✓           | ✓         | ✓                      |
 | Plot3D / CGNS structured grid                  | ✓                | ✓           | ✓         | ✓ (Plot3D)             |
-| OpenFOAM rhoCentralFoam case                   | ✓                | —           | ✓         | ✓                      |
+| OpenFOAM rhoCentralFoam case                   | ✓                | ✓ (annular) | ✓         | ✓                      |
 | OpenFOAM blockMesh (full 3-D revolved)         | ✓                | —           | —         | ✓                      |
 | Gmsh .geo (full 3-D revolved)                  | ✓                | —           | —         | ✓                      |
 | Plot3D .xyz (full 3-D revolved)                | ✓                | —           | —         | ✓                      |
@@ -493,6 +493,12 @@ new OpenFOAMExporter()
 new OpenFOAMExporter()
         .setAxialCells(300).setRadialCells(100).setTurbulenceEnabled(true)
         .exportCase(params, fullGeom, Path.of("nozzle_case_full"));
+
+// Aerospike — annular domain (spike inner wall + cowl outer wall)
+// Patches: inlet, outlet, spike (wall), cowl (wall), wedge0, wedge1
+new OpenFOAMExporter()
+        .setAxialCells(150).setRadialCells(60)
+        .exportAerospikeCase(aerospikeNozzle, Path.of("aerospike_case"));
 ```
 
 The exported case is ready to run with:

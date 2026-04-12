@@ -614,7 +614,7 @@ public class HeatTransferModel {
             double dfdM = exp * (gamma - 1.0) * coeff * Math.pow(bracket, exp - 1.0)
                           - Bg / (M * M);
             double dM = -f / dfdM;
-            M = Math.max(0.01, Math.min(0.9999, M + dM));
+            M = Math.clamp(M + dM, 0.01, 0.9999);
             if (Math.abs(dM) < 1e-10) break;
         }
         return M;

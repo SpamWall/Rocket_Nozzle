@@ -71,7 +71,8 @@ import java.util.List;
  * - Thermal stress and fatigue life analysis (Timoshenko, Basquin, Coffin-Manson)
  * - Aerospike (plug) nozzle design via MOC kernel-flow algorithm
  * - Altitude compensation comparison: aerospike vs. bell nozzle
- * - Aerospike export: CSV spike contour, altitude performance, DXF, STEP, STL, CFD mesh
+ * - Aerospike export: CSV spike contour, altitude performance, DXF, STEP, STL, CFD mesh,
+ *   OpenFOAM rhoCentralFoam complete case (annular domain, spike + cowl wall patches)
  * - Ablative liner analysis: Arrhenius char rate, mechanical erosion supplement, ablated mass budget
  * - Radiation-cooled extension analysis: equilibrium wall temperature, material comparison, overtemperature detection
  * - y⁺-controlled first-cell-height grading: CFDMeshExporter and OpenFOAMExporter firstLayerThickness
@@ -1044,6 +1045,16 @@ public class Main {
         System.out.println("  CFD:  Aerospike_blockMeshDict, aerospike.geo, aerospike.xyz");
         System.out.printf("        (annular domain: spike inner wall → r=%.0f mm outer cowl)%n",
                 rt * 1000);
+
+        // OpenFOAM rhoCentralFoam complete case
+        Path foamDir = aeroDir.resolve("aerospike_openfoam");
+        new OpenFOAMExporter()
+                .setAxialCells(150)
+                .setRadialCells(60)
+                .exportAerospikeCase(nozzle, foamDir);
+        System.out.println("  OpenFOAM rhoCentralFoam case: aerospike_openfoam/");
+        System.out.println("    Patches: inlet, outlet, spike (wall), cowl (wall), wedge0, wedge1");
+        System.out.println("    Run: blockMesh && rhoCentralFoam");
 
         System.out.printf("%nAerospike output saved to: %s%n", aeroDir.toAbsolutePath());
     }

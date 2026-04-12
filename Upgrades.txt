@@ -102,6 +102,7 @@ High value — currently missing or approximate
   - Geometry-complete CFD/CAD export. Every exporter today outputs only the divergent section. A real blockMesh or STEP file needs the full nozzle from injector face to exit. The convergent section is required geometry, not optional.
   The geometry-complete export case alone is probably sufficient justification — it's a gap that affects every user who
    takes output into a CFD or CAD tool.
+                                                              Bell/TIC/Conical | Aerospike   | Dual-Bell | Full nozzle (conv+div) |
        97 +| OpenFOAM rhoCentralFoam case                   | ✓                | —           | ✓         | ✓                      |
        98 +| OpenFOAM blockMesh (full 3-D revolved)         | ✓                | —           | —         | ✓                      |
        99 +| Gmsh .geo (full 3-D revolved)                  | ✓                | —           | —         | ✓                      |
@@ -109,8 +110,6 @@ High value — currently missing or approximate
 
   Moderate value
 
-  - MOC initial data line accuracy. The library's initial data line assumes a flat sonic plane. Accounting for sonic
-  line curvature (a function of r_cu and r_cd together) would improve the accuracy of the first few characteristic rows.
 
   Low value
 

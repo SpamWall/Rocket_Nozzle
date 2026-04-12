@@ -25,6 +25,7 @@ import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
+import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.DualBellNozzle;
 import com.nozzle.moc.RaoNozzle;
 
@@ -72,6 +73,19 @@ import java.util.List;
  *   <li>{@code front} / {@code back} — {@code wedge}</li>
  * </ul>
  *
+ * <h2>Aerospike case</h2>
+ * {@link #exportAerospikeCase(AerospikeNozzle, Path)} writes a rhoCentralFoam case
+ * for the annular flow domain of an aerospike nozzle.  The mesh spans the gap between
+ * the spike surface (inner wall) and the cowl (outer wall at r = r_t).  There is no
+ * axis patch — both inner and outer boundaries are solid walls.  Boundary patches:
+ * <ul>
+ *   <li>{@code inlet}  — {@code patch} (annular throat plane)</li>
+ *   <li>{@code outlet} — {@code patch} (annular exit plane at spike tip)</li>
+ *   <li>{@code spike}  — {@code wall}  (spike inner surface)</li>
+ *   <li>{@code cowl}   — {@code wall}  (constant-radius outer cowl)</li>
+ *   <li>{@code wedge0} / {@code wedge1} — {@code wedge}</li>
+ * </ul>
+ *
  * <h2>Solver</h2>
  * {@code rhoCentralFoam} (density-based, Kurganov-Tadmor central scheme) — suitable
  * for the full Mach range from subsonic chamber to supersonic exit.
@@ -83,6 +97,9 @@ import java.util.List;
  *       .setRadialCells(100)
  *       .setRadialGrading(5.0)
  *       .exportCase(params, contour, Path.of("nozzle_case"));
+ *
+ *   new OpenFOAMExporter()
+ *       .exportAerospikeCase(aerospikeNozzle, Path.of("aerospike_case"));
  * </pre>
  * Then run: {@code blockMesh && rhoCentralFoam}
  */
@@ -261,6 +278,69 @@ public class OpenFOAMExporter {
         exportCase(nozzle.getParameters(),
                 NozzleContour.fromPoints(nozzle.getParameters(), nozzle.getContourPoints()),
                 caseDir);
+    }
+
+    /**
+     * Writes a complete rhoCentralFoam case for an aerospike nozzle.
+     *
+     * <p>The computational domain is the annular gap between the spike surface (inner
+     * wall) and the cowl at {@code r = r_t} (outer wall).  The spike contour is
+     * embedded as a {@code spline} edge.  There is no axis patch — both inner and
+     * outer boundaries use wall boundary conditions.
+     *
+     * <p>Boundary patches written:
+     * <ul>
+     *   <li>{@code inlet}  — annular face at the throat plane (x = 0)</li>
+     *   <li>{@code outlet} — annular face at the truncated spike tip (x = L)</li>
+     *   <li>{@code spike}  — inner spike surface (wall)</li>
+     *   <li>{@code cowl}   — outer cowl at constant r = r_t (wall)</li>
+     *   <li>{@code wedge0} / {@code wedge1} — axisymmetric wedge faces</li>
+     * </ul>
+     *
+     * @param nozzle  Aerospike nozzle (must have been generated)
+     * @param caseDir Output directory (created if absent)
+     * @throws IllegalArgumentException if the nozzle has not been generated
+     * @throws IOException              on any file write failure
+     */
+    public void exportAerospikeCase(AerospikeNozzle nozzle, Path caseDir) throws IOException {
+        List<Point2D> spike = nozzle.getTruncatedSpikeContour();
+        if (spike.size() < 2) {
+            throw new IllegalArgumentException(
+                    "AerospikeNozzle has no contour — call generate() first");
+        }
+        NozzleDesignParameters params = nozzle.getParameters();
+        double rt   = params.throatRadius();          // cowl radius
+        double ri   = spike.getFirst().y();           // spike root radius at x = 0
+        double rTip = nozzle.getTruncatedBaseRadius(); // spike tip radius at x = L
+        double L    = nozzle.getTruncatedLength();    // axial length of spike
+
+        LOG.debug("Exporting aerospike OpenFOAM case: {} spike pts, rt={} ri={} L={} → {}",
+                spike.size(), rt, ri, L, caseDir);
+
+        Path system   = caseDir.resolve("system");
+        Path constant = caseDir.resolve("constant");
+        Path zero     = caseDir.resolve("0");
+        Files.createDirectories(system);
+        Files.createDirectories(constant);
+        Files.createDirectories(zero);
+
+        writeAerospikeBlockMeshDict(spike, ri, rt, rTip, system.resolve("blockMeshDict"));
+        writeControlDict(system.resolve("controlDict"));
+        writeFvSchemes(system.resolve("fvSchemes"));
+        writeFvSolution(system.resolve("fvSolution"));
+
+        writeThermophysicalProperties(params, constant.resolve("thermophysicalProperties"));
+        writeTurbulenceProperties(constant.resolve("turbulenceProperties"));
+
+        writeAerospikePressureField(params, L, zero.resolve("p"));
+        writeAeroSpikeTemperatureField(params, zero.resolve("T"));
+        writeAeroSpikeVelocityField(zero.resolve("U"));
+        if (turbulenceEnabled) {
+            writeAeroSpikeKField(params, zero.resolve("k"));
+            writeAeroSpikeOmegaField(params, ri, rt, zero.resolve("omega"));
+        }
+
+        LOG.debug("Aerospike OpenFOAM case export complete → {}", caseDir);
     }
 
     /**
@@ -839,6 +919,317 @@ public class OpenFOAMExporter {
             emptyPatch(w);
             wedgePatch(w, "front");
             wedgePatch(w, "back");
+            w.println("}");
+            divider(w);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Aerospike case — blockMeshDict
+    // -------------------------------------------------------------------------
+
+    /**
+     * Writes {@code system/blockMeshDict} for the aerospike annular domain.
+     *
+     * <p>Eight vertices form a single hex block spanning the annular gap from the
+     * spike surface (inner, r = ri at inlet, r = rTip at outlet) to the cowl
+     * (outer, r = rt).  The spike profile is embedded as two {@code spline} edges
+     * (front and back wedge faces).  Patches: inlet, outlet, spike (wall), cowl (wall),
+     * wedge0 (wedge), wedge1 (wedge).
+     *
+     * @param spike Ordered spike contour points (x monotonically increasing from 0 to L)
+     * @param ri    Spike root radius at x = 0 (m)
+     * @param rt    Cowl radius — constant outer boundary (m)
+     * @param rTip  Spike tip radius at x = L (m)
+     * @param file  Destination file path
+     * @throws IOException if the file cannot be written
+     */
+    private void writeAerospikeBlockMeshDict(List<Point2D> spike,
+                                              double ri, double rt, double rTip,
+                                              Path file) throws IOException {
+        double psi  = Math.toRadians(wedgeAngleDeg);
+        double cosP = Math.cos(psi);
+        double sinP = Math.sin(psi);
+        double L    = spike.getLast().x();
+
+        try (PrintWriter w = printer(file)) {
+            foamHeader(w, "dictionary", "system", "blockMeshDict");
+            w.println("convertToMeters 1;");
+            w.println();
+
+            // --- vertices ---
+            // v0  spike-inlet-front   v1  spike-outlet-front
+            // v2  cowl-outlet-front   v3  cowl-inlet-front
+            // v4  spike-inlet-back    v5  spike-outlet-back
+            // v6  cowl-outlet-back    v7  cowl-inlet-back
+            w.println("vertices");
+            w.println("(");
+            w.printf("    ( %12.8f %12.8f %12.8f )  // 0  spike-inlet-front%n",
+                    0.0, ri * cosP, ri * sinP);
+            w.printf("    ( %12.8f %12.8f %12.8f )  // 1  spike-outlet-front%n",
+                    L, rTip * cosP, rTip * sinP);
+            w.printf("    ( %12.8f %12.8f %12.8f )  // 2  cowl-outlet-front%n",
+                    L, rt * cosP, rt * sinP);
+            w.printf("    ( %12.8f %12.8f %12.8f )  // 3  cowl-inlet-front%n",
+                    0.0, rt * cosP, rt * sinP);
+            w.printf("    ( %12.8f %12.8f %12.8f )  // 4  spike-inlet-back%n",
+                    0.0, ri * cosP, -ri * sinP);
+            w.printf("    ( %12.8f %12.8f %12.8f )  // 5  spike-outlet-back%n",
+                    L, rTip * cosP, -rTip * sinP);
+            w.printf("    ( %12.8f %12.8f %12.8f )  // 6  cowl-outlet-back%n",
+                    L, rt * cosP, -rt * sinP);
+            w.printf("    ( %12.8f %12.8f %12.8f )  // 7  cowl-inlet-back%n",
+                    0.0, rt * cosP, -rt * sinP);
+            w.println(");");
+            w.println();
+
+            // --- blocks ---
+            // i-direction: v0→v1 (axial), j-direction: v0→v3 (radial, spike→cowl)
+            // k-direction: v0→v4 (wedge)
+            w.println("blocks");
+            w.println("(");
+            double gapWidth = rt - ri;
+            double effectiveGrading = (firstLayerThickness > 0)
+                    ? Math.max(1.0, gapWidth / firstLayerThickness)
+                    : radialGrading;
+            w.printf("    hex (0 1 2 3 4 5 6 7) (%d %d 1)%n", axialCells, radialCells);
+            w.printf("    simpleGrading (1 %s 1)%n", gradingSpec(effectiveGrading));
+            w.println(");");
+            w.println();
+
+            // --- spline edges along spike (inner) surface ---
+            w.println("edges");
+            w.println("(");
+            // front face: vertex 0 (spike inlet) → vertex 1 (spike outlet)
+            w.println("    spline 0 1");
+            w.println("    (");
+            for (int i = 1; i < spike.size() - 1; i++) {
+                Point2D p = spike.get(i);
+                w.printf("        ( %12.8f %12.8f %12.8f )%n",
+                        p.x(), p.y() * cosP, p.y() * sinP);
+            }
+            w.println("    )");
+            // back face: vertex 4 → vertex 5 (mirror of front)
+            w.println("    spline 4 5");
+            w.println("    (");
+            for (int i = 1; i < spike.size() - 1; i++) {
+                Point2D p = spike.get(i);
+                w.printf("        ( %12.8f %12.8f %12.8f )%n",
+                        p.x(), p.y() * cosP, -p.y() * sinP);
+            }
+            w.println("    )");
+            w.println(");");
+            w.println();
+
+            // --- boundary patches ---
+            w.println("boundary");
+            w.println("(");
+            patch(w, "inlet",  "patch", "(0 4 7 3)");
+            patch(w, "outlet", "patch", "(1 2 6 5)");
+            patch(w, "spike",  "wall",  "(0 1 5 4)");
+            patch(w, "cowl",   "wall",  "(3 7 6 2)");
+            patch(w, "wedge0", "wedge", "(0 3 2 1)");
+            patch(w, "wedge1", "wedge", "(4 7 6 5)");
+            w.println(");");
+            w.println();
+            w.println("mergePatchPairs");
+            w.println("(");
+            w.println(");");
+            divider(w);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Aerospike case — 0/ field files
+    // -------------------------------------------------------------------------
+
+    /**
+     * Writes {@code 0/p} for the aerospike case.  Same inlet/outlet conditions as
+     * the bell-nozzle pressure field; wall patches ({@code spike}, {@code cowl}) use
+     * {@code zeroGradient} in place of the single {@code wall} patch; no {@code axis}
+     * patch.
+     *
+     * @param params Nozzle design parameters providing chamber and ambient pressures
+     * @param L      Spike truncated length (m), used for the {@code lInf} far-field estimate
+     * @param file   Destination file path
+     * @throws IOException if the file cannot be written
+     */
+    private void writeAerospikePressureField(NozzleDesignParameters params,
+                                              double L, Path file) throws IOException {
+        double p0 = params.chamberPressure();
+        double pa = params.ambientPressure();
+
+        try (PrintWriter w = printer(file)) {
+            foamHeader(w, "volScalarField", "0", "p");
+            w.println("dimensions      [1 -1 -2 0 0 0 0];");
+            w.printf("%ninternalField   uniform %.2f;%n%n", p0);
+            w.println("boundaryField");
+            w.println("{");
+            w.println("    inlet");
+            w.println("    {");
+            w.println("        type            totalPressure;");
+            w.println("        p0              uniform " + p0 + ";");
+            w.println("    }");
+            w.println("    outlet");
+            w.println("    {");
+            w.println("        type            waveTransmissive;");
+            w.println("        field           p;");
+            w.println("        psi             thermo:psi;");
+            w.println("        gamma           " + params.gasProperties().gamma() + ";");
+            w.println("        fieldInf        uniform " + pa + ";");
+            w.println("        lInf            " + (L * 10) + ";");
+            w.println("        value           uniform " + pa + ";");
+            w.println("    }");
+            zeroGradientPatch(w, "spike");
+            zeroGradientPatch(w, "cowl");
+            wedgePatch(w, "wedge0");
+            wedgePatch(w, "wedge1");
+            w.println("}");
+            divider(w);
+        }
+    }
+
+    /**
+     * Writes {@code 0/T} for the aerospike case.  Both spike and cowl walls use
+     * adiabatic ({@code zeroGradient}) conditions; no {@code axis} patch.
+     *
+     * @param params Nozzle design parameters providing chamber temperature and γ
+     * @param file   Destination file path
+     * @throws IOException if the file cannot be written
+     */
+    private void writeAeroSpikeTemperatureField(NozzleDesignParameters params,
+                                                 Path file) throws IOException {
+        double t0 = params.chamberTemperature();
+        try (PrintWriter w = printer(file)) {
+            foamHeader(w, "volScalarField", "0", "T");
+            w.println("dimensions      [0 0 0 1 0 0 0];");
+            w.printf("%ninternalField   uniform %.2f;%n%n", t0);
+            w.println("boundaryField");
+            w.println("{");
+            w.println("    inlet");
+            w.println("    {");
+            w.println("        type            totalTemperature;");
+            w.println("        gamma           " + params.gasProperties().gamma() + ";");
+            w.println("        T0              uniform " + t0 + ";");
+            w.println("    }");
+            zeroGradientPatch(w, "outlet");
+            w.println("    spike");
+            w.println("    {");
+            w.println("        type            zeroGradient;  // adiabatic wall");
+            w.println("    }");
+            w.println("    cowl");
+            w.println("    {");
+            w.println("        type            zeroGradient;  // adiabatic wall");
+            w.println("    }");
+            wedgePatch(w, "wedge0");
+            wedgePatch(w, "wedge1");
+            w.println("}");
+            divider(w);
+        }
+    }
+
+    /**
+     * Writes {@code 0/U} for the aerospike case.  Both spike and cowl walls use
+     * {@code noSlip}; no {@code axis} patch.
+     *
+     * @param file Destination file path
+     * @throws IOException if the file cannot be written
+     */
+    private void writeAeroSpikeVelocityField(Path file) throws IOException {
+        try (PrintWriter w = printer(file)) {
+            foamHeader(w, "volVectorField", "0", "U");
+            w.println("dimensions      [0 1 -1 0 0 0 0];");
+            w.println();
+            w.println("internalField   uniform (0 0 0);");
+            w.println();
+            w.println("boundaryField");
+            w.println("{");
+            w.println("    inlet");
+            w.println("    {");
+            w.println("        type            pressureInletOutletVelocity;");
+            w.println("        value           uniform (0 0 0);");
+            w.println("    }");
+            zeroGradientPatch(w, "outlet");
+            w.println("    spike    { type noSlip; }");
+            w.println("    cowl     { type noSlip; }");
+            wedgePatch(w, "wedge0");
+            wedgePatch(w, "wedge1");
+            w.println("}");
+            divider(w);
+        }
+    }
+
+    /**
+     * Writes {@code 0/k} for the aerospike case.  Both spike and cowl walls use
+     * {@code kqRWallFunction}; no {@code axis} patch.
+     *
+     * @param params Nozzle design parameters providing gas and chamber conditions
+     * @param file   Destination file path
+     * @throws IOException if the file cannot be written
+     */
+    private void writeAeroSpikeKField(NozzleDesignParameters params, Path file) throws IOException {
+        double a0 = params.gasProperties().speedOfSound(params.chamberTemperature());
+        double k0 = 1.5 * Math.pow(turbulenceIntensity * a0, 2.0);
+
+        try (PrintWriter w = printer(file)) {
+            foamHeader(w, "volScalarField", "0", "k");
+            w.println("dimensions      [0 2 -2 0 0 0 0];");
+            w.printf("%ninternalField   uniform %.4f;%n%n", k0);
+            w.println("boundaryField");
+            w.println("{");
+            w.println("    inlet");
+            w.println("    {");
+            w.println("        type            turbulentIntensityKineticEnergyInlet;");
+            w.printf("        intensity       %.3f;%n", turbulenceIntensity);
+            w.println("        value           uniform " + k0 + ";");
+            w.println("    }");
+            zeroGradientPatch(w, "outlet");
+            w.println("    spike    { type kqRWallFunction; value uniform " + k0 + "; }");
+            w.println("    cowl     { type kqRWallFunction; value uniform " + k0 + "; }");
+            wedgePatch(w, "wedge0");
+            wedgePatch(w, "wedge1");
+            w.println("}");
+            divider(w);
+        }
+    }
+
+    /**
+     * Writes {@code 0/omega} for the aerospike case.  The mixing-length estimate uses
+     * 7% of the annular gap width ({@code l_t = 0.07 · (r_t − r_i)}).  Both spike
+     * and cowl walls use {@code omegaWallFunction}; no {@code axis} patch.
+     *
+     * @param params Nozzle design parameters providing gas and chamber conditions
+     * @param ri     Spike root radius (m) — inner boundary of the annular gap
+     * @param rt     Cowl radius (m) — outer boundary of the annular gap
+     * @param file   Destination file path
+     * @throws IOException if the file cannot be written
+     */
+    private void writeAeroSpikeOmegaField(NozzleDesignParameters params,
+                                           double ri, double rt,
+                                           Path file) throws IOException {
+        double lt    = 0.07 * (rt - ri);
+        double a0    = params.gasProperties().speedOfSound(params.chamberTemperature());
+        double k0    = 1.5 * Math.pow(turbulenceIntensity * a0, 2.0);
+        double cmu   = 0.09;
+        double omega0 = Math.pow(cmu, -0.25) * Math.sqrt(k0) / lt;
+
+        try (PrintWriter w = printer(file)) {
+            foamHeader(w, "volScalarField", "0", "omega");
+            w.println("dimensions      [0 0 -1 0 0 0 0];");
+            w.printf("%ninternalField   uniform %.2f;%n%n", omega0);
+            w.println("boundaryField");
+            w.println("{");
+            w.println("    inlet");
+            w.println("    {");
+            w.println("        type            turbulentMixingLengthFrequencyInlet;");
+            w.printf("        mixingLength    %.6f;%n", lt);
+            w.println("        value           uniform " + omega0 + ";");
+            w.println("    }");
+            zeroGradientPatch(w, "outlet");
+            w.println("    spike    { type omegaWallFunction; value uniform " + omega0 + "; }");
+            w.println("    cowl     { type omegaWallFunction; value uniform " + omega0 + "; }");
+            wedgePatch(w, "wedge0");
+            wedgePatch(w, "wedge1");
             w.println("}");
             divider(w);
         }

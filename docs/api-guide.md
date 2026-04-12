@@ -1013,6 +1013,9 @@ foam.exportCase(params, fullGeom, Path.of("nozzle_case_full"));
 // Convenience overloads (build NozzleContour and extract params internally)
 foam.exportCase(new RaoNozzle(params).generate(),      Path.of("rao_case"));
 foam.exportCase(new DualBellNozzle(params).generate(), Path.of("dualbell_case"));
+
+// Aerospike — annular domain, spike inner wall + cowl outer wall
+foam.exportAerospikeCase(aerospikeNozzle, Path.of("aerospike_case"));
 ```
 
 Run the generated case:
@@ -1021,8 +1024,16 @@ blockMesh && rhoCentralFoam
 ```
 
 The `blockMeshDict` embeds the wall profile as a `spline` edge so the mesh
-faithfully follows the nozzle contour. Boundary patches: `inlet`, `outlet`,
-`wall`, `axis` (empty — axisymmetric), `wedge0`, `wedge1`.
+faithfully follows the nozzle contour.
+
+Bell-nozzle patches: `inlet`, `outlet`, `wall`, `axis` (empty — axisymmetric),
+`front`, `back` (wedge).
+
+Aerospike patches: `inlet`, `outlet`, `spike` (wall — inner spike surface),
+`cowl` (wall — outer cowl at r = r_t), `wedge0`, `wedge1`. There is no `axis`
+patch; both inner and outer boundaries are solid walls. The spike contour is
+embedded as a spline. The mixing-length estimate for ω₀ uses 7% of the annular
+gap width (r_t − r_i).
 
 ### RevolvedMeshExporter
 
