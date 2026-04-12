@@ -22,6 +22,7 @@ package com.nozzle.thermal;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
+import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.CharacteristicPoint;
@@ -44,6 +45,7 @@ public class HeatTransferModel {
     private final NozzleDesignParameters parameters;
     private final NozzleContour contour;
     private final List<WallThermalPoint> wallThermalProfile;
+    private WallThermalPoint peakFluxPoint = null;
     
     // Material properties
     private double wallThermalConductivity = 20.0; // W/(m·K) - typical for Inconel
@@ -133,6 +135,7 @@ public class HeatTransferModel {
      */
     public HeatTransferModel calculate(List<CharacteristicPoint> flowPoints) {
         wallThermalProfile.clear();
+        peakFluxPoint = null;
 
         List<Point2D> contourPoints = contour.getContourPoints();
         if (contourPoints.isEmpty()) {
@@ -173,20 +176,26 @@ public class HeatTransferModel {
 
             // Calculate wall temperature (steady state)
             double wallTemp = calculateWallTemperature(recoveryTemp, hGas, hCoolant);
-            
+
             // Calculate heat flux
             double qConv = hGas * (recoveryTemp - wallTemp);
             double qRad = wallEmissivity * STEFAN_BOLTZMANN * Math.pow(wallTemp, 4);
             double qTotal = qConv - qRad;
-            
+
             WallThermalPoint thermalPoint = new WallThermalPoint(
                     point.x(), point.y(), wallTemp, qTotal, qConv, qRad, hGas, recoveryTemp
             );
             wallThermalProfile.add(thermalPoint);
+
+            if (peakFluxPoint == null || qTotal > peakFluxPoint.totalHeatFlux()) {
+                peakFluxPoint = thermalPoint;
+            }
         }
 
-        LOG.debug("Heat transfer complete: {} points, max Tw={} K, max q={} W/m²",
-                wallThermalProfile.size(), getMaxWallTemperature(), getMaxHeatFlux());
+        LOG.debug("Heat transfer complete: {} points, peak at x={} m, max q={} W/m²",
+                wallThermalProfile.size(),
+                peakFluxPoint != null ? peakFluxPoint.x() : Double.NaN,
+                getMaxHeatFlux());
         return this;
     }
 
@@ -285,6 +294,11 @@ public class HeatTransferModel {
      */
     private double calculateBartzHeatTransfer(double x, double r, double temp, double T_aw,
                                                double hCoolant) {
+        return calculateBartzHeatTransfer(x, r, temp, T_aw, hCoolant, contour.getContourPoints());
+    }
+
+    private double calculateBartzHeatTransfer(double x, double r, double temp, double T_aw,
+                                               double hCoolant, List<Point2D> wallPts) {
         GasProperties gas = parameters.gasProperties();
         double gamma = gas.gamma();
         double Pr = 4.0 * gamma / (9.0 * gamma - 5.0);  // Eucken relation
@@ -297,8 +311,9 @@ public class HeatTransferModel {
         // Mass flux at throat: G* = ṁ/A_t = P_c / c*
         double G_Star = parameters.chamberPressure() / parameters.characteristicVelocity();
 
-        // Local wall radius of curvature for the (D_t/r_c)^0.1 correction
-        double r_c = localRadiusOfCurvature(x);
+        // Local wall radius of curvature for the (D_t/r_c)^0.1 correction.
+        // Uses parametric r_cd / r_cu in the throat arc zones; finite differences elsewhere.
+        double r_c = localRadiusOfCurvature(x, wallPts);
 
         // Iterative convergence: T* depends on T_w, T_w depends on h, h depends on T*
         // Typically converges within 2–3 iterations
@@ -323,23 +338,47 @@ public class HeatTransferModel {
     }
 
     /**
-     * Estimates the local wall radius of curvature at axial position {@code x} using
-     * non-uniform second-order finite differences on the discrete contour points.
-     * Falls back to the throat radius if the contour contains fewer than three
-     * points or if the neighboring knots are too closely spaced ({@code h < 1 pm}).
-     * The result is capped at {@code 10 × r_throat} to prevent the Bartz curvature
-     * correction from vanishing on near-straight wall sections.
+     * Returns the local wall radius of curvature at axial position {@code x}, using
+     * the divergent contour's point list.
      *
      * @param x Axial position in metres
      * @return Local radius of curvature in metres
+     * @see #localRadiusOfCurvature(double, List)
      */
     private double localRadiusOfCurvature(double x) {
-        List<Point2D> pts = contour.getContourPoints();
-        if (pts.size() < 3) {
-            return parameters.throatRadius();
-        }
+        return localRadiusOfCurvature(x, contour.getContourPoints());
+    }
 
-        // Find the index of the contour point nearest to x
+    /**
+     * Estimates the local wall radius of curvature at axial position {@code x}.
+     *
+     * <p>In the downstream throat arc zone ({@code x ∈ [0, r_cd]}) the parametric
+     * radius {@code r_cd = throatCurvatureRatio × r_t} is returned directly, avoiding
+     * noisy finite differences over the tightly curved arc.  In the upstream arc zone
+     * ({@code x ∈ [−r_cu, 0)}) the parametric radius {@code r_cu = upstreamCurvatureRatio × r_t}
+     * is returned.  Outside both arc zones the curvature is estimated from non-uniform
+     * second-order finite differences on {@code pts}.
+     *
+     * <p>The result is capped at {@code 10 × r_t} so the Bartz correction term
+     * remains bounded on near-straight wall sections.
+     *
+     * @param x   Axial position in metres
+     * @param pts Wall point list ordered by increasing x (contour or full-nozzle)
+     * @return Local radius of curvature in metres
+     */
+    private double localRadiusOfCurvature(double x, List<Point2D> pts) {
+        double rt  = parameters.throatRadius();
+        double rcd = parameters.throatCurvatureRatio()  * rt;   // downstream arc radius
+        double rcu = parameters.upstreamCurvatureRatio() * rt;  // upstream arc radius
+
+        // In the throat arc zones use the parametric design radius directly.
+        // The downstream arc occupies x ∈ [0, r_cd]; the upstream arc x ∈ [-r_cu, 0).
+        if (x >= 0.0 && x <= rcd) return rcd;
+        if (x < 0.0  && x >= -rcu) return rcu;
+
+        // Outside the arc zones: finite differences on the provided wall points.
+        if (pts.size() < 3) return rt;
+
         int idx = 1;
         double minDx = Double.MAX_VALUE;
         for (int i = 0; i < pts.size(); i++) {
@@ -357,23 +396,19 @@ public class HeatTransferModel {
 
         double h1 = x1 - x0;
         double h2 = x2 - x1;
-        if (h1 < 1e-12 || h2 < 1e-12) {
-            return parameters.throatRadius();
-        }
+        if (Math.abs(h1) < 1e-12 || Math.abs(h2) < 1e-12) return rt;
 
-        // Non-uniform finite differences
+        // Non-uniform second-order finite differences
         double dydx   = (y2 - y0) / (x2 - x0);
         double d2ydx2 = 2.0 * (h1 * y2 - (h1 + h2) * y1 + h2 * y0)
                             / (h1 * h2 * (h1 + h2));
 
         if (Math.abs(d2ydx2) < 1e-10) {
-            // Near-straight wall: cap so the correction term stays bounded
-            return 10.0 * parameters.throatRadius();
+            return 10.0 * rt;   // near-straight: cap so the correction stays bounded
         }
 
         double r_c = Math.pow(1.0 + dydx * dydx, 1.5) / Math.abs(d2ydx2);
-        // Cap at 10*rt to prevent the correction term from vanishing in straight sections
-        return Math.min(r_c, 10.0 * parameters.throatRadius());
+        return Math.min(r_c, 10.0 * rt);
     }
     
     /**
@@ -440,7 +475,163 @@ public class HeatTransferModel {
                 .max()
                 .orElse(0);
     }
-    
+
+    /**
+     * Returns the {@link WallThermalPoint} at the heat-flux peak, or {@code null}
+     * if no calculation has been run yet.
+     *
+     * <p>The peak location is tracked during both {@link #calculate(List)} and
+     * {@link #calculateFullProfile(FullNozzleGeometry, List)}.  Because the Bartz
+     * curvature correction {@code (D_t/r_c)^0.1} uses the parametric throat-arc
+     * radii {@code r_cd} and {@code r_cu}, the returned position correctly reflects
+     * how upstream wall curvature shifts the peak downstream of the throat plane for
+     * standard Rao values ({@code r_cd=0.382·r_t, r_cu=1.5·r_t}).
+     *
+     * @return Peak heat-flux point, or {@code null} before any calculation
+     */
+    public WallThermalPoint getPeakFluxPoint() {
+        return peakFluxPoint;
+    }
+
+    /**
+     * Returns the axial position of the heat-flux peak in metres.
+     *
+     * @return Axial position x (m), or {@link Double#NaN} before any calculation
+     */
+    public double getPeakFluxX() {
+        return peakFluxPoint != null ? peakFluxPoint.x() : Double.NaN;
+    }
+
+    /**
+     * Calculates the wall thermal profile over the full nozzle from chamber face to
+     * exit, using the complete wall geometry from a {@link FullNozzleGeometry}.
+     *
+     * <p>This method resolves the heat-flux peak location accurately because it
+     * covers the convergent section (x &lt; 0) as well as the divergent section.
+     * The curvature correction in the Bartz equation uses the parametric
+     * {@code r_cu = upstreamCurvatureRatio × r_t} for the upstream arc zone and
+     * {@code r_cd = throatCurvatureRatio × r_t} for the downstream arc zone, so the
+     * peak position shifts correctly when either ratio is changed.
+     *
+     * <p>For wall points in the convergent section (x &lt; 0) the local Mach number is
+     * estimated from the isentropic area-Mach relation using a Newton solver.  For
+     * wall points in the divergent section (x ≥ 0) the nearest MOC
+     * {@link CharacteristicPoint} is looked up via a {@link KdTree}.
+     *
+     * <p>Replaces any profile computed by a previous call to
+     * {@link #calculate(List)} or {@code calculateFullProfile}.
+     *
+     * @param fullGeometry Full nozzle geometry (must have been generated via
+     *                     {@code generate()} before this call)
+     * @param flowPoints   MOC flow field points for divergent-section conditions
+     * @return This instance
+     */
+    public HeatTransferModel calculateFullProfile(FullNozzleGeometry fullGeometry,
+                                                   List<CharacteristicPoint> flowPoints) {
+        wallThermalProfile.clear();
+        peakFluxPoint = null;
+
+        List<Point2D> wallPoints = fullGeometry.getWallPoints();
+        if (wallPoints.isEmpty()) {
+            LOG.warn("calculateFullProfile: FullNozzleGeometry has no wall points — call generate() first");
+            return this;
+        }
+
+        LOG.debug("Full-profile heat transfer started: {} wall points, {} flow points",
+                wallPoints.size(), flowPoints != null ? flowPoints.size() : 0);
+
+        KdTree kdTree = (flowPoints != null && !flowPoints.isEmpty())
+                ? KdTree.build(flowPoints, 0) : null;
+
+        GasProperties gas = parameters.gasProperties();
+        double gamma = gas.gamma();
+        double Pr = 4.0 * gamma / (9.0 * gamma - 5.0);        // Eucken relation
+        double recoveryFactor = Math.pow(Pr, 1.0 / 3.0);      // turbulent BL
+        double rt = parameters.throatRadius();
+
+        for (Point2D point : wallPoints) {
+            double x = point.x();
+            double r = point.y();
+
+            double gasTemp;
+            double mach;
+
+            if (x < 0.0) {
+                // Convergent section: isentropic subsonic relations
+                double areaRatio = (r / rt) * (r / rt);   // A/A* = (r/r_t)²
+                mach = machFromAreaRatioSubsonic(areaRatio, gamma);
+                double stagFactor = 1.0 + (gamma - 1.0) / 2.0 * mach * mach;
+                gasTemp = parameters.chamberTemperature() / stagFactor;
+            } else {
+                // Divergent section: nearest MOC flow point
+                CharacteristicPoint nearestFlow = (kdTree != null)
+                        ? kdTree.nearest(x, r) : null;
+                gasTemp = nearestFlow != null ? nearestFlow.temperature()
+                        : parameters.chamberTemperature() * 0.8;
+                mach = nearestFlow != null ? nearestFlow.mach() : 2.0;
+            }
+
+            double recoveryTemp = gasTemp * (1.0 + recoveryFactor * (gamma - 1.0) / 2.0 * mach * mach);
+
+            double hCoolant = (coolantChannel != null && !coolantChannel.getProfile().isEmpty())
+                    ? coolantChannel.getHeatTransferCoeffAt(x)
+                    : coolantHeatTransferCoeff;
+
+            double hGas = calculateBartzHeatTransfer(x, r, gasTemp, recoveryTemp, hCoolant, wallPoints);
+
+            double wallTemp = calculateWallTemperature(recoveryTemp, hGas, hCoolant);
+            double qConv = hGas * (recoveryTemp - wallTemp);
+            double qRad  = wallEmissivity * STEFAN_BOLTZMANN * Math.pow(wallTemp, 4);
+            double qTotal = qConv - qRad;
+
+            WallThermalPoint thermalPoint = new WallThermalPoint(
+                    x, r, wallTemp, qTotal, qConv, qRad, hGas, recoveryTemp);
+            wallThermalProfile.add(thermalPoint);
+
+            if (peakFluxPoint == null || qTotal > peakFluxPoint.totalHeatFlux()) {
+                peakFluxPoint = thermalPoint;
+            }
+        }
+
+        LOG.debug("Full-profile heat transfer complete: {} points, peak at x={} m, max q={} W/m²",
+                wallThermalProfile.size(),
+                peakFluxPoint != null ? peakFluxPoint.x() : Double.NaN,
+                getMaxHeatFlux());
+        return this;
+    }
+
+    /**
+     * Solves the isentropic area-Mach relation for the subsonic root (M &lt; 1)
+     * given the local area ratio A/A* using Newton's method.
+     *
+     * <p>The area-Mach relation is:
+     * <pre>
+     *   A/A* = (1/M) × [(2/(γ+1)) × (1 + (γ−1)/2 × M²)]^((γ+1)/(2(γ−1)))
+     * </pre>
+     *
+     * @param areaRatio A/A* (must be ≥ 1; values &lt; 1 are clamped to 1)
+     * @param gamma     Ratio of specific heats
+     * @return Subsonic Mach number in (0, 1]
+     */
+    private double machFromAreaRatioSubsonic(double areaRatio, double gamma) {
+        if (areaRatio <= 1.0) return 1.0;
+        double exp   = (gamma + 1.0) / (2.0 * (gamma - 1.0));
+        double coeff = 2.0 / (gamma + 1.0);
+        double M = 0.5;   // initial subsonic guess
+        for (int i = 0; i < 50; i++) {
+            double bracket = coeff * (1.0 + (gamma - 1.0) / 2.0 * M * M);
+            double Bg  = Math.pow(bracket, exp);
+            double f   = Bg / M - areaRatio;
+            // df/dM = exp*(γ−1)*coeff * bracket^(exp−1) − bracket^exp / M²
+            double dfdM = exp * (gamma - 1.0) * coeff * Math.pow(bracket, exp - 1.0)
+                          - Bg / (M * M);
+            double dM = -f / dfdM;
+            M = Math.max(0.01, Math.min(0.9999, M + dM));
+            if (Math.abs(dM) < 1e-10) break;
+        }
+        return M;
+    }
+
     /**
      * Calculates total heat load.
      *
