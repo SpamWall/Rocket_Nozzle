@@ -85,6 +85,8 @@ import java.util.List;
  *   OpenFOAMExporter, RevolvedMeshExporter, CSVExporter now all accept FullNozzleGeometry
  * - Heat flux peak location: calculateFullProfile() covering convergent + divergent, parametric throat-arc curvature
  *   correction, getPeakFluxPoint() / getPeakFluxX() showing how r_cu shifts the peak
+ * - Curved sonic-line initial data line: Hall (1962) x_s(r) = coeff·r²·(1/R_cd + 1/(3·R_cu)) replaces the flat
+ *   plane; offset and first-row wall x are printed in the basic MOC demonstration to make the correction visible
  */
 public class Main {
 
