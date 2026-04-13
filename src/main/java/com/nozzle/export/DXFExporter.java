@@ -25,6 +25,8 @@ import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.CharacteristicNet;
+import com.nozzle.moc.DualBellNozzle;
+import com.nozzle.moc.RaoNozzle;
 import com.nozzle.moc.CharacteristicPoint;
 
 import org.slf4j.Logger;
@@ -402,5 +404,130 @@ public class DXFExporter {
 
             writer.write(DXF_FOOTER);
         }
+    }
+
+    /**
+     * Convenience overload that exports a Rao bell nozzle contour as a DXF file
+     * (wall POLYLINE + axis LINE).
+     *
+     * @param nozzle   Rao bell nozzle (must have been generated)
+     * @param filePath Destination DXF file path
+     * @throws IllegalArgumentException if the nozzle has not been generated
+     * @throws IOException              if the file cannot be written
+     */
+    public void exportContour(RaoNozzle nozzle, Path filePath) throws IOException {
+        List<Point2D> pts = nozzle.getContourPoints();
+        if (pts.isEmpty()) {
+            throw new IllegalArgumentException("RaoNozzle has no contour — call generate() first");
+        }
+        exportContour(NozzleContour.fromPoints(nozzle.getParameters(), pts), filePath);
+    }
+
+    /**
+     * Exports a dual-bell nozzle contour as a DXF file.
+     *
+     * <p>Three DXF layers are written:
+     * <ul>
+     *   <li>{@code WALL} — polyline tracing the full wall (base bell + extension)</li>
+     *   <li>{@code AXIS} — centerline from throat to exit</li>
+     *   <li>{@code KINK} — POINT marker at the inflection point and a vertical LINE
+     *       from the kink down to the axis, indicating the axial station where the
+     *       extension bell begins</li>
+     * </ul>
+     *
+     * @param nozzle   Dual-bell nozzle (must have been generated)
+     * @param filePath Destination DXF file path
+     * @throws IllegalArgumentException if the nozzle has not been generated
+     * @throws IOException              if the file cannot be written
+     */
+    public void exportDualBellContour(DualBellNozzle nozzle, Path filePath) throws IOException {
+        List<Point2D> pts = nozzle.getContourPoints();
+        if (pts.isEmpty()) {
+            throw new IllegalArgumentException("DualBellNozzle has no contour — call generate() first");
+        }
+        Point2D kink = pts.get(nozzle.getKinkIndex());
+        LOG.debug("Exporting DXF dual-bell contour: {} points, kink at ({:.4f},{:.4f}) → {}",
+                pts.size(), kink.x(), kink.y(), filePath);
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writer.write(DXF_HEADER);
+            writePolyline(writer, pts, "WALL");
+            writeLine(writer, new Point2D(pts.getFirst().x(), 0),
+                    new Point2D(pts.getLast().x(), 0), "AXIS");
+            writePoint(writer, kink, "KINK");
+            writeLine(writer, kink, new Point2D(kink.x(), 0), "KINK");
+            writer.write(DXF_FOOTER);
+        }
+        LOG.debug("DXF dual-bell contour export complete → {}", filePath);
+    }
+
+    /**
+     * Convenience overload that exports a closed revolution-profile cross-section for
+     * a Rao bell nozzle.  Equivalent to {@link #exportRevolutionProfile(NozzleContour, Path)}.
+     *
+     * @param nozzle   Rao bell nozzle (must have been generated)
+     * @param filePath Destination DXF file path
+     * @throws IllegalArgumentException if the nozzle has not been generated
+     * @throws IOException              if the file cannot be written
+     */
+    public void exportRevolutionProfile(RaoNozzle nozzle, Path filePath) throws IOException {
+        List<Point2D> pts = nozzle.getContourPoints();
+        if (pts.isEmpty()) {
+            throw new IllegalArgumentException("RaoNozzle has no contour — call generate() first");
+        }
+        exportRevolutionProfile(NozzleContour.fromPoints(nozzle.getParameters(), pts), filePath);
+    }
+
+    /**
+     * Exports a closed revolution-profile cross-section for a dual-bell nozzle with
+     * kink annotation.
+     *
+     * <p>Layers written:
+     * <ul>
+     *   <li>{@code WALL} — full wall polyline (base + extension)</li>
+     *   <li>{@code AXIS} — three LINE segments closing the profile (exit face, axis,
+     *       throat face) to form a closed sketch suitable for a CAD revolve operation</li>
+     *   <li>{@code KINK} — POINT marker and vertical LINE at the inflection station</li>
+     * </ul>
+     *
+     * @param nozzle   Dual-bell nozzle (must have been generated)
+     * @param filePath Destination DXF file path
+     * @throws IllegalArgumentException if the nozzle has not been generated
+     * @throws IOException              if the file cannot be written
+     */
+    public void exportRevolutionProfile(DualBellNozzle nozzle, Path filePath) throws IOException {
+        List<Point2D> pts = nozzle.getContourPoints();
+        if (pts.isEmpty()) {
+            throw new IllegalArgumentException("DualBellNozzle has no contour — call generate() first");
+        }
+        Point2D kink    = pts.get(nozzle.getKinkIndex());
+        Point2D exitTop = pts.getLast();
+        LOG.debug("Exporting DXF dual-bell revolution profile: {} points → {}", pts.size(), filePath);
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writer.write(DXF_HEADER);
+            writePolyline(writer, pts, "WALL");
+            writeLine(writer, exitTop,                      new Point2D(exitTop.x(), 0),          "AXIS");
+            writeLine(writer, new Point2D(exitTop.x(), 0), new Point2D(pts.getFirst().x(), 0),    "AXIS");
+            writeLine(writer, new Point2D(pts.getFirst().x(), 0), pts.getFirst(),                 "AXIS");
+            writePoint(writer, kink, "KINK");
+            writeLine(writer, kink, new Point2D(kink.x(), 0), "KINK");
+            writer.write(DXF_FOOTER);
+        }
+        LOG.debug("DXF dual-bell revolution profile export complete → {}", filePath);
+    }
+
+    /**
+     * Writes a DXF POINT entity at the given 2D location.
+     * Coordinates are scaled by {@link #scaleFactor} before writing.
+     *
+     * @param writer Writer receiving the DXF entities section content
+     * @param point  2D point position
+     * @param layer  DXF layer name string
+     * @throws IOException If the writer throws
+     */
+    private void writePoint(BufferedWriter writer, Point2D point, String layer)
+            throws IOException {
+        writer.write("0\nPOINT\n8\n" + layer + "\n");
+        writer.write(String.format("10\n%.6f\n20\n%.6f\n30\n0.0\n",
+                point.x() * scaleFactor, point.y() * scaleFactor));
     }
 }

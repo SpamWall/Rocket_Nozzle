@@ -78,7 +78,9 @@ import java.util.List;
  * - y⁺-controlled first-cell-height grading: CFDMeshExporter and OpenFOAMExporter firstLayerThickness
  * - Full 3-D revolved mesh export: RevolvedMeshExporter (OpenFOAM blockMesh, Gmsh, Plot3D)
  * - O/F sweep and optimum search: OFSweep adiabatic Isp(O/F), c*(O/F), γ(O/F) curves with golden-section optimum
- * - Dual-bell altitude-compensating nozzle: DualBellNozzle contour, sea-level and high-altitude Isp, transition pressure
+ * - Dual-bell altitude-compensating nozzle: DualBellNozzle contour, sea-level and high-altitude Isp, transition pressure;
+ *   CSV report with BASE/EXTENSION section labels, DXF with KINK layer annotation, STEP revolved solid + profile curve,
+ *   STL mesh, full 3-D revolved OpenFOAM/Gmsh/Plot3D meshes
  * - Throat curvature ratio sweep: effect of r_cd/r_t on exit area ratio and Cf across Rao, MOC, and conical contours
  * - Convergent section: full nozzle geometry (chamber face to exit), sonic-line Cd correction, upstream BL extension,
  *   geometry-complete exports
@@ -125,7 +127,7 @@ public class Main {
             demonstrateYPlusGrading(outputDir);
             demonstrateRevolvedMesh(outputDir);
             demonstrateOFSweep();
-            demonstrateDualBellNozzle();
+            demonstrateDualBellNozzle(outputDir);
             demonstrateThroatCurvatureRatio();
             demonstrateConvergentSection(outputDir);
             demonstrateUnitsConversion();
@@ -1709,7 +1711,7 @@ public class Main {
      *   <li>Dual-bell — high-altitude mode (full nozzle, vacuum).</li>
      * </ol>
      */
-    private static void demonstrateDualBellNozzle() {
+    private static void demonstrateDualBellNozzle(Path outputDir) throws Exception {
         System.out.println("\n--- DUAL-BELL ALTITUDE-COMPENSATING NOZZLE ---\n");
 
         NozzleDesignParameters params = NozzleDesignParameters.builder()
@@ -1824,6 +1826,42 @@ public class Main {
         System.out.printf("  High-alt  Cf:  model = %.5f   analytical = %.5f   diff = %+.4f%%%n",
                 dlr.getHighAltitudeCf(), cfAltAnal,
                 (dlr.getHighAltitudeCf() - cfAltAnal) / cfAltAnal * 100.0);
+
+        // --- Exports ---
+        System.out.println("\nDual-Bell Exports:");
+        Path dbDir = outputDir.resolve("DualBell");
+        Files.createDirectories(dbDir);
+
+        // CSV report: contour with BASE/EXTENSION labels + performance scalars
+        new CSVExporter().exportDualBellReport(db4, dbDir.resolve("report"));
+        System.out.println("  CSV: report/ (design_parameters, contour with section labels, performance)");
+
+        // DXF: contour + revolution profile, both with KINK annotation
+        DXFExporter dbDxf = new DXFExporter().setScaleFactor(1000);
+        dbDxf.exportDualBellContour(db4, dbDir.resolve("dual_bell.dxf"));
+        dbDxf.exportRevolutionProfile(db4, dbDir.resolve("dual_bell_revolution.dxf"));
+        System.out.println("  DXF: dual_bell.dxf, dual_bell_revolution.dxf  (KINK layer marks inflection point)");
+
+        // STEP: revolved solid + profile curve
+        STEPExporter dbStep = new STEPExporter();
+        dbStep.exportRevolvedSolid(db4, dbDir.resolve("dual_bell.step"));
+        dbStep.exportProfileCurve(db4, dbDir.resolve("dual_bell_profile.step"));
+        System.out.println("  STEP: dual_bell.step (solid), dual_bell_profile.step (B-spline curve)");
+
+        // STL: revolved mesh
+        new STLExporter().setCircumferentialSegments(72).setBinaryFormat(true)
+                .exportMesh(db4, dbDir.resolve("dual_bell.stl"));
+        System.out.printf("  STL:  dual_bell.stl  (%d triangles, binary)%n",
+                new STLExporter().estimateTriangleCount(db4.getContourPoints().size()));
+
+        // 3D revolved mesh
+        RevolvedMeshExporter dbRev = new RevolvedMeshExporter().setAxialCells(100).setRadialCells(40);
+        dbRev.export(db4, dbDir.resolve("dual_bell_3d_blockMeshDict"), RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
+        dbRev.export(db4, dbDir.resolve("dual_bell_3d.geo"),           RevolvedMeshExporter.Format.GMSH_GEO);
+        dbRev.export(db4, dbDir.resolve("dual_bell_3d.xyz"),           RevolvedMeshExporter.Format.PLOT3D);
+        System.out.println("  3D revolved: dual_bell_3d_blockMeshDict, dual_bell_3d.geo, dual_bell_3d.xyz");
+
+        System.out.printf("%nDual-bell output saved to: %s%n", dbDir.toAbsolutePath());
     }
 
     /**

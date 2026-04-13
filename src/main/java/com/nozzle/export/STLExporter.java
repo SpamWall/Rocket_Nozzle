@@ -24,6 +24,8 @@ import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
+import com.nozzle.moc.DualBellNozzle;
+import com.nozzle.moc.RaoNozzle;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -434,6 +436,49 @@ public class STLExporter {
             exportAsciiSTL(triangles, filePath);
         }
         LOG.debug("Aerospike STL export complete: {} triangles → {}", triangles.size(), filePath);
+    }
+
+    /**
+     * Convenience overload that exports a Rao bell nozzle as a revolved STL mesh.
+     *
+     * @param nozzle   Rao bell nozzle (must have been generated)
+     * @param filePath Destination STL file path
+     * @throws IllegalArgumentException if the nozzle has not been generated
+     * @throws IOException              if the file cannot be written
+     */
+    public void exportMesh(RaoNozzle nozzle, Path filePath) throws IOException {
+        List<Point2D> pts = nozzle.getContourPoints();
+        if (pts.size() < 2) {
+            throw new IllegalArgumentException("RaoNozzle has no contour — call generate() first");
+        }
+        LOG.debug("Exporting Rao nozzle STL mesh: {} points, {} segments → {}",
+                pts.size(), circumferentialSegments, filePath);
+        List<Triangle> triangles = generateTriangles(pts);
+        if (binaryFormat) exportBinarySTL(triangles, filePath);
+        else exportAsciiSTL(triangles, filePath);
+        LOG.debug("Rao nozzle STL export complete: {} triangles → {}", triangles.size(), filePath);
+    }
+
+    /**
+     * Convenience overload that exports a dual-bell nozzle (base bell + extension) as
+     * a revolved STL mesh.  The full contour including the kink transition is exported.
+     *
+     * @param nozzle   Dual-bell nozzle (must have been generated)
+     * @param filePath Destination STL file path
+     * @throws IllegalArgumentException if the nozzle has not been generated
+     * @throws IOException              if the file cannot be written
+     */
+    public void exportMesh(DualBellNozzle nozzle, Path filePath) throws IOException {
+        List<Point2D> pts = nozzle.getContourPoints();
+        if (pts.size() < 2) {
+            throw new IllegalArgumentException("DualBellNozzle has no contour — call generate() first");
+        }
+        LOG.debug("Exporting dual-bell nozzle STL mesh: {} points, {} segments → {}",
+                pts.size(), circumferentialSegments, filePath);
+        List<Triangle> triangles = generateTriangles(pts);
+        if (binaryFormat) exportBinarySTL(triangles, filePath);
+        else exportAsciiSTL(triangles, filePath);
+        LOG.debug("Dual-bell nozzle STL export complete: {} triangles → {}", triangles.size(), filePath);
     }
 
     /**

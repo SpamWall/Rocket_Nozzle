@@ -855,6 +855,14 @@ csv.exportDesignParameters(params, Path.of("params.csv"));
 csv.exportSpikeContour(aero, Path.of("spike.csv"));
 csv.exportAltitudePerformance(altPerf, Path.of("altitude.csv"));
 csv.exportAerospikeReport(aero, altitudePressures, Path.of("report_dir/"));
+
+// Dual-bell — contour with section labels + performance scalars
+csv.exportDualBellContour(db, Path.of("dual_bell.csv"));
+// columns: x_m, y_m, section (BASE | EXTENSION)
+
+csv.exportDualBellReport(db, Path.of("db_report/"));
+// creates: dual_bell_design_parameters.csv, dual_bell_contour.csv,
+//          dual_bell_performance.csv (Cf, Isp, transition pressure, geometry)
 ```
 
 ### DXFExporter
@@ -882,6 +890,17 @@ dxf.exportFullNozzleRevolutionProfile(geom, Path.of("full_profile.dxf"));
 // Aerospike
 dxf.exportAerospikeContour(aero, Path.of("spike.dxf"));
 // Layers: SPIKE (contour polyline), COWL (annular throat face), AXIS
+
+// Rao bell — convenience overloads (equivalent to the NozzleContour versions)
+dxf.exportContour(raoNozzle, Path.of("rao.dxf"));
+dxf.exportRevolutionProfile(raoNozzle, Path.of("rao_profile.dxf"));
+
+// Dual-bell — includes KINK layer annotation at the inflection point
+dxf.exportDualBellContour(db, Path.of("dual_bell.dxf"));
+// Layers: WALL (full polyline), AXIS (centerline), KINK (POINT + drop-line to axis)
+
+dxf.exportRevolutionProfile(db, Path.of("dual_bell_profile.dxf"));
+// Layers: WALL, AXIS (closure lines), KINK (POINT + drop-line to axis)
 ```
 
 **`exportFullNozzleProfile` layers:**
@@ -920,6 +939,13 @@ step.exportProfileCurve(fullGeom,  Path.of("profile_full.step"));
 
 // Aerospike
 step.exportAerospikeRevolvedSolid(aero, Path.of("spike.step"));
+step.exportProfileCurve(aero, Path.of("spike_profile.step"));  // truncated spike B-spline curve
+
+// Rao bell and dual-bell convenience overloads
+step.exportRevolvedSolid(raoNozzle, Path.of("rao.step"));
+step.exportProfileCurve(raoNozzle,  Path.of("rao_profile.step"));
+step.exportRevolvedSolid(db, Path.of("dual_bell.step"));
+step.exportProfileCurve(db,  Path.of("dual_bell_profile.step"));
 ```
 
 ### STLExporter
@@ -940,6 +966,10 @@ stl.exportInnerSurfaceMesh(fullGeom, Path.of("nozzle_full_inner.stl"));
 
 // Aerospike
 stl.exportAerospikeMesh(aero, Path.of("spike.stl"));
+
+// Rao bell and dual-bell convenience overloads
+stl.exportMesh(raoNozzle, Path.of("rao.stl"));
+stl.exportMesh(db, Path.of("dual_bell.stl"));
 
 int triangles = stl.estimateTriangleCount(contour.getContourPoints().size());
 ```
@@ -1055,6 +1085,12 @@ rev.export(contour, Path.of("nozzle_3d.xyz"),    RevolvedMeshExporter.Format.PLO
 rev.export(fullGeom, Path.of("blockMeshDict_3d_full"), RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
 rev.export(fullGeom, Path.of("nozzle_3d_full.geo"),    RevolvedMeshExporter.Format.GMSH_GEO);
 rev.export(fullGeom, Path.of("nozzle_3d_full.xyz"),    RevolvedMeshExporter.Format.PLOT3D);
+
+// Rao bell and dual-bell convenience overloads
+rev.export(raoNozzle, Path.of("rao_3d_bmd"),    RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
+rev.export(db,        Path.of("db_3d_bmd"),     RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
+rev.export(db,        Path.of("db_3d.geo"),     RevolvedMeshExporter.Format.GMSH_GEO);
+rev.export(db,        Path.of("db_3d.xyz"),     RevolvedMeshExporter.Format.PLOT3D);
 ```
 
 ---

@@ -98,12 +98,17 @@ structural analysis, and multi-format CAD/CFD export.
 | Gmsh .geo transfinite mesh                     | ✓                | ✓           | ✓         | ✓                      |
 | Plot3D / CGNS structured grid                  | ✓                | ✓           | ✓         | ✓ (Plot3D)             |
 | OpenFOAM rhoCentralFoam case                   | ✓                | ✓ (annular) | ✓         | ✓                      |
-| OpenFOAM blockMesh (full 3-D revolved)         | ✓                | —           | —         | ✓                      |
-| Gmsh .geo (full 3-D revolved)                  | ✓                | —           | —         | ✓                      |
-| Plot3D .xyz (full 3-D revolved)                | ✓                | —           | —         | ✓                      |
+| OpenFOAM blockMesh (full 3-D revolved)         | ✓                | —           | ✓         | ✓                      |
+| Gmsh .geo (full 3-D revolved)                  | ✓                | —           | ✓         | ✓                      |
+| Plot3D .xyz (full 3-D revolved)                | ✓                | —           | ✓         | ✓                      |
 
 Every exporter accepts a `FullNozzleGeometry` overload that covers the complete
 internal wall from injector face (x < 0) to nozzle exit (x > 0).
+
+DXF exports for dual-bell nozzles include a `KINK` layer marking the inflection
+point (POINT entity + vertical drop-line to the axis).  CSV dual-bell reports
+label each contour row as `BASE` or `EXTENSION`.  The aerospike and dual-bell
+STEP exports include both a revolved solid and a profile B-spline curve.
 
 ---
 

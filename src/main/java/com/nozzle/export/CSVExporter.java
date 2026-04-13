@@ -30,6 +30,7 @@ import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.AltitudePerformance;
 import com.nozzle.moc.CharacteristicNet;
+import com.nozzle.moc.DualBellNozzle;
 import com.nozzle.moc.CharacteristicPoint;
 import com.nozzle.thermal.BoundaryLayerCorrection;
 import com.nozzle.thermal.HeatTransferModel;
@@ -486,5 +487,79 @@ public class CSVExporter {
         exportSpikeContour(nozzle, outputDir.resolve("aerospike_spike_contour.csv"));
         AltitudePerformance perf = nozzle.calculateAltitudePerformance(ambientPressures);
         exportAltitudePerformance(perf, outputDir.resolve("aerospike_altitude_performance.csv"));
+    }
+
+    /**
+     * Exports the dual-bell nozzle wall contour to a CSV file.
+     *
+     * <p>Each row contains x (m), y (m), and a {@code section} column that identifies
+     * whether the point belongs to the {@code BASE} bell (up to and including the kink)
+     * or the {@code EXTENSION} bell (after the kink).  The kink point itself is labelled
+     * {@code BASE}.
+     *
+     * @param nozzle   Dual-bell nozzle (must have been generated)
+     * @param filePath Output file path
+     * @throws IOException If write fails
+     */
+    public void exportDualBellContour(DualBellNozzle nozzle, Path filePath) throws IOException {
+        List<Point2D> pts = nozzle.getContourPoints();
+        int kinkIdx = nozzle.getKinkIndex();
+        LOG.debug("Exporting CSV dual-bell contour: {} points (kink at {}) → {}",
+                pts.size(), kinkIdx, filePath);
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+            writer.write("x_m,y_m,section");
+            writer.write(NEWLINE);
+            for (int i = 0; i < pts.size(); i++) {
+                Point2D p = pts.get(i);
+                String section = (i <= kinkIdx) ? "BASE" : "EXTENSION";
+                writer.write(String.format("%.8f%s%.8f%s%s",
+                        p.x(), DELIMITER, p.y(), DELIMITER, section));
+                writer.write(NEWLINE);
+            }
+        }
+        LOG.debug("CSV dual-bell contour export complete → {}", filePath);
+    }
+
+    /**
+     * Exports a complete dual-bell design report to CSV files in {@code outputDir}.
+     *
+     * <p>Creates three files:
+     * <ul>
+     *   <li>{@code dual_bell_design_parameters.csv} — scalar design parameters</li>
+     *   <li>{@code dual_bell_contour.csv} — wall profile with {@code BASE}/{@code EXTENSION}
+     *       section labels</li>
+     *   <li>{@code dual_bell_performance.csv} — performance scalars: sea-level and
+     *       high-altitude Cf and Isp, transition pressure, nozzle lengths, kink geometry
+     *       (inflection angle, exit angles, transition Mach)</li>
+     * </ul>
+     *
+     * @param nozzle    Dual-bell nozzle (must have been generated)
+     * @param outputDir Output directory (created if it does not exist)
+     * @throws IOException If write fails
+     */
+    public void exportDualBellReport(DualBellNozzle nozzle, Path outputDir) throws IOException {
+        LOG.debug("Exporting dual-bell CSV report → {}", outputDir);
+        Files.createDirectories(outputDir);
+        exportDesignParameters(nozzle.getParameters(),
+                outputDir.resolve("dual_bell_design_parameters.csv"));
+        exportDualBellContour(nozzle, outputDir.resolve("dual_bell_contour.csv"));
+        try (BufferedWriter writer = Files.newBufferedWriter(
+                outputDir.resolve("dual_bell_performance.csv"))) {
+            writer.write("parameter,value,unit");
+            writer.write(NEWLINE);
+            writeParameter(writer, "base_length",          nozzle.getBaseLength(),                      "m");
+            writeParameter(writer, "total_length",         nozzle.getTotalLength(),                     "m");
+            writeParameter(writer, "transition_radius",    nozzle.getTransitionRadius(),                "m");
+            writeParameter(writer, "transition_mach",      nozzle.getTransitionMach(),                  "-");
+            writeParameter(writer, "inflection_angle",     Math.toDegrees(nozzle.getInflectionAngle()), "deg");
+            writeParameter(writer, "base_exit_angle",      Math.toDegrees(nozzle.getBaseExitAngle()),   "deg");
+            writeParameter(writer, "extension_exit_angle", Math.toDegrees(nozzle.getExtensionExitAngle()), "deg");
+            writeParameter(writer, "transition_pressure",  nozzle.getTransitionPressure(),              "Pa");
+            writeParameter(writer, "sea_level_cf",         nozzle.getSeaLevelCf(),                      "-");
+            writeParameter(writer, "high_altitude_cf",     nozzle.getHighAltitudeCf(),                  "-");
+            writeParameter(writer, "sea_level_isp",        nozzle.getSeaLevelIsp(),                     "s");
+            writeParameter(writer, "high_altitude_isp",    nozzle.getHighAltitudeIsp(),                 "s");
+        }
+        LOG.debug("Dual-bell CSV report export complete → {}", outputDir);
     }
 }
