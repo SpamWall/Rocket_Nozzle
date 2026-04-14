@@ -629,4 +629,110 @@ class NozzleDesignParameters_UT {
                     .isCloseTo(p.throatArea() * p.exitAreaRatio(), within(1e-12));
         }
     }
+
+    @Nested
+    @DisplayName("ConvergentLength Tests")
+    class ConvergentLengthTests {
+
+        private NozzleDesignParameters baseParams() {
+            return NozzleDesignParameters.builder()
+                    .throatRadius(0.05)
+                    .exitMach(3.0)
+                    .upstreamCurvatureRatio(1.5)
+                    .convergentHalfAngleDegrees(30.0)
+                    .contractionRatio(4.0)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("convergentLength() is positive for standard geometry")
+        void convergentLengthIsPositive() {
+            assertThat(baseParams().convergentLength()).isGreaterThan(0.0);
+        }
+
+        @Test
+        @DisplayName("convergentLength() matches closed-form formula")
+        void convergentLengthMatchesFormula() {
+            double rt  = 0.05;
+            double rcu = 1.5 * rt;
+            double tc  = Math.toRadians(30.0);
+            double rc  = rt * Math.sqrt(4.0);  // chamberRadius for axisymmetric
+            double yArc     = rt + rcu * (1.0 - Math.cos(tc));
+            double xArc     = -rcu * Math.sin(tc);
+            double xChamber = xArc - (rc - yArc) / Math.tan(tc);
+            double expected = -xChamber;
+
+            assertThat(baseParams().convergentLength())
+                    .isCloseTo(expected, within(1e-12));
+        }
+
+        @Test
+        @DisplayName("convergentLength() grows with larger contraction ratio")
+        void convergentLengthGrowsWithContractionRatio() {
+            NozzleDesignParameters low  = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(3.0).contractionRatio(2.5).build();
+            NozzleDesignParameters high = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(3.0).contractionRatio(6.0).build();
+            assertThat(low.convergentLength()).isLessThan(high.convergentLength());
+        }
+
+        @Test
+        @DisplayName("convergentLength() decreases as half-angle increases (steeper cone is shorter)")
+        void convergentLengthDecreasesWithLargerHalfAngle() {
+            NozzleDesignParameters shallow = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(3.0).convergentHalfAngleDegrees(20.0)
+                    .contractionRatio(4.0).build();
+            NozzleDesignParameters steep  = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(3.0).convergentHalfAngleDegrees(45.0)
+                    .contractionRatio(4.0).build();
+            assertThat(shallow.convergentLength()).isGreaterThan(steep.convergentLength());
+        }
+
+        @Test
+        @DisplayName("convergentLength() scales linearly with throatRadius")
+        void convergentLengthScalesWithThroatRadius() {
+            NozzleDesignParameters small = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(3.0).contractionRatio(4.0).build();
+            NozzleDesignParameters large = NozzleDesignParameters.builder()
+                    .throatRadius(0.10).exitMach(3.0).contractionRatio(4.0).build();
+            // doubling r_t doubles every length in the geometry
+            assertThat(large.convergentLength())
+                    .isCloseTo(small.convergentLength() * 2.0, within(1e-12));
+        }
+
+        @Test
+        @DisplayName("convergentLengthRatio() equals convergentLength / (2 * throatRadius)")
+        void convergentLengthRatioDefinition() {
+            NozzleDesignParameters p = baseParams();
+            double expected = p.convergentLength() / (2.0 * p.throatRadius());
+            assertThat(p.convergentLengthRatio()).isCloseTo(expected, within(1e-12));
+        }
+
+        @Test
+        @DisplayName("convergentLengthRatio() is positive")
+        void convergentLengthRatioIsPositive() {
+            assertThat(baseParams().convergentLengthRatio()).isGreaterThan(0.0);
+        }
+
+        @Test
+        @DisplayName("convergentLengthRatio() grows with contraction ratio")
+        void convergentLengthRatioGrowsWithContractionRatio() {
+            NozzleDesignParameters low  = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(3.0).contractionRatio(2.5).build();
+            NozzleDesignParameters high = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(3.0).contractionRatio(6.0).build();
+            assertThat(low.convergentLengthRatio()).isLessThan(high.convergentLengthRatio());
+        }
+
+        @Test
+        @DisplayName("convergentLengthRatio() is independent of throatRadius")
+        void convergentLengthRatioIsIndependentOfThroatRadius() {
+            NozzleDesignParameters small = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(3.0).contractionRatio(4.0).build();
+            NozzleDesignParameters large = NozzleDesignParameters.builder()
+                    .throatRadius(0.10).exitMach(3.0).contractionRatio(4.0).build();
+            assertThat(large.convergentLengthRatio())
+                    .isCloseTo(small.convergentLengthRatio(), within(1e-12));
+        }
+    }
 }

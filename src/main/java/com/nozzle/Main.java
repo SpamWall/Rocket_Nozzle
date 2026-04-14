@@ -1984,6 +1984,10 @@ public class Main {
         System.out.printf("  Arc end-point radius:        %.2f mm%n", cs.getArcEndY() * 1000);
         System.out.printf("  Chamber face x:              %.2f mm%n", cs.getChamberFaceX() * 1000);
         System.out.printf("  Convergent section length:   %.2f mm%n", cs.getLength() * 1000);
+        System.out.printf("  Convergent length (params):  %.2f mm  (convergentLength())%n",
+                params.convergentLength() * 1000);
+        System.out.printf("  Convergent length ratio:     %.4f  (L_conv / D_t)%n",
+                params.convergentLengthRatio());
         System.out.printf("  Contour wall points:         %d%n", cs.getContourPoints().size());
 
         // ------------------------------------------------------------------

@@ -192,6 +192,58 @@ public record NozzleDesignParameters(
     }
 
     /**
+     * Computes the axial length of the convergent section (chamber face to throat)
+     * using the same closed-form geometry as {@link com.nozzle.geometry.ConvergentSection}.
+     *
+     * <p>The convergent wall consists of a conical section (half-angle θ_c) tangent
+     * to an upstream circular arc (radius r_cu = upstreamCurvatureRatio × r_t).
+     * The arc end-point coordinates are:
+     * <pre>
+     *   x_arc = −r_cu · sin(θ_c)
+     *   y_arc =  r_t  + r_cu · (1 − cos(θ_c))
+     * </pre>
+     * and the chamber face sits at:
+     * <pre>
+     *   x_chamber = x_arc − (r_c − y_arc) / tan(θ_c)
+     * </pre>
+     * so the convergent length is {@code L_conv = −x_chamber}.
+     *
+     * <p>This is a pure function of the existing fields — no geometry object is
+     * required. Longer convergent sections improve flow uniformity and reduce
+     * boundary-layer thickness at the throat but increase engine length and mass.
+     *
+     * @return Convergent section axial length L_conv in metres (always positive)
+     */
+    public double convergentLength() {
+        double rcu   = upstreamCurvatureRatio * throatRadius;
+        double tc    = convergentHalfAngle;
+        double rc    = chamberRadius();
+        double yArc  = throatRadius + rcu * (1.0 - Math.cos(tc));
+        double xArc  = -rcu * Math.sin(tc);
+        double xChamber = xArc - (rc - yArc) / Math.tan(tc);
+        return -xChamber;
+    }
+
+    /**
+     * Returns the convergent section length normalized by the throat diameter
+     * ({@code L_conv / D_t = convergentLength() / (2 × throatRadius)}).
+     *
+     * <p>This dimensionless ratio is the standard engineering metric for convergent
+     * section sizing.  Representative values:
+     * <ul>
+     *   <li>L/D_t ≈ 1–2 — compact rocket engines (minimal mass, thicker BL)</li>
+     *   <li>L/D_t ≈ 3–5 — typical liquid rocket engines</li>
+     *   <li>L/D_t ≈ 6–10 — wind-tunnel settling chambers (thinnest BL, best
+     *       flow uniformity at the throat)</li>
+     * </ul>
+     *
+     * @return L_conv / D_t (dimensionless, always positive)
+     */
+    public double convergentLengthRatio() {
+        return convergentLength() / (2.0 * throatRadius);
+    }
+
+    /**
      * Geometric discharge coefficient (Cd) based on sonic-line curvature.
      *
      * <p>The sonic line at the throat is curved rather than flat, so the

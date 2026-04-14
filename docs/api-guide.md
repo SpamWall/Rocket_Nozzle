@@ -79,12 +79,31 @@ System.out.printf("At = %.0f mm²%n", params.throatArea() * 1e6);
 System.out.printf("Ae = %.0f mm²%n", params.exitArea()   * 1e6);
 ```
 
+**`convergentLength()`** — Axial length of the convergent section from the
+chamber face to the throat plane (positive value, metres). Computed from the
+upstream arc radius, convergent half-angle, and chamber radius without
+requiring a `ConvergentSection` object:
+
+```
+L = r_cu·sin(θ_c) + (r_c − r_t − r_cu·(1−cos(θ_c))) / tan(θ_c)
+```
+
+where `r_cu = upstreamCurvatureRatio · r_t` and `r_c = chamberRadius()`.
+Useful for quick sizing — a longer convergent reduces boundary-layer
+displacement thickness at the throat.
+
+**`convergentLengthRatio()`** — `convergentLength() / (2 · r_t)`. A
+dimensionless metric used in nozzle sizing; typical values range from 0.5 to
+2.0 depending on contraction ratio and half-angle.
+
 **Derived quantities also added:**
 
 | Method                         | Returns                                                                     |
 |--------------------------------|-----------------------------------------------------------------------------|
 | `chamberRadius()`              | r_t · √(contractionRatio)                                                   |
 | `convergentHalfAngleDegrees()` | convergentHalfAngle converted to degrees                                    |
+| `convergentLength()`           | Axial length of the convergent section (chamber face → throat) in metres    |
+| `convergentLengthRatio()`      | convergentLength / (2 · r_t) — dimensionless sizing metric                  |
 | `dischargeCoefficient()`       | Cd ∈ [0.98, 1.0] — sonic-line curvature correction to effective throat area |
 
 ---
@@ -140,18 +159,18 @@ System.out.println(pc.getSpecificImpulse());
 
 **Derived quantities (computed lazily on first access):**
 
-| Method                     | Returns                                        |
-|----------------------------|------------------------------------------------|
-| `exitAreaRatio()`          | A/A* from isentropic area-velocity relation    |
-| `exitRadius()`             | r_throat · √(exitAreaRatio)                    |
+| Method                     | Returns                                                    |
+|----------------------------|------------------------------------------------------------|
+| `exitAreaRatio()`          | A/A* from isentropic area-velocity relation                |
+| `exitRadius()`             | r_throat · √(exitAreaRatio)                                |
 | `throatArea()`             | π·r_throat² (axisymmetric) or 2·r_throat·throatWidth (2-D) |
-| `idealExitPressure()`      | Pc · (isentropic pressure ratio at Me)         |
-| `exitTemperature()`        | Tc · (isentropic temperature ratio at Me)      |
-| `exitVelocity()`           | Me · √(γ·R·T_exit)                             |
-| `characteristicVelocity()` | c* = √(γ·R·Tc)/γ · (2/(γ+1))^((γ+1)/(2(γ-1)))  |
-| `idealThrustCoefficient()` | Cf from the isentropic thrust equation         |
-| `idealSpecificImpulse()`   | c* · Cf / g₀                                   |
-| `maxPrandtlMeyerAngle()`   | Prandtl-Meyer ν at M = ∞                       |
+| `idealExitPressure()`      | Pc · (isentropic pressure ratio at Me)                     |
+| `exitTemperature()`        | Tc · (isentropic temperature ratio at Me)                  |
+| `exitVelocity()`           | Me · √(γ·R·T_exit)                                         |
+| `characteristicVelocity()` | c* = √(γ·R·Tc)/γ · (2/(γ+1))^((γ+1)/(2(γ-1)))              |
+| `idealThrustCoefficient()` | Cf from the isentropic thrust equation                     |
+| `idealSpecificImpulse()`   | c* · Cf / g₀                                               |
+| `maxPrandtlMeyerAngle()`   | Prandtl-Meyer ν at M = ∞                                   |
 
 ---
 

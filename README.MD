@@ -28,7 +28,9 @@ structural analysis, and multi-format CAD/CFD export.
   parameters (all backward-compatible): `throatCurvatureRatio` (r_cd/r_t,
   default 0.382), `upstreamCurvatureRatio` (r_cu/r_t, default 1.5),
   `convergentHalfAngle` (default 30°), `contractionRatio` (Ac/At, default 4.0),
-  and `throatWidth` (span of a 2-D rectangular nozzle, default 1.0 m)
+  and `throatWidth` (span of a 2-D rectangular nozzle, default 1.0 m);
+  derived quantities `convergentLength()` and `convergentLengthRatio()` give
+  the axial extent of the convergent section and its ratio to throat diameter
 - **Planar (2-D rectangular) nozzle support** — set `axisymmetric(false)` and
   `throatWidth(w)` to model wind-tunnel or linear aerospike nozzles with a
   rectangular cross-section; throat area becomes `2 × r_t × w` and all
