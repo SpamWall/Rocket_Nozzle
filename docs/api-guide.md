@@ -164,6 +164,8 @@ System.out.println(pc.getSpecificImpulse());
 | `exitAreaRatio()`          | A/A* from isentropic area-velocity relation                |
 | `exitRadius()`             | r_throat · √(exitAreaRatio)                                |
 | `throatArea()`             | π·r_throat² (axisymmetric) or 2·r_throat·throatWidth (2-D) |
+| `exitArea()`               | throatArea() × exitAreaRatio()                             |
+| `pressureRatio()`          | Pc / Pa — chamber-to-ambient pressure ratio                |
 | `idealExitPressure()`      | Pc · (isentropic pressure ratio at Me)                     |
 | `exitTemperature()`        | Tc · (isentropic temperature ratio at Me)                  |
 | `exitVelocity()`           | Me · √(γ·R·T_exit)                                         |
