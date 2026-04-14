@@ -24,11 +24,16 @@ structural analysis, and multi-format CAD/CFD export.
 - **Convergent section geometry** — `ConvergentSection` generates the full
   chamber-to-throat wall contour: upstream circular arc (r_cu), conical section,
   and chamber face; C¹-continuous throughout
-- **Configurable throat geometry** — `NozzleDesignParameters` exposes four new
-  optional parameters (all backward-compatible with existing call sites):
-  `throatCurvatureRatio` (r_cd/r_t, default 0.382), `upstreamCurvatureRatio`
-  (r_cu/r_t, default 1.5), `convergentHalfAngle` (default 30°), and
-  `contractionRatio` (Ac/At, default 4.0)
+- **Configurable throat geometry** — `NozzleDesignParameters` exposes optional
+  parameters (all backward-compatible): `throatCurvatureRatio` (r_cd/r_t,
+  default 0.382), `upstreamCurvatureRatio` (r_cu/r_t, default 1.5),
+  `convergentHalfAngle` (default 30°), `contractionRatio` (Ac/At, default 4.0),
+  and `throatWidth` (span of a 2-D rectangular nozzle, default 1.0 m)
+- **Planar (2-D rectangular) nozzle support** — set `axisymmetric(false)` and
+  `throatWidth(w)` to model wind-tunnel or linear aerospike nozzles with a
+  rectangular cross-section; throat area becomes `2 × r_t × w` and all
+  derived quantities (exit area, mass flow, thrust) scale accordingly;
+  the CSV exporter emits `throat_width` only when the geometry is planar
 - **Discharge coefficient** — `NozzleDesignParameters.dischargeCoefficient()`
   computes the geometric sonic-line Cd from the Kliegel & Levine (1969)
   harmonic-mean curvature model; for Rao defaults (r_cd/r_t = 0.382,
@@ -154,6 +159,7 @@ NozzleDesignParameters params = NozzleDesignParameters.builder()
         .upstreamCurvatureRatio(1.5)      // r_cu/r_t
         .convergentHalfAngleDegrees(30)   // conical convergent half-angle
         .contractionRatio(4.0)            // Ac/At
+        // .throatWidth(0.15)             // span for 2-D planar nozzles (ignored when axisymmetric)
         .build();
 ```
 

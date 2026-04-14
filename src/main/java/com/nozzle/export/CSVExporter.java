@@ -290,6 +290,9 @@ public class CSVExporter {
             writeParameter(writer, "length_fraction", params.lengthFraction(), "-");
             writeParameter(writer, "num_char_lines", params.numberOfCharLines(), "-");
             writeParameter(writer, "axisymmetric", params.axisymmetric() ? 1 : 0, "-");
+            if (!params.axisymmetric()) {
+                writeParameter(writer, "throat_width", params.throatWidth(), "m");
+            }
             writeParameter(writer, "throat_curvature_ratio", params.throatCurvatureRatio(), "-");
             writeParameter(writer, "upstream_curvature_ratio", params.upstreamCurvatureRatio(), "-");
             writeParameter(writer, "convergent_half_angle", params.convergentHalfAngleDegrees(), "deg");

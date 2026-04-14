@@ -27,13 +27,15 @@ NozzleDesignParameters params = NozzleDesignParameters.builder()
         .upstreamCurvatureRatio(1.5)               // r_cu / r_t (optional, default 1.5)
         .convergentHalfAngleDegrees(30)            // convergent cone half-angle (optional, default 30°)
         .contractionRatio(4.0)                     // Ac/At (optional, default 4.0)
+        // .throatWidth(0.15)                      // 2-D planar span in metres (ignored when axisymmetric)
         .build();
 ```
 
 **Key builder defaults:** `throatRadius=0.05`, `exitMach=3.0`, `Pc=7 MPa`,
 `Tc=3500 K`, `Pa=101325 Pa`, `numberOfCharLines=50`, `wallAngleDeg=30`,
 `lengthFraction=0.8`, `axisymmetric=true`, `throatCurvatureRatio=0.382`,
-`upstreamCurvatureRatio=1.5`, `convergentHalfAngleDeg=30`, `contractionRatio=4.0`.
+`upstreamCurvatureRatio=1.5`, `convergentHalfAngleDeg=30`, `contractionRatio=4.0`,
+`throatWidth=1.0`.
 
 **`throatCurvatureRatio(double ratio)`** — Downstream throat arc radius as a
 multiple of r_t (`r_cd = ratio × r_t`). Valid range `(0, 2.0]`.
@@ -49,6 +51,33 @@ combustion chamber. Valid range `[5°, 60°]`.
 **`contractionRatio(double ratio)`** — Chamber-to-throat area ratio (Ac/At).
 Determines chamber radius: `r_c = r_t × √(contractionRatio)`. Valid range
 `[1.5, 20]`.
+
+**`throatWidth(double w)`** — Span (depth into the page) of a 2-D rectangular
+nozzle in metres. Only used when `axisymmetric` is `false`; silently ignored for
+axisymmetric designs. Physical throat area becomes `2 × throatRadius × throatWidth`;
+all derived quantities (exit area, mass flow, thrust) scale accordingly. Valid
+range: positive; default `1.0` (per-unit-depth convention, preserving backward
+compatibility). The CSV exporter writes `throat_width` only when the geometry
+is planar.
+
+**Planar (2-D rectangular) nozzle example:**
+```
+// Wind-tunnel nozzle: 200 mm × 150 mm test section, Mach 2.5
+NozzleDesignParameters params = NozzleDesignParameters.builder()
+        .throatRadius(0.050)       // half-height at throat: 50 mm
+        .throatWidth(0.150)        // span: 150 mm
+        .exitMach(2.5)
+        .chamberPressure(500_000)  // 500 kPa driver
+        .chamberTemperature(400)
+        .ambientPressure(101_325)
+        .gasProperties(GasProperties.AIR)
+        .axisymmetric(false)       // select 2-D planar MOC
+        .build();
+
+// Throat area = 2 × 0.050 × 0.150 = 15 000 mm²
+System.out.printf("At = %.0f mm²%n", params.throatArea() * 1e6);
+System.out.printf("Ae = %.0f mm²%n", params.exitArea()   * 1e6);
+```
 
 **Derived quantities also added:**
 
@@ -115,7 +144,7 @@ System.out.println(pc.getSpecificImpulse());
 |----------------------------|------------------------------------------------|
 | `exitAreaRatio()`          | A/A* from isentropic area-velocity relation    |
 | `exitRadius()`             | r_throat · √(exitAreaRatio)                    |
-| `throatArea()`             | π·r_throat² (axisymmetric) or 2·r_throat (2-D) |
+| `throatArea()`             | π·r_throat² (axisymmetric) or 2·r_throat·throatWidth (2-D) |
 | `idealExitPressure()`      | Pc · (isentropic pressure ratio at Me)         |
 | `exitTemperature()`        | Tc · (isentropic temperature ratio at Me)      |
 | `exitVelocity()`           | Me · √(γ·R·T_exit)                             |

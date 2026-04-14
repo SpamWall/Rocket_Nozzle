@@ -528,7 +528,7 @@ class NozzleDesignParameters_UT {
     @Nested
     @DisplayName("Planar vs Axisymmetric")
     class PlanarVsAxisymmetricTests {
-        
+
         @Test
         @DisplayName("Axisymmetric should use circular throat area")
         void axisymmetricShouldUseCircularArea() {
@@ -537,11 +537,11 @@ class NozzleDesignParameters_UT {
                     .exitMach(2.0)
                     .axisymmetric(true)
                     .build();
-            
+
             double at = axiParams.throatArea();
             assertThat(at).isCloseTo(Math.PI * 0.1 * 0.1, within(1e-6));
         }
-        
+
         @Test
         @DisplayName("Planar should use 2D throat area")
         void planarShouldUse2DArea() {
@@ -550,9 +550,83 @@ class NozzleDesignParameters_UT {
                     .exitMach(2.0)
                     .axisymmetric(false)
                     .build();
-            
+
             double at = planarParams.throatArea();
             assertThat(at).isCloseTo(2.0 * 0.1, within(1e-6));
+        }
+    }
+
+    @Nested
+    @DisplayName("Throat width (2D planar nozzles)")
+    class ThroatWidthTests {
+
+        @Test
+        @DisplayName("Default throat width is 1.0 m (per-unit-depth convention)")
+        void defaultThroatWidthIsOne() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .exitMach(2.0).planar().build();
+            assertThat(p.throatWidth()).isEqualTo(NozzleDesignParameters.DEFAULT_THROAT_WIDTH);
+        }
+
+        @Test
+        @DisplayName("Builder stores the supplied throat width")
+        void builderStoresThroatWidth() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .exitMach(2.0).planar().throatWidth(0.3).build();
+            assertThat(p.throatWidth()).isCloseTo(0.3, within(1e-12));
+        }
+
+        @Test
+        @DisplayName("throatArea() equals 2 × throatRadius × throatWidth for planar nozzle")
+        void planarThroatAreaUsesWidth() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(2.0).planar().throatWidth(0.4).build();
+            assertThat(p.throatArea()).isCloseTo(2.0 * 0.05 * 0.4, within(1e-12));
+        }
+
+        @Test
+        @DisplayName("throatArea() scales linearly with throatWidth")
+        void throatAreaScalesWithWidth() {
+            NozzleDesignParameters p1 = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(2.0).planar().throatWidth(0.2).build();
+            NozzleDesignParameters p2 = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(2.0).planar().throatWidth(0.4).build();
+            assertThat(p2.throatArea()).isCloseTo(2.0 * p1.throatArea(), within(1e-12));
+        }
+
+        @Test
+        @DisplayName("throatArea() for axisymmetric is unaffected by throatWidth")
+        void axisymmetricIgnoresThroatWidth() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(2.0).axisymmetric(true).throatWidth(0.5).build();
+            assertThat(p.throatArea()).isCloseTo(Math.PI * 0.05 * 0.05, within(1e-12));
+        }
+
+        @Test
+        @DisplayName("Zero throat width throws IllegalArgumentException")
+        void zeroThroatWidthThrows() {
+            assertThatThrownBy(() -> NozzleDesignParameters.builder()
+                    .exitMach(2.0).planar().throatWidth(0.0).build())
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Throat width");
+        }
+
+        @Test
+        @DisplayName("Negative throat width throws IllegalArgumentException")
+        void negativeThroatWidthThrows() {
+            assertThatThrownBy(() -> NozzleDesignParameters.builder()
+                    .exitMach(2.0).planar().throatWidth(-0.1).build())
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Throat width");
+        }
+
+        @Test
+        @DisplayName("exitArea() uses throatWidth via throatArea × exitAreaRatio")
+        void exitAreaUsesWidth() {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(2.0).planar().throatWidth(0.3).build();
+            assertThat(p.exitArea())
+                    .isCloseTo(p.throatArea() * p.exitAreaRatio(), within(1e-12));
         }
     }
 }

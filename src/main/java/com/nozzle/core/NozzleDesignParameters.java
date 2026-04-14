@@ -39,6 +39,11 @@ import jakarta.validation.constraints.Positive;
  * @param wallAngleInitial      Initial wall angle at throat in radians
  * @param lengthFraction        Fractional length compared to 15° cone (Rao parameter)
  * @param axisymmetric          True for axisymmetric nozzle, false for 2D planar
+ * @param throatWidth           Span (depth into the page) of a 2D rectangular nozzle
+ *                              in metres.  Only used when {@code axisymmetric} is
+ *                              {@code false}; ignored for axisymmetric nozzles.
+ *                              Defaults to 1.0 m (per-unit-depth convention).
+ *                              Must be positive.
  * @param throatCurvatureRatio    Downstream throat radius of curvature as a multiple
  *                                of the throat radius (r_cd = ratio × r_t).
  *                                The classical Rao value is 0.382; the valid range
@@ -69,6 +74,7 @@ public record NozzleDesignParameters(
         @Positive double wallAngleInitial,
         @Positive double lengthFraction,
         boolean axisymmetric,
+        @Positive double throatWidth,
         @Positive double throatCurvatureRatio,
         @Positive double upstreamCurvatureRatio,
         @Positive double convergentHalfAngle,
@@ -82,6 +88,12 @@ public record NozzleDesignParameters(
      */
     public static final int DEFAULT_CHAR_LINES = 50;
     
+    /**
+     * Default throat width for 2D planar nozzles (1.0 m = per-unit-depth convention).
+     * Has no effect on axisymmetric nozzles.
+     */
+    public static final double DEFAULT_THROAT_WIDTH = 1.0;
+
     /**
      * Default downstream throat radius-of-curvature ratio (r_cd / r_t).
      * This is the classical Rao value for bell nozzles.
@@ -134,6 +146,10 @@ public record NozzleDesignParameters(
         }
         if (lengthFraction <= 0 || lengthFraction > 1.0) {
             throw new IllegalArgumentException("Length fraction must be between 0 and 1");
+        }
+        if (throatWidth <= 0) {
+            throw new IllegalArgumentException(
+                    "Throat width must be positive; got " + throatWidth);
         }
         if (throatCurvatureRatio <= 0 || throatCurvatureRatio > 2.0) {
             throw new IllegalArgumentException(
@@ -242,7 +258,7 @@ public record NozzleDesignParameters(
         if (axisymmetric) {
             return Math.PI * throatRadius * throatRadius;
         } else {
-            return 2.0 * throatRadius; // Per unit depth for 2D
+            return 2.0 * throatRadius * throatWidth; // height × span
         }
     }
     
@@ -375,6 +391,7 @@ public record NozzleDesignParameters(
         private double wallAngleInitial = Math.toRadians(30.0);
         private double lengthFraction = 0.8;
         private boolean axisymmetric = true;
+        private double throatWidth             = DEFAULT_THROAT_WIDTH;
         private double throatCurvatureRatio    = DEFAULT_THROAT_CURVATURE_RATIO;
         private double upstreamCurvatureRatio  = DEFAULT_UPSTREAM_CURVATURE_RATIO;
         private double convergentHalfAngle     = DEFAULT_CONVERGENT_HALF_ANGLE;
@@ -518,6 +535,24 @@ public record NozzleDesignParameters(
         }
 
         /**
+         * Sets the span (depth into the page) of a 2D rectangular nozzle.
+         * Only meaningful when {@link #axisymmetric(boolean)} is set to
+         * {@code false}; ignored for axisymmetric nozzles.
+         *
+         * <p>Used to compute the physical throat area
+         * {@code At = 2 × throatRadius × throatWidth} and therefore the mass
+         * flow rate and thrust for wind-tunnel or linear-aerospike designs.
+         *
+         * @param throatWidth Span in metres (must be positive); default 1.0 m
+         *                    (per-unit-depth convention)
+         * @return This builder
+         */
+        public Builder throatWidth(double throatWidth) {
+            this.throatWidth = throatWidth;
+            return this;
+        }
+
+        /**
          * Sets the downstream throat radius of curvature as a multiple of the
          * throat radius ({@code r_cd = ratio × r_t}).  Controls how sharply the
          * flow turns through the throat and directly seeds the initial expansion
@@ -612,7 +647,7 @@ public record NozzleDesignParameters(
             return new NozzleDesignParameters(
                     throatRadius, exitMach, chamberPressure, chamberTemperature,
                     ambientPressure, gasProperties, numberOfCharLines,
-                    wallAngleInitial, lengthFraction, axisymmetric,
+                    wallAngleInitial, lengthFraction, axisymmetric, throatWidth,
                     throatCurvatureRatio, upstreamCurvatureRatio,
                     convergentHalfAngle, contractionRatio
             );

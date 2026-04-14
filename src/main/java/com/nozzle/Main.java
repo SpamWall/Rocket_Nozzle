@@ -134,6 +134,7 @@ public class Main {
             demonstrateFullNozzleGeometry(outputDir);
             demonstrateBoundaryLayerFromInjectorFace();
             demonstrateHeatFluxPeakLocation();
+            demonstratePlanarWindTunnelNozzle(outputDir);
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -2531,5 +2532,110 @@ public class Main {
         System.out.println("  rather than finite differences on the contour.  When r_cu < r_cd the");
         System.out.println("  upstream correction factor exceeds the downstream value and the peak");
         System.out.println("  shifts to the convergent side — visible only with calculateFullProfile().");
+    }
+
+    /**
+     * Demonstrates 2-D rectangular (planar) nozzle design using throatWidth.
+     *
+     * <p>A planar nozzle has a rectangular cross-section: the half-height in the
+     * MOC plane is {@code throatRadius} and the span (depth into the page) is
+     * {@code throatWidth}.  Physical throat area is therefore
+     * {@code 2 × throatRadius × throatWidth}.  This geometry is used in:
+     * <ul>
+     *   <li>Supersonic wind tunnels (fixed rectangular test section)</li>
+     *   <li>Linear aerospike segments (each segment is a 2-D slice)</li>
+     *   <li>Scramjet isolator nozzles</li>
+     * </ul>
+     * The 2-D MOC is automatically selected when {@code axisymmetric = false};
+     * the contour shape is the same as the axisymmetric case but the area-ratio
+     * definition changes from circular to rectangular, so the Mach number
+     * distribution along the wall differs slightly.
+     */
+    private static void demonstratePlanarWindTunnelNozzle(Path outputDir) throws Exception {
+        System.out.println("\n--- PLANAR (2-D RECTANGULAR) WIND TUNNEL NOZZLE ---\n");
+
+        // ── Wind tunnel nozzle design ─────────────────────────────────────────
+        // Test section: 200 mm × 150 mm (half-height 100 mm, span 150 mm)
+        // Design Mach: 2.5  |  driver: air at 500 kPa, 400 K
+        // ─────────────────────────────────────────────────────────────────────
+        NozzleDesignParameters params = NozzleDesignParameters.builder()
+                .throatRadius(0.050)               // half-height at throat: 50 mm
+                .throatWidth(0.150)                // span (depth into page): 150 mm
+                .exitMach(2.5)
+                .chamberPressure(500_000)           // 500 kPa driver pressure
+                .chamberTemperature(400)            // 400 K driver temperature
+                .ambientPressure(101_325)
+                .gasProperties(GasProperties.AIR)
+                .numberOfCharLines(30)
+                .wallAngleInitialDegrees(20)
+                .lengthFraction(0.85)
+                .axisymmetric(false)               // 2-D planar geometry
+                .build();
+
+        // ── Geometry ─────────────────────────────────────────────────────────
+        System.out.printf("Throat half-height : %.1f mm%n",
+                params.throatRadius() * 1000);
+        System.out.printf("Throat span        : %.1f mm%n",
+                params.throatWidth() * 1000);
+        System.out.printf("Throat area (rect) : %.0f mm²  (vs π·r² = %.0f mm² axisymmetric)%n",
+                params.throatArea() * 1e6,
+                Math.PI * params.throatRadius() * params.throatRadius() * 1e6);
+        System.out.printf("Exit area ratio    : %.4f%n", params.exitAreaRatio());
+        System.out.printf("Exit half-height   : %.1f mm%n",
+                params.exitRadius() * 1000);
+        System.out.printf("Exit area (rect)   : %.0f mm²%n",
+                params.exitArea() * 1e6);
+
+        // ── Rao-bell contour (2-D MOC) ────────────────────────────────────────
+        NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+        contour.generate(80);
+        System.out.printf("%nContour points     : %d%n", contour.getContourPoints().size());
+        System.out.printf("Nozzle length      : %.1f mm%n", contour.getLength() * 1000);
+
+        // ── Performance ───────────────────────────────────────────────────────
+        System.out.printf("%nIdeal Isp          : %.1f s%n", params.idealSpecificImpulse());
+        System.out.printf("Ideal Cf           : %.4f%n",    params.idealThrustCoefficient());
+        System.out.printf("c*                 : %.1f m/s%n", params.characteristicVelocity());
+
+        // ── Span sensitivity — same half-height, different spans ──────────────
+        System.out.println("\nSpan sensitivity (throat area and exit area vs. span):");
+        System.out.printf("  %-12s  %-14s  %-14s%n", "Span (mm)", "At (mm²)", "Ae (mm²)");
+        for (double spanMm : new double[]{50, 100, 150, 200, 300}) {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .throatRadius(0.050).throatWidth(spanMm / 1000)
+                    .exitMach(2.5).chamberPressure(500_000)
+                    .chamberTemperature(400).ambientPressure(101_325)
+                    .gasProperties(GasProperties.AIR)
+                    .numberOfCharLines(20).wallAngleInitialDegrees(20)
+                    .lengthFraction(0.85).axisymmetric(false).build();
+            System.out.printf("  %-12.0f  %-14.1f  %-14.1f%n",
+                    spanMm, p.throatArea() * 1e6, p.exitArea() * 1e6);
+        }
+
+        // ── Export ────────────────────────────────────────────────────────────
+        // DXF contour profile
+        Path dxfOut = outputDir.resolve("wind_tunnel_nozzle.dxf");
+        new DXFExporter().exportContour(contour, dxfOut);
+        System.out.printf("%nDXF contour        → %s%n", dxfOut.getFileName());
+
+        // CSV design parameters (includes throat_width for planar geometry)
+        Path csvOut = outputDir.resolve("wind_tunnel_params.csv");
+        new CSVExporter().exportDesignParameters(params, csvOut);
+        System.out.printf("CSV parameters     → %s%n", csvOut.getFileName());
+
+        // STL surface mesh
+        Path stlOut = outputDir.resolve("wind_tunnel_nozzle.stl");
+        new STLExporter().exportMesh(contour, stlOut);
+        System.out.printf("STL mesh           → %s%n", stlOut.getFileName());
+
+        // STEP profile curve
+        Path stepOut = outputDir.resolve("wind_tunnel_profile.step");
+        new STEPExporter().exportProfileCurve(contour, stepOut);
+        System.out.printf("STEP profile       → %s%n", stepOut.getFileName());
+
+        System.out.println("\nNote: for a planar nozzle the MOC uses the 2-D irrotationality");
+        System.out.println("  equation (no r-term), giving a slightly different wall contour");
+        System.out.println("  than the equivalent axisymmetric design at the same Mach number.");
+        System.out.println("  Physical throat area = 2 × throatRadius × throatWidth.");
     }
 }
