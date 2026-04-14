@@ -26,8 +26,6 @@ import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
-import com.nozzle.moc.DualBellNozzle;
-import com.nozzle.moc.RaoNozzle;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,7 +73,7 @@ import java.util.List;
  *
  * <h2>Aerospike case</h2>
  * {@link #exportAerospikeCase(AerospikeNozzle, Path)} writes a rhoCentralFoam case
- * for the annular flow domain of an aerospike nozzle.  The mesh spans the gap between
+ * for the annular flow domain of an Aerospike nozzle.  The mesh spans the gap between
  * the spike surface (inner wall) and the cowl (outer wall at r = r_t).  There is no
  * axis patch — both inner and outer boundaries are solid walls.  Boundary patches:
  * <ul>
@@ -254,34 +252,7 @@ public class OpenFOAMExporter {
     }
 
     /**
-     * Convenience overload that exports a complete OpenFOAM case for a Rao bell nozzle.
-     *
-     * @param nozzle  Rao bell nozzle (must have been generated)
-     * @param caseDir Output directory (created if absent)
-     * @throws IOException on any file write failure
-     */
-    public void exportCase(RaoNozzle nozzle, Path caseDir) throws IOException {
-        exportCase(nozzle.getParameters(),
-                NozzleContour.fromPoints(nozzle.getParameters(), nozzle.getContourPoints()),
-                caseDir);
-    }
-
-    /**
-     * Convenience overload that exports a complete OpenFOAM case for a dual-bell nozzle.
-     * The full contour (base bell + extension) is exported.
-     *
-     * @param nozzle  Dual-bell nozzle (must have been generated)
-     * @param caseDir Output directory (created if absent)
-     * @throws IOException on any file write failure
-     */
-    public void exportCase(DualBellNozzle nozzle, Path caseDir) throws IOException {
-        exportCase(nozzle.getParameters(),
-                NozzleContour.fromPoints(nozzle.getParameters(), nozzle.getContourPoints()),
-                caseDir);
-    }
-
-    /**
-     * Writes a complete rhoCentralFoam case for an aerospike nozzle.
+     * Writes a complete rhoCentralFoam case for an Aerospike nozzle.
      *
      * <p>The computational domain is the annular gap between the spike surface (inner
      * wall) and the cowl at {@code r = r_t} (outer wall).  The spike contour is
@@ -314,7 +285,7 @@ public class OpenFOAMExporter {
         double rTip = nozzle.getTruncatedBaseRadius(); // spike tip radius at x = L
         double L    = nozzle.getTruncatedLength();    // axial length of spike
 
-        LOG.debug("Exporting aerospike OpenFOAM case: {} spike pts, rt={} ri={} L={} → {}",
+        LOG.debug("Exporting Aerospike OpenFOAM case: {} spike pts, rt={} ri={} L={} → {}",
                 spike.size(), rt, ri, L, caseDir);
 
         Path system   = caseDir.resolve("system");
@@ -929,7 +900,7 @@ public class OpenFOAMExporter {
     // -------------------------------------------------------------------------
 
     /**
-     * Writes {@code system/blockMeshDict} for the aerospike annular domain.
+     * Writes {@code system/blockMeshDict} for the Aerospike annular domain.
      *
      * <p>Eight vertices form a single hex block spanning the annular gap from the
      * spike surface (inner, r = ri at inlet, r = rTip at outlet) to the cowl
@@ -1044,7 +1015,7 @@ public class OpenFOAMExporter {
     // -------------------------------------------------------------------------
 
     /**
-     * Writes {@code 0/p} for the aerospike case.  Same inlet/outlet conditions as
+     * Writes {@code 0/p} for the Aerospike case.  Same inlet/outlet conditions as
      * the bell-nozzle pressure field; wall patches ({@code spike}, {@code cowl}) use
      * {@code zeroGradient} in place of the single {@code wall} patch; no {@code axis}
      * patch.
@@ -1090,7 +1061,7 @@ public class OpenFOAMExporter {
     }
 
     /**
-     * Writes {@code 0/T} for the aerospike case.  Both spike and cowl walls use
+     * Writes {@code 0/T} for the Aerospike case.  Both spike and cowl walls use
      * adiabatic ({@code zeroGradient}) conditions; no {@code axis} patch.
      *
      * @param params Nozzle design parameters providing chamber temperature and γ
@@ -1129,7 +1100,7 @@ public class OpenFOAMExporter {
     }
 
     /**
-     * Writes {@code 0/U} for the aerospike case.  Both spike and cowl walls use
+     * Writes {@code 0/U} for the Aerospike case.  Both spike and cowl walls use
      * {@code noSlip}; no {@code axis} patch.
      *
      * @param file Destination file path
@@ -1160,7 +1131,7 @@ public class OpenFOAMExporter {
     }
 
     /**
-     * Writes {@code 0/k} for the aerospike case.  Both spike and cowl walls use
+     * Writes {@code 0/k} for the Aerospike case.  Both spike and cowl walls use
      * {@code kqRWallFunction}; no {@code axis} patch.
      *
      * @param params Nozzle design parameters providing gas and chamber conditions
@@ -1194,7 +1165,7 @@ public class OpenFOAMExporter {
     }
 
     /**
-     * Writes {@code 0/omega} for the aerospike case.  The mixing-length estimate uses
+     * Writes {@code 0/omega} for the Aerospike case.  The mixing-length estimate uses
      * 7% of the annular gap width ({@code l_t = 0.07 · (r_t − r_i)}).  Both spike
      * and cowl walls use {@code omegaWallFunction}; no {@code axis} patch.
      *

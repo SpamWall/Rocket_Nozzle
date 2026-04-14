@@ -107,7 +107,7 @@ internal wall from injector face (x < 0) to nozzle exit (x > 0).
 
 DXF exports for dual-bell nozzles include a `KINK` layer marking the inflection
 point (POINT entity + vertical drop-line to the axis).  CSV dual-bell reports
-label each contour row as `BASE` or `EXTENSION`.  The aerospike and dual-bell
+label each contour row as `BASE` or `EXTENSION`.  The Aerospike and dual-bell
 STEP exports include both a revolved solid and a profile B-spline curve.
 
 ---
@@ -173,9 +173,17 @@ System.out.printf("Exit A/A*  : %.4f%n", net.calculateExitAreaRatio());
 NozzleContour contour = NozzleContour.fromMOCWallPoints(params, net.getWallPoints());
 contour.generate(200);   // 200 discrete points along the wall
 
-// Or use the Rao bell approximation
+// Rao optimum bell approximation
 NozzleContour raoContour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
 raoContour.generate(200);
+
+// Truncated Ideal Contour (TIC) — truncation fraction set by lengthFraction
+NozzleContour ticContour = new NozzleContour(NozzleContour.ContourType.TRUNCATED_IDEAL, params);
+ticContour.generate(200);
+
+// Conical nozzle
+NozzleContour conical = new NozzleContour(NozzleContour.ContourType.CONICAL, params);
+conical.generate(200);
 ```
 
 ### 4. Calculate performance
@@ -274,6 +282,71 @@ System.out.printf("High-altitude Isp: %.1f s%n",  s.highAltitudeIsp());
 System.out.printf("Isp gain         : %.1f s%n",  s.ispGain());
 System.out.printf("Transition at    : %.0f Pa%n",  s.transitionPressure());
 ```
+
+---
+
+## Ablative Liner
+
+`AblativeNozzleModel` computes Arrhenius char recession and optional mechanical
+erosion for five liner material families. Build a heat-transfer profile first,
+then run the ablative model.
+
+```
+NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+contour.generate(60);
+
+List<HeatTransferModel.WallThermalPoint> heatProfile =
+        new HeatTransferModel(params, contour)
+                .setWallProperties(1.0, 0.020)    // carbon-phenolic: k, liner thickness
+                .setCoolantProperties(300.0, 0.0) // no active cooling
+                .calculate(List.of())
+                .getWallThermalProfile();
+
+AblativeNozzleModel ablative = new AblativeNozzleModel(params, contour)
+        .setMaterial(AblativeNozzleModel.AblativeMaterial.CARBON_PHENOLIC)
+        .setInitialLinerThickness(0.020)  // 20 mm
+        .setBurnTime(10.0)                // seconds
+        .setErosionFactor(1e-5)           // mechanical erosion coefficient, m/s
+        .calculate(heatProfile);
+
+System.out.printf("Max recession    : %.4f mm%n", ablative.getMaxRecessionDepth() * 1000);
+System.out.printf("Min remaining    : %.4f mm%n", ablative.getMinRemainingThickness() * 1000);
+System.out.printf("Total ablated mass: %.4f kg%n", ablative.getTotalAblatedMass());
+System.out.printf("Perforated anywhere: %s%n",    ablative.isPerforatedAnywhere());
+```
+
+Available materials: `CARBON_PHENOLIC`, `SILICA_PHENOLIC`, `EPDM`, `GRAPHITE`,
+`CARBON_CARBON`.  The `AblativeMaterial` enum exposes `charRateAt(T)` for quick
+Arrhenius evaluation without running a full model.
+
+---
+
+## Radiation-Cooled Extension
+
+`RadiationCooledExtension` balances convective heat input against surface
+radiation to find the equilibrium wall temperature of a high-emissivity nozzle
+extension.
+
+```
+// LOX/LH2 upper-stage engine — bell regeneratively cooled to x_start;
+// extension is radiation-cooled from x_start to exit.
+double extensionStartX = contour.getLength() * 0.30;  // 30 % of bell length
+
+RadiationCooledExtension rad = new RadiationCooledExtension(params, contour)
+        .setMaterial(RadiationCooledExtension.ExtensionMaterial.NIOBIUM_C103)
+        .setExtensionStartX(extensionStartX)
+        .setEnvironmentTemperature(3.0)   // deep-space (K)
+        .calculate(List.of());
+
+System.out.printf("Max wall temperature : %.0f K%n",  rad.getMaxWallTemperature());
+System.out.printf("Temperature margin   : %.0f K%n",  rad.getMinTemperatureMargin());
+System.out.printf("Total radiated power : %.2f kW%n", rad.getTotalRadiatedPower() / 1000);
+System.out.printf("Overtemperature      : %s%n",      rad.isOvertemperatureAnywhere());
+```
+
+Available materials: `NIOBIUM_C103`, `RHENIUM_IRIDIUM`, `TITANIUM_6AL_4V`,
+`CARBON_CARBON`. Each material records an emissivity and a temperature limit;
+`isOvertemperatureAnywhere()` flags if any station exceeds that limit.
 
 ---
 
@@ -413,16 +486,23 @@ System.out.printf("Peak wall temp : %.0f K%n",    peak.wallTemperature());
 // Regenerative coolant channel
 CoolantChannel channel = new CoolantChannel(contour)
         .setChannelGeometry(120, 0.003, 0.005, 0.001)
+        .setWallConductivity(20.0)
         .setCoolant(CoolantChannel.CoolantProperties.RP1, 2.0, 300.0, 8.5e6)
         .calculate();
 
+channel.calculate(htr.getWallThermalProfile());  // thermal analysis
+System.out.printf("Coolant temp rise    : %.1f K%n", channel.getCoolantTemperatureRise());
+System.out.printf("Min boiling margin   : %.1f K%n", channel.getMinBoilingMargin());
+
 // Thermal stress and fatigue
-ThermalStressAnalysis stress = new ThermalStressAnalysis(params, htr,
-        ThermalStressAnalysis.Material.CU_CR_ZR).calculate();
+ThermalStressAnalysis stress = new ThermalStressAnalysis(
+        params, htr.getWallThermalProfile(),
+        ThermalStressAnalysis.Material.COPPER_ALLOY_CuCrZr, 0.003, 320.0).calculate();
 
 System.out.printf("Peak von Mises stress: %.1f MPa%n",
-        stress.getPeakVonMisesStress() / 1e6);
-System.out.printf("Fatigue life         : %.0f cycles%n", stress.getFatigueLife());
+        stress.getMaxVonMisesStress() / 1e6);
+System.out.printf("Min safety factor    : %.2f%n",   stress.getMinSafetyFactor());
+System.out.printf("Min fatigue life     : %.0f cycles%n", stress.getMinFatigueCycles());
 ```
 
 ---
@@ -460,7 +540,7 @@ STEPExporter step = new STEPExporter().setScaleFactor(1000).setAuthor("Me");
 
 step.exportRevolvedSolid(contour,  Path.of("nozzle.step"));      // divergent only
 step.exportRevolvedSolid(fullGeom, Path.of("nozzle_full.step")); // full nozzle
-step.exportProfileCurve(fullGeom,  Path.of("profile_full.step")); // curve only
+step.exportProfileCurve(contour,   Path.of("profile.step"));     // profile curve
 ```
 
 ### STL (3D revolved mesh)
@@ -472,13 +552,22 @@ stl.exportMesh(fullGeom, Path.of("nozzle_full.stl")); // full nozzle
 ```
 
 ### CFD mesh files (2D axisymmetric)
+
+`setFirstLayerThickness(y₁)` enables y⁺-controlled wall-normal grading.
+When set, the first cell height is fixed at `y₁` and the expansion ratio is
+derived automatically per format (`g = H/y₁` for OpenFOAM blockMesh,
+`r = (H/y₁)^(1/N)` for Gmsh, where H is the exit radius or annular gap).
+Omit it to use a fixed `expansionRatio` instead.
+
 ```
 CFDMeshExporter cfd = new CFDMeshExporter()
         .setAxialCells(200).setRadialCells(80).setFirstLayerThickness(1e-5);
 
-// Divergent only
+// Divergent only — all four formats
 cfd.export(contour, Path.of("blockMeshDict"), CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
 cfd.export(contour, Path.of("nozzle.geo"),    CFDMeshExporter.Format.GMSH_GEO);
+cfd.export(contour, Path.of("nozzle.xyz"),    CFDMeshExporter.Format.PLOT3D);
+cfd.export(contour, Path.of("nozzle.cgns"),   CFDMeshExporter.Format.CGNS);
 
 // Geometry-complete (convergent + divergent — captures the transonic throat)
 cfd.export(fullGeom, Path.of("blockMeshDict_full"), CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);

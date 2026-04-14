@@ -304,7 +304,7 @@ public class CharacteristicNet {
      * downstream when the upstream geometry is tightly curved.
      *
      * <p>At the axis ({@code r = 0}) this correctly returns zero (the sonic point
-     * is always at the geometric throat on the centreline).  Near the wall
+     * is always at the geometric throat on the centerline).  Near the wall
      * ({@code r = r_t}) the displacement grows as the square of the throat
      * radius and inversely with the curvature radii.
      *

@@ -858,11 +858,12 @@ public class Main {
         dxfExporter.exportFullNozzleRevolutionProfile(fullGeom, outputDir.resolve("nozzle_full_rev.dxf"));
         System.out.println("Exported DXF files (divergent + geometry-complete)");
 
-        // STEP Export — divergent only and geometry-complete
+        // STEP Export — revolved solid and profile curve
         STEPExporter stepExporter = new STEPExporter();
-        stepExporter.exportRevolvedSolid(contour, outputDir.resolve("nozzle.step"));
+        stepExporter.exportRevolvedSolid(contour,  outputDir.resolve("nozzle.step"));
         stepExporter.exportRevolvedSolid(fullGeom, outputDir.resolve("nozzle_full.step"));
-        System.out.println("Exported STEP files (divergent + geometry-complete)");
+        stepExporter.exportProfileCurve(contour,   outputDir.resolve("nozzle_profile.step"));
+        System.out.println("Exported STEP files (revolved solid + profile curve)");
 
         // STL Export — divergent only and geometry-complete
         STLExporter stlExporter = new STLExporter()
@@ -890,10 +891,11 @@ public class Main {
                 CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
         cfdExporter.export(fullGeom, outputDir.resolve("blockMeshDict_full"),
                 CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
-        cfdExporter.export(contour, outputDir.resolve("nozzle.geo"), CFDMeshExporter.Format.GMSH_GEO);
-        cfdExporter.export(fullGeom, outputDir.resolve("nozzle_full.geo"),
-                CFDMeshExporter.Format.GMSH_GEO);
-        System.out.println("Exported CFD mesh files (divergent + geometry-complete)");
+        cfdExporter.export(contour,  outputDir.resolve("nozzle.geo"),  CFDMeshExporter.Format.GMSH_GEO);
+        cfdExporter.export(fullGeom, outputDir.resolve("nozzle_full.geo"), CFDMeshExporter.Format.GMSH_GEO);
+        cfdExporter.export(contour,  outputDir.resolve("nozzle.xyz"),  CFDMeshExporter.Format.PLOT3D);
+        cfdExporter.export(contour,  outputDir.resolve("nozzle.cgns"), CFDMeshExporter.Format.CGNS);
+        System.out.println("Exported CFD mesh files (OpenFOAM, Gmsh, Plot3D, CGNS)");
 
         // OpenFOAM complete case export — divergent only and geometry-complete
         Path foamCase     = outputDir.resolve("openfoam_case");

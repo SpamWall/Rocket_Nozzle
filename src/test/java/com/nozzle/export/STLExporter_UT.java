@@ -22,8 +22,10 @@ package com.nozzle.export;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
+import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.moc.AerospikeNozzle;
+import com.nozzle.moc.DualBellNozzle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -124,20 +126,6 @@ class STLExporter_UT {
         }
 
         @Test
-        @DisplayName("exportInnerSurfaceMesh should produce an identical file to exportMesh")
-        void exportInnerSurfaceMeshDelegatesToExportMesh() throws IOException {
-            Path outMesh  = tempDir.resolve("mesh.stl");
-            Path outInner = tempDir.resolve("inner.stl");
-
-            new STLExporter().setCircumferentialSegments(6).setBinaryFormat(false)
-                    .exportMesh(contour, outMesh);
-            new STLExporter().setCircumferentialSegments(6).setBinaryFormat(false)
-                    .exportInnerSurfaceMesh(contour, outInner);
-
-            assertThat(Files.readString(outInner)).isEqualTo(Files.readString(outMesh));
-        }
-
-        @Test
         @DisplayName("Contour with on-axis profile points skips both end caps and produces degenerate normals")
         void tinyThroatCoversNoCapsAndDegenerateNormal() throws IOException {
             // throatRadius = 1e-8 m → firstPoint.y() ≈ 1e-8 < 1e-6 (no start cap)
@@ -165,6 +153,237 @@ class STLExporter_UT {
 
             assertThat(out).exists();
             assertThat(Files.readString(out)).contains("solid").contains("endsolid");
+        }
+    }
+
+    @Nested
+    @DisplayName("exportMesh(NozzleContour) — deep format tests")
+    class ExportMeshContourTests {
+
+        @Test
+        @DisplayName("Binary file size equals 84 + triangleCount × 50 bytes")
+        void binaryFileSizeMatchesFormula() throws IOException {
+            int segments = 36;
+            Path out = tempDir.resolve("mesh_size.stl");
+            new STLExporter().setCircumferentialSegments(segments).setBinaryFormat(true)
+                    .exportMesh(contour, out);
+
+            // estimateTriangleCount includes both end caps (both endpoints have r > 1µm)
+            int expected = new STLExporter().setCircumferentialSegments(segments)
+                    .estimateTriangleCount(contour.getContourPoints().size());
+            assertThat(Files.size(out)).isEqualTo(84L + (long) expected * 50);
+        }
+
+        @Test
+        @DisplayName("ASCII facet count equals estimateTriangleCount")
+        void asciiFacetCountMatchesEstimate() throws IOException {
+            int segments = 24;
+            Path out = tempDir.resolve("mesh_facets.stl");
+            new STLExporter().setCircumferentialSegments(segments).setBinaryFormat(false)
+                    .exportMesh(contour, out);
+
+            int expected = new STLExporter().setCircumferentialSegments(segments)
+                    .estimateTriangleCount(contour.getContourPoints().size());
+            long actual = Files.readString(out).lines()
+                    .filter(l -> l.contains("facet normal")).count();
+            assertThat(actual).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("More circumferential segments produce a larger file")
+        void moreSegmentsProduceLargerFile() throws IOException {
+            Path coarse = tempDir.resolve("mesh_coarse.stl");
+            Path fine   = tempDir.resolve("mesh_fine.stl");
+
+            new STLExporter().setCircumferentialSegments(12).setBinaryFormat(true)
+                    .exportMesh(contour, coarse);
+            new STLExporter().setCircumferentialSegments(48).setBinaryFormat(true)
+                    .exportMesh(contour, fine);
+
+            assertThat(Files.size(fine)).isGreaterThan(Files.size(coarse));
+        }
+
+        @Test
+        @DisplayName("ASCII output starts with 'solid nozzle' and ends with 'endsolid nozzle'")
+        void asciiHasCorrectSolidDelimiters() throws IOException {
+            Path out = tempDir.resolve("mesh_delimiters.stl");
+            new STLExporter().setBinaryFormat(false).exportMesh(contour, out);
+
+            String content = Files.readString(out);
+            assertThat(content).startsWith("solid nozzle");
+            assertThat(content.stripTrailing()).endsWith("endsolid nozzle");
+        }
+
+        @Test
+        @DisplayName("ASCII each facet has outer loop with exactly three vertex lines")
+        void asciiEachFacetHasThreeVertices() throws IOException {
+            Path out = tempDir.resolve("mesh_vertices.stl");
+            new STLExporter().setCircumferentialSegments(6).setBinaryFormat(false)
+                    .exportMesh(contour, out);
+
+            String content = Files.readString(out);
+            long facets   = content.lines().filter(l -> l.contains("facet normal")).count();
+            long vertices = content.lines().filter(l -> l.trim().startsWith("vertex")).count();
+            assertThat(vertices).isEqualTo(facets * 3);
+        }
+    }
+
+    @Nested
+    @DisplayName("exportMesh(FullNozzleGeometry) Tests")
+    class ExportMeshFullGeometryTests {
+
+        private FullNozzleGeometry fullGeometry;
+
+        @BeforeEach
+        void setUpFullGeometry() {
+            fullGeometry = new FullNozzleGeometry(params).generate();
+        }
+
+        @Test
+        @DisplayName("Binary produces a non-trivial file")
+        void binaryProducesNonTrivialFile() throws IOException {
+            Path out = tempDir.resolve("full_mesh.stl");
+            new STLExporter().setCircumferentialSegments(12).setBinaryFormat(true)
+                    .exportMesh(fullGeometry, out);
+
+            // At minimum: 80-byte header + 4-byte count + at least one triangle record
+            assertThat(Files.size(out)).isGreaterThan(84L);
+        }
+
+        @Test
+        @DisplayName("ASCII has correct STL structure")
+        void asciiHasCorrectStructure() throws IOException {
+            Path out = tempDir.resolve("full_mesh_ascii.stl");
+            new STLExporter().setCircumferentialSegments(12).setBinaryFormat(false)
+                    .exportMesh(fullGeometry, out);
+
+            String content = Files.readString(out);
+            assertThat(content).contains("solid nozzle");
+            assertThat(content).contains("facet normal");
+            assertThat(content).contains("outer loop");
+            assertThat(content).contains("endsolid nozzle");
+        }
+
+        @Test
+        @DisplayName("Throws IllegalStateException when FullNozzleGeometry has not been generated")
+        void throwsWhenNotGenerated() {
+            FullNozzleGeometry ungenerated = new FullNozzleGeometry(params);
+            Path out = tempDir.resolve("full_mesh_empty.stl");
+            assertThatThrownBy(() -> new STLExporter().exportMesh(ungenerated, out))
+                    .isInstanceOf(IllegalStateException.class);
+        }
+
+        @Test
+        @DisplayName("Produces more triangles than the divergent-only contour")
+        void moreTrianglesThanDivergentOnly() throws IOException {
+            int segments = 12;
+            Path fullOut      = tempDir.resolve("full_mesh_count.stl");
+            Path divergentOut = tempDir.resolve("div_mesh_count.stl");
+
+            new STLExporter().setCircumferentialSegments(segments).setBinaryFormat(true)
+                    .exportMesh(fullGeometry, fullOut);
+            new STLExporter().setCircumferentialSegments(segments).setBinaryFormat(true)
+                    .exportMesh(contour, divergentOut);
+
+            assertThat(Files.size(fullOut)).isGreaterThan(Files.size(divergentOut));
+        }
+
+        @Test
+        @DisplayName("ASCII facet count equals estimateTriangleCount for the full wall")
+        void facetCountMatchesEstimate() throws IOException {
+            int segments = 18;
+            Path out = tempDir.resolve("full_mesh_facets.stl");
+            new STLExporter().setCircumferentialSegments(segments).setBinaryFormat(false)
+                    .exportMesh(fullGeometry, out);
+
+            int expected = new STLExporter().setCircumferentialSegments(segments)
+                    .estimateTriangleCount(fullGeometry.getWallPoints().size());
+            long actual = Files.readString(out).lines()
+                    .filter(l -> l.contains("facet normal")).count();
+            assertThat(actual).isEqualTo(expected);
+        }
+    }
+
+    @Nested
+    @DisplayName("exportMesh(DualBellNozzle) Tests")
+    class ExportMeshDualBellTests {
+
+        private DualBellNozzle nozzle;
+
+        @BeforeEach
+        void setUpDualBell() {
+            nozzle = new DualBellNozzle(params, 2.0).generate();
+        }
+
+        @Test
+        @DisplayName("Binary produces a non-trivial file")
+        void binaryProducesNonTrivialFile() throws IOException {
+            Path out = tempDir.resolve("dualbell_mesh.stl");
+            new STLExporter().setCircumferentialSegments(12).setBinaryFormat(true)
+                    .exportMesh(nozzle, out);
+
+            assertThat(Files.size(out)).isGreaterThan(84L);
+        }
+
+        @Test
+        @DisplayName("ASCII has correct STL structure")
+        void asciiHasCorrectStructure() throws IOException {
+            Path out = tempDir.resolve("dualbell_mesh_ascii.stl");
+            new STLExporter().setCircumferentialSegments(12).setBinaryFormat(false)
+                    .exportMesh(nozzle, out);
+
+            String content = Files.readString(out);
+            assertThat(content).contains("solid nozzle");
+            assertThat(content).contains("facet normal");
+            assertThat(content).contains("endsolid nozzle");
+        }
+
+        @Test
+        @DisplayName("ASCII facet count equals estimateTriangleCount for the dual-bell contour")
+        void facetCountMatchesEstimate() throws IOException {
+            int segments = 18;
+            Path out = tempDir.resolve("dualbell_mesh_facets.stl");
+            new STLExporter().setCircumferentialSegments(segments).setBinaryFormat(false)
+                    .exportMesh(nozzle, out);
+
+            int expected = new STLExporter().setCircumferentialSegments(segments)
+                    .estimateTriangleCount(nozzle.getContourPoints().size());
+            long actual = Files.readString(out).lines()
+                    .filter(l -> l.contains("facet normal")).count();
+            assertThat(actual).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("More circumferential segments produce a larger file")
+        void moreSegmentsProduceLargerFile() throws IOException {
+            Path coarse = tempDir.resolve("dualbell_coarse.stl");
+            Path fine   = tempDir.resolve("dualbell_fine.stl");
+
+            new STLExporter().setCircumferentialSegments(12).setBinaryFormat(true)
+                    .exportMesh(nozzle, coarse);
+            new STLExporter().setCircumferentialSegments(48).setBinaryFormat(true)
+                    .exportMesh(nozzle, fine);
+
+            assertThat(Files.size(fine)).isGreaterThan(Files.size(coarse));
+        }
+
+        @Test
+        @DisplayName("DualBell output size matches equivalent NozzleContour for same point count")
+        void outputSizeMatchesEquivalentContour() throws IOException {
+            int segments = 12;
+            NozzleContour fromNozzle = NozzleContour.fromPoints(
+                    nozzle.getParameters(), nozzle.getContourPoints());
+
+            Path dualBellOut = tempDir.resolve("db_equiv_db.stl");
+            Path contourOut  = tempDir.resolve("db_equiv_c.stl");
+
+            new STLExporter().setCircumferentialSegments(segments).setBinaryFormat(true)
+                    .exportMesh(nozzle, dualBellOut);
+            new STLExporter().setCircumferentialSegments(segments).setBinaryFormat(true)
+                    .exportMesh(fromNozzle, contourOut);
+
+            // Both call generateTriangles with the same number of profile points
+            assertThat(Files.size(dualBellOut)).isEqualTo(Files.size(contourOut));
         }
     }
 

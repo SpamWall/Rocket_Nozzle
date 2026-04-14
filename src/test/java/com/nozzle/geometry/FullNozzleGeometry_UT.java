@@ -213,6 +213,45 @@ class FullNozzleGeometry_UT {
         assertThat(new FullNozzleGeometry(params).getChamberFaceX()).isEqualTo(0.0);
     }
 
+    @Test
+    void exitXZeroBeforeGenerate() {
+        assertThat(new FullNozzleGeometry(params).getExitX()).isEqualTo(0.0);
+    }
+
+    @Test
+    void chamberFaceXMatchesFirstWallPoint() {
+        FullNozzleGeometry geom = new FullNozzleGeometry(params).generate();
+        assertThat(geom.getChamberFaceX())
+                .isEqualTo(geom.getWallPoints().getFirst().x());
+    }
+
+    @Test
+    void exitXMatchesLastWallPoint() {
+        FullNozzleGeometry geom = new FullNozzleGeometry(params).generate();
+        assertThat(geom.getExitX())
+                .isEqualTo(geom.getWallPoints().getLast().x());
+    }
+
+    @Test
+    void exitXEqualsDivergentLength() {
+        FullNozzleGeometry geom = new FullNozzleGeometry(params).generate();
+        assertThat(geom.getExitX()).isCloseTo(geom.getDivergentLength(), within(1e-12));
+    }
+
+    @Test
+    void chamberFaceXMagnitudeEqualsConvergentLength() {
+        FullNozzleGeometry geom = new FullNozzleGeometry(params).generate();
+        assertThat(-geom.getChamberFaceX())
+                .isCloseTo(geom.getConvergentLength(), within(geom.getConvergentLength() * 1e-6));
+    }
+
+    @Test
+    void exitXMinusChamberFaceXEqualsTotalLength() {
+        FullNozzleGeometry geom = new FullNozzleGeometry(params).generate();
+        double span = geom.getExitX() - geom.getChamberFaceX();
+        assertThat(span).isCloseTo(geom.getTotalLength(), within(geom.getTotalLength() * 1e-12));
+    }
+
     // ── toString ─────────────────────────────────────────────────────────────
 
     @Test

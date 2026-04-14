@@ -25,7 +25,6 @@ import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.DualBellNozzle;
-import com.nozzle.moc.RaoNozzle;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -315,22 +314,6 @@ public class STEPExporter {
     }
 
     /**
-     * Convenience overload that exports a Rao bell nozzle as a STEP revolved solid.
-     *
-     * @param nozzle   Rao bell nozzle (must have been generated)
-     * @param filePath Destination STEP file path
-     * @throws IllegalArgumentException if the nozzle has not been generated
-     * @throws IOException              if the file cannot be written
-     */
-    public void exportRevolvedSolid(RaoNozzle nozzle, Path filePath) throws IOException {
-        List<Point2D> pts = nozzle.getContourPoints();
-        if (pts.size() < 2) {
-            throw new IllegalArgumentException("RaoNozzle has no contour — call generate() first");
-        }
-        exportRevolvedSolid(NozzleContour.fromPoints(nozzle.getParameters(), pts), filePath);
-    }
-
-    /**
      * Convenience overload that exports a dual-bell nozzle (base bell + extension) as
      * a STEP revolved solid.  The full contour including the kink transition is exported.
      *
@@ -345,52 +328,6 @@ public class STEPExporter {
             throw new IllegalArgumentException("DualBellNozzle has no contour — call generate() first");
         }
         exportRevolvedSolid(NozzleContour.fromPoints(nozzle.getParameters(), pts), filePath);
-    }
-
-    /**
-     * Exports the complete nozzle profile curve (convergent + divergent) to STEP
-     * format as a B-spline curve.  Equivalent to
-     * {@link #exportProfileCurve(NozzleContour, Path)} but uses the geometry-complete
-     * wall-point list from {@link FullNozzleGeometry}.
-     *
-     * @param fullGeometry Full nozzle geometry (must have been generated)
-     * @param filePath     Destination STEP file path
-     * @throws IllegalStateException If {@code fullGeometry} has not been generated
-     * @throws IOException           If the file cannot be written
-     */
-    public void exportProfileCurve(FullNozzleGeometry fullGeometry, Path filePath)
-            throws IOException {
-        List<Point2D> points = fullGeometry.getWallPoints();
-        if (points.isEmpty()) {
-            throw new IllegalStateException(
-                    "FullNozzleGeometry has no wall points — call generate() first");
-        }
-        LOG.debug("Exporting geometry-complete STEP profile curve: {} wall points → {}",
-                points.size(), filePath);
-        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
-            writeHeader(writer);
-            writer.write("DATA;\n");
-            int entityId = 1;
-            List<Integer> pointIds = new ArrayList<>();
-            for (Point2D point : points) {
-                writer.write(String.format("#%d=CARTESIAN_POINT('',(%.8f,%.8f,0.0));\n",
-                        entityId, point.x() * scaleFactor, point.y() * scaleFactor));
-                pointIds.add(entityId);
-                entityId++;
-            }
-            StringBuilder ctrlPts = new StringBuilder();
-            for (int i = 0; i < pointIds.size(); i++) {
-                if (i > 0) ctrlPts.append(",");
-                ctrlPts.append("#").append(pointIds.get(i));
-            }
-            int degree = Math.min(3, pointIds.size() - 1);
-            writer.write(String.format(
-                    "#%d=B_SPLINE_CURVE_WITH_KNOTS('Profile',%d,(%s),.UNSPECIFIED.,.F.,.F.,(),(),.UNSPECIFIED.);\n",
-                    entityId, degree, ctrlPts));
-            writer.write("ENDSEC;\n");
-            writeFooter(writer);
-        }
-        LOG.debug("Geometry-complete STEP profile curve export complete → {}", filePath);
     }
 
     /**
@@ -437,62 +374,6 @@ public class STEPExporter {
             writer.write("ENDSEC;\n");
             writeFooter(writer);
         }
-    }
-
-    /**
-     * Exports the truncated aerospike spike profile as a STEP B-spline curve.
-     * The spike contour is exported in the r-x plane (y = 0 for the z-coordinate).
-     *
-     * @param nozzle   Aerospike nozzle (must have been generated)
-     * @param filePath Destination STEP file path
-     * @throws IllegalArgumentException if the nozzle has not been generated
-     * @throws IOException              if the file cannot be written
-     */
-    public void exportProfileCurve(AerospikeNozzle nozzle, Path filePath) throws IOException {
-        List<Point2D> points = nozzle.getTruncatedSpikeContour();
-        if (points.isEmpty()) {
-            throw new IllegalArgumentException("AerospikeNozzle has no contour — call generate() first");
-        }
-        LOG.debug("Exporting Aerospike STEP profile curve: {} spike points → {}", points.size(), filePath);
-        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
-            writeHeader(writer);
-            writer.write("DATA;\n");
-            int entityId = 1;
-            List<Integer> pointIds = new ArrayList<>();
-            for (Point2D point : points) {
-                writer.write(String.format("#%d=CARTESIAN_POINT('',(%.8f,%.8f,0.0));\n",
-                        entityId, point.x() * scaleFactor, point.y() * scaleFactor));
-                pointIds.add(entityId++);
-            }
-            StringBuilder ctrlPts = new StringBuilder();
-            for (int i = 0; i < pointIds.size(); i++) {
-                if (i > 0) ctrlPts.append(",");
-                ctrlPts.append("#").append(pointIds.get(i));
-            }
-            int degree = Math.min(3, pointIds.size() - 1);
-            writer.write(String.format(
-                    "#%d=B_SPLINE_CURVE_WITH_KNOTS('SpikeProfile',%d,(%s),.UNSPECIFIED.,.F.,.F.,(),(),.UNSPECIFIED.);\n",
-                    entityId, degree, ctrlPts));
-            writer.write("ENDSEC;\n");
-            writeFooter(writer);
-        }
-        LOG.debug("Aerospike STEP profile curve export complete → {}", filePath);
-    }
-
-    /**
-     * Convenience overload that exports a Rao bell nozzle wall profile as a STEP B-spline curve.
-     *
-     * @param nozzle   Rao bell nozzle (must have been generated)
-     * @param filePath Destination STEP file path
-     * @throws IllegalArgumentException if the nozzle has not been generated
-     * @throws IOException              if the file cannot be written
-     */
-    public void exportProfileCurve(RaoNozzle nozzle, Path filePath) throws IOException {
-        List<Point2D> pts = nozzle.getContourPoints();
-        if (pts.size() < 2) {
-            throw new IllegalArgumentException("RaoNozzle has no contour — call generate() first");
-        }
-        exportProfileCurve(NozzleContour.fromPoints(nozzle.getParameters(), pts), filePath);
     }
 
     /**

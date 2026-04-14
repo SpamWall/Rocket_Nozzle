@@ -26,7 +26,6 @@ import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.DualBellNozzle;
-import com.nozzle.moc.RaoNozzle;
 import com.nozzle.moc.CharacteristicPoint;
 
 import org.slf4j.Logger;
@@ -407,23 +406,6 @@ public class DXFExporter {
     }
 
     /**
-     * Convenience overload that exports a Rao bell nozzle contour as a DXF file
-     * (wall POLYLINE + axis LINE).
-     *
-     * @param nozzle   Rao bell nozzle (must have been generated)
-     * @param filePath Destination DXF file path
-     * @throws IllegalArgumentException if the nozzle has not been generated
-     * @throws IOException              if the file cannot be written
-     */
-    public void exportContour(RaoNozzle nozzle, Path filePath) throws IOException {
-        List<Point2D> pts = nozzle.getContourPoints();
-        if (pts.isEmpty()) {
-            throw new IllegalArgumentException("RaoNozzle has no contour — call generate() first");
-        }
-        exportContour(NozzleContour.fromPoints(nozzle.getParameters(), pts), filePath);
-    }
-
-    /**
      * Exports a dual-bell nozzle contour as a DXF file.
      *
      * <p>Three DXF layers are written:
@@ -446,7 +428,7 @@ public class DXFExporter {
             throw new IllegalArgumentException("DualBellNozzle has no contour — call generate() first");
         }
         Point2D kink = pts.get(nozzle.getKinkIndex());
-        LOG.debug("Exporting DXF dual-bell contour: {} points, kink at ({:.4f},{:.4f}) → {}",
+        LOG.debug("Exporting DXF dual-bell contour: {} points, kink at ({},{}) → {}",
                 pts.size(), kink.x(), kink.y(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(DXF_HEADER);
@@ -458,23 +440,6 @@ public class DXFExporter {
             writer.write(DXF_FOOTER);
         }
         LOG.debug("DXF dual-bell contour export complete → {}", filePath);
-    }
-
-    /**
-     * Convenience overload that exports a closed revolution-profile cross-section for
-     * a Rao bell nozzle.  Equivalent to {@link #exportRevolutionProfile(NozzleContour, Path)}.
-     *
-     * @param nozzle   Rao bell nozzle (must have been generated)
-     * @param filePath Destination DXF file path
-     * @throws IllegalArgumentException if the nozzle has not been generated
-     * @throws IOException              if the file cannot be written
-     */
-    public void exportRevolutionProfile(RaoNozzle nozzle, Path filePath) throws IOException {
-        List<Point2D> pts = nozzle.getContourPoints();
-        if (pts.isEmpty()) {
-            throw new IllegalArgumentException("RaoNozzle has no contour — call generate() first");
-        }
-        exportRevolutionProfile(NozzleContour.fromPoints(nozzle.getParameters(), pts), filePath);
     }
 
     /**

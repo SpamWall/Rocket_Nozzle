@@ -404,7 +404,249 @@ class DualBellNozzle_UT {
     }
 
     // =========================================================================
-    //  7. Constant-γ analytical verification
+    //  7. calculateBaseAngles — branch coverage for lf ∈ [0.6, 0.8) and lf < 0.6
+    // =========================================================================
+
+    /**
+     * calculateBaseAngles() is private but fully observable through
+     * getInflectionAngle() and getBaseExitAngle().  The method has three
+     * branches keyed on baseLengthFraction (lf):
+     * <ul>
+     *   <li>lf ≥ 0.8  — inflection = 21 + 3(M−2)°,  exit = 8 − 0.5·ln(AR)</li>
+     *   <li>lf ≥ 0.6  — inflection = 25 + 4(M−2)°,  exit = 11 − 0.7·ln(AR)</li>
+     *   <li>default   — inflection = 30 + 5(M−2)°,  exit = 14 − 0.9·ln(AR)</li>
+     * </ul>
+     * Both outputs are clamped: inflectionAngle ∈ [15°, 45°],
+     * baseExitAngle ≥ 1°.  The existing tests only exercise the lf ≥ 0.8
+     * branch; this class covers the remaining two.
+     */
+    @Nested
+    @DisplayName("calculateBaseAngles — lf ∈ [0.6, 0.8) and lf < 0.6 branches")
+    class CalculateBaseAnglesTests {
+
+        /** transitionAreaRatio used across all branch tests. */
+        private static final double AR = 4.0;
+
+        // ---- helpers --------------------------------------------------------
+
+        /** Mach number at the kink (same formula the nozzle uses internally). */
+        private double transitionMach() {
+            return params.gasProperties().machFromAreaRatio(AR);
+        }
+
+        private DualBellNozzle buildWith(double baseLf) {
+            return new DualBellNozzle(
+                    params, AR, baseLf, 0.8, Math.toRadians(3.0), 200).generate();
+        }
+
+        // ---- lf ∈ [0.6, 0.8) branch ----------------------------------------
+
+        @Test
+        @DisplayName("lf=0.7: inflectionAngle matches 25 + 4*(M−2)° formula")
+        void lf07InflectionAngleMatchesFormula() {
+            DualBellNozzle nozzle = buildWith(0.7);
+            double mach     = transitionMach();
+            double expected = Math.clamp(
+                    Math.toRadians(25.0 + 4.0 * (mach - 2.0)),
+                    Math.toRadians(15.0), Math.toRadians(45.0));
+            assertThat(nozzle.getInflectionAngle()).isCloseTo(expected, within(1e-9));
+        }
+
+        @Test
+        @DisplayName("lf=0.7: baseExitAngle matches 11 − 0.7·ln(AR) formula")
+        void lf07BaseExitAngleMatchesFormula() {
+            DualBellNozzle nozzle = buildWith(0.7);
+            double expected = Math.max(
+                    Math.toRadians(11.0 - 0.7 * Math.log(AR)),
+                    Math.toRadians(1.0));
+            assertThat(nozzle.getBaseExitAngle()).isCloseTo(expected, within(1e-9));
+        }
+
+        @Test
+        @DisplayName("lf=0.7: inflectionAngle is larger than lf=0.8 value (shorter bell → steeper initial angle)")
+        void lf07InflectionLargerThanLf08() {
+            assertThat(buildWith(0.7).getInflectionAngle())
+                    .isGreaterThan(buildWith(0.8).getInflectionAngle());
+        }
+
+        @Test
+        @DisplayName("lf=0.7: baseExitAngle is larger than lf=0.8 value (wider exit for shorter base bell)")
+        void lf07BaseExitAngleLargerThanLf08() {
+            assertThat(buildWith(0.7).getBaseExitAngle())
+                    .isGreaterThan(buildWith(0.8).getBaseExitAngle());
+        }
+
+        @Test
+        @DisplayName("lf=0.7: nozzle generates a valid contour (Isp physics intact)")
+        void lf07GeneratesValidContour() {
+            DualBellNozzle nozzle = buildWith(0.7);
+            assertThat(nozzle.getContourPoints()).hasSizeGreaterThan(10);
+            assertThat(nozzle.getHighAltitudeIsp()).isGreaterThan(nozzle.getSeaLevelIsp());
+        }
+
+        // ---- lf < 0.6 (default) branch -------------------------------------
+
+        @Test
+        @DisplayName("lf=0.4: inflectionAngle matches 30 + 5*(M−2)° formula")
+        void lf04InflectionAngleMatchesFormula() {
+            DualBellNozzle nozzle = buildWith(0.4);
+            double mach     = transitionMach();
+            double expected = Math.clamp(
+                    Math.toRadians(30.0 + 5.0 * (mach - 2.0)),
+                    Math.toRadians(15.0), Math.toRadians(45.0));
+            assertThat(nozzle.getInflectionAngle()).isCloseTo(expected, within(1e-9));
+        }
+
+        @Test
+        @DisplayName("lf=0.4: baseExitAngle matches 14 − 0.9·ln(AR) formula")
+        void lf04BaseExitAngleMatchesFormula() {
+            DualBellNozzle nozzle = buildWith(0.4);
+            double expected = Math.max(
+                    Math.toRadians(14.0 - 0.9 * Math.log(AR)),
+                    Math.toRadians(1.0));
+            assertThat(nozzle.getBaseExitAngle()).isCloseTo(expected, within(1e-9));
+        }
+
+        @Test
+        @DisplayName("lf=0.4: inflectionAngle is larger than lf=0.7 value (steeper still)")
+        void lf04InflectionLargerThanLf07() {
+            assertThat(buildWith(0.4).getInflectionAngle())
+                    .isGreaterThan(buildWith(0.7).getInflectionAngle());
+        }
+
+        @Test
+        @DisplayName("lf=0.4: baseExitAngle is larger than lf=0.7 value (wider exit)")
+        void lf04BaseExitAngleLargerThanLf07() {
+            assertThat(buildWith(0.4).getBaseExitAngle())
+                    .isGreaterThan(buildWith(0.7).getBaseExitAngle());
+        }
+
+        @Test
+        @DisplayName("lf=0.4: nozzle generates a valid contour (Isp physics intact)")
+        void lf04GeneratesValidContour() {
+            DualBellNozzle nozzle = buildWith(0.4);
+            assertThat(nozzle.getContourPoints()).hasSizeGreaterThan(10);
+            assertThat(nozzle.getHighAltitudeIsp()).isGreaterThan(nozzle.getSeaLevelIsp());
+        }
+
+        // ---- three-way monotonicity -----------------------------------------
+
+        @Test
+        @DisplayName("inflectionAngle is strictly ordered: lf=0.4 > lf=0.7 > lf=0.85")
+        void inflectionAngleMonotonicWithLf() {
+            double a04 = buildWith(0.4).getInflectionAngle();
+            double a07 = buildWith(0.7).getInflectionAngle();
+            double a85 = buildWith(0.85).getInflectionAngle();
+            assertThat(a04).isGreaterThan(a07);
+            assertThat(a07).isGreaterThan(a85);
+        }
+
+        @Test
+        @DisplayName("baseExitAngle is strictly ordered: lf=0.4 > lf=0.7 > lf=0.85")
+        void baseExitAngleMonotonicWithLf() {
+            double e04 = buildWith(0.4).getBaseExitAngle();
+            double e07 = buildWith(0.7).getBaseExitAngle();
+            double e85 = buildWith(0.85).getBaseExitAngle();
+            assertThat(e04).isGreaterThan(e07);
+            assertThat(e07).isGreaterThan(e85);
+        }
+    }
+
+    // =========================================================================
+    //  8. calculateExtensionAngles — branch coverage for lf ∈ [0.6, 0.8) and lf < 0.6
+    // =========================================================================
+
+    /**
+     * calculateExtensionAngles() is private but fully observable through
+     * getExtensionExitAngle().  It mirrors calculateBaseAngles() but uses
+     * extensionLengthFraction and exitAreaRatio:
+     * <ul>
+     *   <li>lf ≥ 0.8  — exit =  8 − 0.5·ln(exitAR)</li>
+     *   <li>lf ≥ 0.6  — exit = 11 − 0.7·ln(exitAR)</li>
+     *   <li>default   — exit = 14 − 0.9·ln(exitAR)</li>
+     * </ul>
+     * extensionExitAngle is clamped to ≥ 1°.  All existing tests pass
+     * extensionLengthFraction = 0.8 and therefore only exercise the first branch.
+     */
+    @Nested
+    @DisplayName("calculateExtensionAngles — lf ∈ [0.6, 0.8) and lf < 0.6 branches")
+    class CalculateExtensionAnglesTests {
+
+        private static final double AR_TRANS = 4.0;
+
+        private DualBellNozzle buildWith(double extLf) {
+            return new DualBellNozzle(
+                    params, AR_TRANS, 0.8, extLf, Math.toRadians(3.0), 200).generate();
+        }
+
+        private double expectedAngle(double coefficient, double constant) {
+            double ln = Math.log(params.exitAreaRatio());
+            return Math.max(Math.toRadians(constant - coefficient * ln), Math.toRadians(1.0));
+        }
+
+        // ---- lf ∈ [0.6, 0.8) branch ----------------------------------------
+
+        @Test
+        @DisplayName("lf=0.7: extensionExitAngle matches 11 − 0.7·ln(exitAR) formula")
+        void lf07MatchesFormula() {
+            assertThat(buildWith(0.7).getExtensionExitAngle())
+                    .isCloseTo(expectedAngle(0.7, 11.0), within(1e-9));
+        }
+
+        @Test
+        @DisplayName("lf=0.7: extensionExitAngle is larger than lf=0.8 value")
+        void lf07LargerThanLf08() {
+            assertThat(buildWith(0.7).getExtensionExitAngle())
+                    .isGreaterThan(buildWith(0.8).getExtensionExitAngle());
+        }
+
+        @Test
+        @DisplayName("lf=0.7: nozzle generates a valid contour (Isp physics intact)")
+        void lf07GeneratesValidContour() {
+            DualBellNozzle nozzle = buildWith(0.7);
+            assertThat(nozzle.getContourPoints()).hasSizeGreaterThan(10);
+            assertThat(nozzle.getHighAltitudeIsp()).isGreaterThan(nozzle.getSeaLevelIsp());
+        }
+
+        // ---- lf < 0.6 (default) branch -------------------------------------
+
+        @Test
+        @DisplayName("lf=0.4: extensionExitAngle matches 14 − 0.9·ln(exitAR) formula")
+        void lf04MatchesFormula() {
+            assertThat(buildWith(0.4).getExtensionExitAngle())
+                    .isCloseTo(expectedAngle(0.9, 14.0), within(1e-9));
+        }
+
+        @Test
+        @DisplayName("lf=0.4: extensionExitAngle is larger than lf=0.7 value")
+        void lf04LargerThanLf07() {
+            assertThat(buildWith(0.4).getExtensionExitAngle())
+                    .isGreaterThan(buildWith(0.7).getExtensionExitAngle());
+        }
+
+        @Test
+        @DisplayName("lf=0.4: nozzle generates a valid contour (Isp physics intact)")
+        void lf04GeneratesValidContour() {
+            DualBellNozzle nozzle = buildWith(0.4);
+            assertThat(nozzle.getContourPoints()).hasSizeGreaterThan(10);
+            assertThat(nozzle.getHighAltitudeIsp()).isGreaterThan(nozzle.getSeaLevelIsp());
+        }
+
+        // ---- three-way monotonicity ----------------------------------------
+
+        @Test
+        @DisplayName("extensionExitAngle is strictly ordered: lf=0.4 > lf=0.7 > lf=0.85")
+        void extensionExitAngleMonotonicWithLf() {
+            double e04 = buildWith(0.4).getExtensionExitAngle();
+            double e07 = buildWith(0.7).getExtensionExitAngle();
+            double e85 = buildWith(0.85).getExtensionExitAngle();
+            assertThat(e04).isGreaterThan(e07);
+            assertThat(e07).isGreaterThan(e85);
+        }
+    }
+
+    // =========================================================================
+    //  9. Constant-γ analytical verification (formerly section 7)
     //     Geometry: DLR subscale nozzle (Génin & Stark, Shock Waves 2009)
     //       R_th = 9 mm  |  ε_b = 3.9  |  ε_e ≈ 7.1  |  kink 15°  |  γ = 1.4
     //

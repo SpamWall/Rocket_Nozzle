@@ -22,9 +22,11 @@ package com.nozzle.export;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
+import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.AltitudePerformance;
+import com.nozzle.moc.DualBellNozzle;
 import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.thermal.BoundaryLayerCorrection;
 import com.nozzle.thermal.HeatTransferModel;
@@ -128,6 +130,135 @@ class CSVExporter_UT {
 
             assertThat(out).exists();
             assertThat(Files.readString(out)).contains("axisymmetric,0.0000000");
+        }
+    }
+
+    @Nested
+    @DisplayName("exportContour Tests")
+    class ContourExportTests {
+
+        // ---- NozzleContour overload ----
+
+        @Test
+        @DisplayName("exportContour(NozzleContour) writes the correct header")
+        void nozzleContourWritesCorrectHeader() throws IOException {
+            Path out = tempDir.resolve("contour_header.csv");
+            new CSVExporter().exportContour(contour, out);
+
+            String firstLine = Files.readString(out).lines().findFirst().orElseThrow();
+            assertThat(firstLine).isEqualTo("x,y,angle_deg");
+        }
+
+        @Test
+        @DisplayName("exportContour(NozzleContour) writes one data row per contour point")
+        void nozzleContourRowCountMatchesContourPoints() throws IOException {
+            Path out = tempDir.resolve("contour_rows.csv");
+            new CSVExporter().exportContour(contour, out);
+
+            long dataRows = Files.readString(out).lines().skip(1)
+                    .filter(l -> !l.isBlank()).count();
+            assertThat(dataRows).isEqualTo(contour.getContourPoints().size());
+        }
+
+        @Test
+        @DisplayName("exportContour(NozzleContour) x values are monotonically non-decreasing")
+        void nozzleContourXValuesMonotonic() throws IOException {
+            Path out = tempDir.resolve("contour_mono.csv");
+            new CSVExporter().exportContour(contour, out);
+
+            List<Double> xs = Files.readString(out).lines().skip(1)
+                    .filter(l -> !l.isBlank())
+                    .map(l -> Double.parseDouble(l.split(",")[0]))
+                    .toList();
+            for (int i = 1; i < xs.size(); i++) {
+                assertThat(xs.get(i)).isGreaterThanOrEqualTo(xs.get(i - 1));
+            }
+        }
+
+        @Test
+        @DisplayName("exportContour(NozzleContour) y values are positive (wall radius > 0)")
+        void nozzleContourYValuesPositive() throws IOException {
+            Path out = tempDir.resolve("contour_y.csv");
+            new CSVExporter().exportContour(contour, out);
+
+            Files.readString(out).lines().skip(1).filter(l -> !l.isBlank()).forEach(line -> {
+                double y = Double.parseDouble(line.split(",")[1]);
+                assertThat(y).isGreaterThan(0.0);
+            });
+        }
+
+        // ---- FullNozzleGeometry overload ----
+
+        @Test
+        @DisplayName("exportContour(FullNozzleGeometry) writes the correct header")
+        void fullGeometryWritesCorrectHeader() throws IOException {
+            FullNozzleGeometry geom = new FullNozzleGeometry(params).generate();
+            Path out = tempDir.resolve("full_contour_header.csv");
+            new CSVExporter().exportContour(geom, out);
+
+            String firstLine = Files.readString(out).lines().findFirst().orElseThrow();
+            assertThat(firstLine).isEqualTo("x,y,angle_deg,section");
+        }
+
+        @Test
+        @DisplayName("exportContour(FullNozzleGeometry) writes one data row per wall point")
+        void fullGeometryRowCountMatchesWallPoints() throws IOException {
+            FullNozzleGeometry geom = new FullNozzleGeometry(params).generate();
+            Path out = tempDir.resolve("full_contour_rows.csv");
+            new CSVExporter().exportContour(geom, out);
+
+            long dataRows = Files.readString(out).lines().skip(1)
+                    .filter(l -> !l.isBlank()).count();
+            assertThat(dataRows).isEqualTo(geom.getWallPoints().size());
+        }
+
+        @Test
+        @DisplayName("exportContour(FullNozzleGeometry) labels negative-x rows as 'convergent'")
+        void fullGeometryConvergentRowsLabelled() throws IOException {
+            FullNozzleGeometry geom = new FullNozzleGeometry(params).generate();
+            Path out = tempDir.resolve("full_contour_conv.csv");
+            new CSVExporter().exportContour(geom, out);
+
+            Files.readString(out).lines().skip(1).filter(l -> !l.isBlank()).forEach(line -> {
+                String[] parts = line.split(",");
+                double x = Double.parseDouble(parts[0]);
+                if (x < 0.0) assertThat(parts[3]).isEqualTo("convergent");
+            });
+        }
+
+        @Test
+        @DisplayName("exportContour(FullNozzleGeometry) labels positive-x rows as 'divergent'")
+        void fullGeometryDivergentRowsLabelled() throws IOException {
+            FullNozzleGeometry geom = new FullNozzleGeometry(params).generate();
+            Path out = tempDir.resolve("full_contour_div.csv");
+            new CSVExporter().exportContour(geom, out);
+
+            Files.readString(out).lines().skip(1).filter(l -> !l.isBlank()).forEach(line -> {
+                String[] parts = line.split(",");
+                double x = Double.parseDouble(parts[0]);
+                if (x > 0.0) assertThat(parts[3]).isEqualTo("divergent");
+            });
+        }
+
+        @Test
+        @DisplayName("exportContour(FullNozzleGeometry) output contains both convergent and divergent rows")
+        void fullGeometryContainsBothSections() throws IOException {
+            FullNozzleGeometry geom = new FullNozzleGeometry(params).generate();
+            Path out = tempDir.resolve("full_contour_both.csv");
+            new CSVExporter().exportContour(geom, out);
+
+            String content = Files.readString(out);
+            assertThat(content).contains("convergent");
+            assertThat(content).contains("divergent");
+        }
+
+        @Test
+        @DisplayName("exportContour(FullNozzleGeometry) throws IllegalStateException when not generated")
+        void fullGeometryThrowsWhenNotGenerated() {
+            FullNozzleGeometry ungenerated = new FullNozzleGeometry(params);
+            Path out = tempDir.resolve("full_contour_empty.csv");
+            assertThatThrownBy(() -> new CSVExporter().exportContour(ungenerated, out))
+                    .isInstanceOf(IllegalStateException.class);
         }
     }
 
@@ -303,6 +434,214 @@ class CSVExporter_UT {
             assertThat(reportDir.resolve("aerospike_design_parameters.csv")).exists();
             assertThat(reportDir.resolve("aerospike_spike_contour.csv")).exists();
             assertThat(reportDir.resolve("aerospike_altitude_performance.csv")).exists();
+        }
+    }
+
+    @Nested
+    @DisplayName("DualBell Report Export Tests")
+    class DualBellReportExportTests {
+
+        private DualBellNozzle nozzle;
+
+        @BeforeEach
+        void setUpDualBell() {
+            nozzle = new DualBellNozzle(params, 2.0).generate();
+        }
+
+        @Test
+        @DisplayName("exportDualBellReport creates all three expected files")
+        void createsAllThreeFiles() throws IOException {
+            Path reportDir = tempDir.resolve("dualbell_report");
+            new CSVExporter().exportDualBellReport(nozzle, reportDir);
+
+            assertThat(reportDir.resolve("dual_bell_design_parameters.csv")).exists();
+            assertThat(reportDir.resolve("dual_bell_contour.csv")).exists();
+            assertThat(reportDir.resolve("dual_bell_performance.csv")).exists();
+        }
+
+        @Test
+        @DisplayName("exportDualBellReport creates the output directory if absent")
+        void createsOutputDirectoryIfAbsent() throws IOException {
+            Path reportDir = tempDir.resolve("nested/dualbell_report");
+            assertThat(reportDir).doesNotExist();
+            new CSVExporter().exportDualBellReport(nozzle, reportDir);
+            assertThat(reportDir).isDirectory();
+        }
+
+        @Test
+        @DisplayName("dual_bell_design_parameters.csv contains the standard header and throat_radius row")
+        void designParametersContainsExpectedContent() throws IOException {
+            Path reportDir = tempDir.resolve("dualbell_report_params");
+            new CSVExporter().exportDualBellReport(nozzle, reportDir);
+
+            String content = Files.readString(reportDir.resolve("dual_bell_design_parameters.csv"));
+            assertThat(content).contains("parameter,value,unit");
+            assertThat(content).contains("throat_radius");
+        }
+
+        @Test
+        @DisplayName("dual_bell_contour.csv contains BASE and EXTENSION section labels")
+        void contourContainsBothSectionLabels() throws IOException {
+            Path reportDir = tempDir.resolve("dualbell_report_contour");
+            new CSVExporter().exportDualBellReport(nozzle, reportDir);
+
+            String content = Files.readString(reportDir.resolve("dual_bell_contour.csv"));
+            assertThat(content).contains("BASE");
+            assertThat(content).contains("EXTENSION");
+        }
+
+        @Test
+        @DisplayName("dual_bell_performance.csv contains the standard header")
+        void performanceContainsHeader() throws IOException {
+            Path reportDir = tempDir.resolve("dualbell_report_perf_header");
+            new CSVExporter().exportDualBellReport(nozzle, reportDir);
+
+            assertThat(Files.readString(reportDir.resolve("dual_bell_performance.csv")))
+                    .startsWith("parameter,value,unit");
+        }
+
+        @Test
+        @DisplayName("dual_bell_performance.csv contains all twelve expected parameter rows")
+        void performanceContainsAllParameters() throws IOException {
+            Path reportDir = tempDir.resolve("dualbell_report_perf_rows");
+            new CSVExporter().exportDualBellReport(nozzle, reportDir);
+
+            String content = Files.readString(reportDir.resolve("dual_bell_performance.csv"));
+            assertThat(content).contains("base_length");
+            assertThat(content).contains("total_length");
+            assertThat(content).contains("transition_radius");
+            assertThat(content).contains("transition_mach");
+            assertThat(content).contains("inflection_angle");
+            assertThat(content).contains("base_exit_angle");
+            assertThat(content).contains("extension_exit_angle");
+            assertThat(content).contains("transition_pressure");
+            assertThat(content).contains("sea_level_cf");
+            assertThat(content).contains("high_altitude_cf");
+            assertThat(content).contains("sea_level_isp");
+            assertThat(content).contains("high_altitude_isp");
+        }
+
+        @Test
+        @DisplayName("dual_bell_performance.csv performance values are physically plausible")
+        void performanceValuesArePlausible() throws IOException {
+            Path reportDir = tempDir.resolve("dualbell_report_perf_values");
+            new CSVExporter().exportDualBellReport(nozzle, reportDir);
+
+            // Parse all rows into a name→value map for spot-checking
+            java.util.Map<String, Double> values = new java.util.HashMap<>();
+            Files.readString(reportDir.resolve("dual_bell_performance.csv"))
+                    .lines().skip(1).filter(l -> !l.isBlank()).forEach(line -> {
+                        String[] parts = line.split(",");
+                        if (parts.length >= 2) values.put(parts[0], Double.parseDouble(parts[1]));
+                    });
+
+            assertThat(values.get("base_length")).isGreaterThan(0.0);
+            assertThat(values.get("total_length")).isGreaterThanOrEqualTo(values.get("base_length"));
+            assertThat(values.get("transition_pressure")).isGreaterThan(0.0)
+                    .isLessThan(params.chamberPressure());
+            assertThat(values.get("sea_level_cf")).isGreaterThan(0.0).isLessThan(2.5);
+            assertThat(values.get("high_altitude_cf")).isGreaterThan(values.get("sea_level_cf"));
+            assertThat(values.get("high_altitude_isp")).isGreaterThan(values.get("sea_level_isp"));
+        }
+    }
+
+    @Nested
+    @DisplayName("DualBell Contour Export Tests")
+    class DualBellContourExportTests {
+
+        private DualBellNozzle nozzle;
+
+        @BeforeEach
+        void setUpDualBell() {
+            nozzle = new DualBellNozzle(params, 2.0).generate();
+        }
+
+        @Test
+        @DisplayName("exportDualBellContour creates the output file")
+        void createsOutputFile() throws IOException {
+            Path out = tempDir.resolve("dual_bell.csv");
+            new CSVExporter().exportDualBellContour(nozzle, out);
+
+            assertThat(out).exists();
+            assertThat(out.toFile().length()).isGreaterThan(0L);
+        }
+
+        @Test
+        @DisplayName("exportDualBellContour writes the correct header")
+        void writesCorrectHeader() throws IOException {
+            Path out = tempDir.resolve("dual_bell_header.csv");
+            new CSVExporter().exportDualBellContour(nozzle, out);
+
+            String firstLine = Files.readString(out).lines().findFirst().orElseThrow();
+            assertThat(firstLine).isEqualTo("x_m,y_m,section");
+        }
+
+        @Test
+        @DisplayName("exportDualBellContour writes one data row per contour point")
+        void rowCountMatchesContourPoints() throws IOException {
+            Path out = tempDir.resolve("dual_bell_rows.csv");
+            new CSVExporter().exportDualBellContour(nozzle, out);
+
+            long dataRows = Files.readString(out).lines().skip(1)
+                    .filter(l -> !l.isBlank()).count();
+            assertThat(dataRows).isEqualTo(nozzle.getContourPoints().size());
+        }
+
+        @Test
+        @DisplayName("exportDualBellContour labels pre-kink rows as BASE")
+        void preKinkRowsAreBase() throws IOException {
+            Path out = tempDir.resolve("dual_bell_base.csv");
+            new CSVExporter().exportDualBellContour(nozzle, out);
+
+            // rows 1..kinkIdx+1 (1-based, skipping header) must all be BASE
+            List<String> dataRows = Files.readString(out).lines().skip(1)
+                    .filter(l -> !l.isBlank()).toList();
+            int kinkIdx = nozzle.getKinkIndex();
+            for (int i = 0; i <= kinkIdx; i++) {
+                assertThat(dataRows.get(i)).as("row %d (kinkIdx=%d)", i, kinkIdx)
+                        .endsWith(",BASE");
+            }
+        }
+
+        @Test
+        @DisplayName("exportDualBellContour labels post-kink rows as EXTENSION")
+        void postKinkRowsAreExtension() throws IOException {
+            Path out = tempDir.resolve("dual_bell_ext.csv");
+            new CSVExporter().exportDualBellContour(nozzle, out);
+
+            List<String> dataRows = Files.readString(out).lines().skip(1)
+                    .filter(l -> !l.isBlank()).toList();
+            int kinkIdx = nozzle.getKinkIndex();
+            for (int i = kinkIdx + 1; i < dataRows.size(); i++) {
+                assertThat(dataRows.get(i)).as("row %d (kinkIdx=%d)", i, kinkIdx)
+                        .endsWith(",EXTENSION");
+            }
+        }
+
+        @Test
+        @DisplayName("exportDualBellContour labels the kink point itself as BASE")
+        void kinkPointIsBASE() throws IOException {
+            Path out = tempDir.resolve("dual_bell_kink.csv");
+            new CSVExporter().exportDualBellContour(nozzle, out);
+
+            List<String> dataRows = Files.readString(out).lines().skip(1)
+                    .filter(l -> !l.isBlank()).toList();
+            assertThat(dataRows.get(nozzle.getKinkIndex())).endsWith(",BASE");
+        }
+
+        @Test
+        @DisplayName("exportDualBellContour x values are monotonically non-decreasing")
+        void xValuesAreMonotonicallyNonDecreasing() throws IOException {
+            Path out = tempDir.resolve("dual_bell_mono.csv");
+            new CSVExporter().exportDualBellContour(nozzle, out);
+
+            List<Double> xValues = Files.readString(out).lines().skip(1)
+                    .filter(l -> !l.isBlank())
+                    .map(l -> Double.parseDouble(l.split(",")[0]))
+                    .toList();
+            for (int i = 1; i < xValues.size(); i++) {
+                assertThat(xValues.get(i)).isGreaterThanOrEqualTo(xValues.get(i - 1));
+            }
         }
     }
 }

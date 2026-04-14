@@ -364,7 +364,7 @@ public class OFSweep {
      * <p>Creates a fresh {@link ChemistryModel} and, in adiabatic mode, a fresh
      * {@link NasaSpeciesDatabase} on each call so callers share no state.
      *
-     * @param of oxidiser-to-fuel mass ratio (must be positive)
+     * @param of oxidizer-to-fuel mass ratio (must be positive)
      * @return {@link OFPoint} containing the chamber temperature, γ, molecular
      *         weight, c★, and Isp at the given O/F ratio
      */

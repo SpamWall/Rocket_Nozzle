@@ -24,7 +24,6 @@ import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.DualBellNozzle;
-import com.nozzle.moc.RaoNozzle;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -234,25 +233,8 @@ public class RevolvedMeshExporter {
     }
 
     /**
-     * Convenience overload that exports a Rao bell nozzle as a full 3-D revolved mesh.
-     *
-     * @param nozzle   Rao bell nozzle (must have been generated)
-     * @param filePath Destination file path
-     * @param format   Target mesh format
-     * @throws IllegalArgumentException if the nozzle has not been generated
-     * @throws IOException              if the file cannot be written
-     */
-    public void export(RaoNozzle nozzle, Path filePath, Format format) throws IOException {
-        List<Point2D> pts = nozzle.getContourPoints();
-        if (pts.size() < 2) {
-            throw new IllegalArgumentException("RaoNozzle has no contour — call generate() first");
-        }
-        export(NozzleContour.fromPoints(nozzle.getParameters(), pts), filePath, format);
-    }
-
-    /**
-     * Convenience overload that exports a dual-bell nozzle (base bell + extension) as
-     * a full 3-D revolved mesh.  The full contour including the kink transition is exported.
+     * Exports a dual-bell nozzle (base bell + extension) as a full 3-D revolved mesh.
+     * The full contour including the kink transition is exported.
      *
      * @param nozzle   Dual-bell nozzle (must have been generated)
      * @param filePath Destination file path

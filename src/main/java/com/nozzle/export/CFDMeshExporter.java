@@ -24,8 +24,6 @@ import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
-import com.nozzle.moc.DualBellNozzle;
-import com.nozzle.moc.RaoNozzle;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -194,33 +192,6 @@ public class CFDMeshExporter {
             case CGNS -> exportCGNS(contour, filePath);
         }
         LOG.debug("CFD mesh export complete → {}", filePath);
-    }
-
-    /**
-     * Convenience overload that exports a Rao bell nozzle directly.
-     *
-     * @param nozzle   Rao bell nozzle (must have been generated)
-     * @param filePath Destination file path
-     * @param format   Target mesh format
-     * @throws IOException If the file cannot be written
-     */
-    public void export(RaoNozzle nozzle, Path filePath, Format format) throws IOException {
-        export(NozzleContour.fromPoints(nozzle.getParameters(), nozzle.getContourPoints()),
-                filePath, format);
-    }
-
-    /**
-     * Convenience overload that exports a dual-bell nozzle directly.
-     * The full contour (base bell + extension) is exported.
-     *
-     * @param nozzle   Dual-bell nozzle (must have been generated)
-     * @param filePath Destination file path
-     * @param format   Target mesh format
-     * @throws IOException If the file cannot be written
-     */
-    public void export(DualBellNozzle nozzle, Path filePath, Format format) throws IOException {
-        export(NozzleContour.fromPoints(nozzle.getParameters(), nozzle.getContourPoints()),
-                filePath, format);
     }
 
     /**

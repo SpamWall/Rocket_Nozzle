@@ -309,6 +309,37 @@ class ChemistryModel_IspComparison_UT {
         }
 
         @Test
+        @DisplayName("deltaPercent() returns 0 when frozenIsp is zero (division guard)")
+        void deltaPercentZeroWhenFrozenIspIsZero() {
+            ChemistryModel.IspComparison cmp = new ChemistryModel.IspComparison(0.0, 10.0);
+            assertThat(cmp.deltaPercent()).isEqualTo(0.0);
+        }
+
+        @Test
+        @DisplayName("deltaPercent() returns 0 when frozenIsp is negative (guard branch)")
+        void deltaPercentZeroWhenFrozenIspIsNegative() {
+            ChemistryModel.IspComparison cmp = new ChemistryModel.IspComparison(-1.0, 10.0);
+            assertThat(cmp.deltaPercent()).isEqualTo(0.0);
+        }
+
+        @Test
+        @DisplayName("deltaPercent() scales linearly with delta — doubling the gain doubles the percentage")
+        void deltaPercentScalesLinearlyWithDelta() {
+            ChemistryModel.IspComparison single = new ChemistryModel.IspComparison(350.0, 354.0);
+            ChemistryModel.IspComparison doubled = new ChemistryModel.IspComparison(350.0, 358.0);
+            assertThat(doubled.deltaPercent())
+                    .isCloseTo(2.0 * single.deltaPercent(), within(1e-12));
+        }
+
+        @Test
+        @DisplayName("deltaPercent() equals delta() / frozenIsp * 100 for arbitrary values")
+        void deltaPercentConsistentWithDelta() {
+            ChemistryModel.IspComparison cmp = new ChemistryModel.IspComparison(400.0, 412.0);
+            assertThat(cmp.deltaPercent())
+                    .isCloseTo(100.0 * cmp.delta() / cmp.frozenIsp(), within(1e-12));
+        }
+
+        @Test
         @DisplayName("Record equality: two identical instances are equal")
         void recordEquality() {
             ChemistryModel.IspComparison a = new ChemistryModel.IspComparison(350.0, 355.0);

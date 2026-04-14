@@ -25,7 +25,6 @@ import com.nozzle.geometry.NozzleContour;
 import com.nozzle.geometry.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.DualBellNozzle;
-import com.nozzle.moc.RaoNozzle;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -122,20 +121,6 @@ public class STLExporter {
     }
     
     /**
-     * Convenience method that exports the inner (flow-wetted) surface mesh,
-     * equivalent to {@link #exportMesh(NozzleContour, Path)}.
-     * The inward-facing normals produced by {@link #generateTriangles} make the
-     * mesh directly usable as a CFD wall boundary patch.
-     *
-     * @param contour  Nozzle contour to revolve
-     * @param filePath Destination STL file path
-     * @throws IOException If the file cannot be written
-     */
-    public void exportInnerSurfaceMesh(NozzleContour contour, Path filePath) throws IOException {
-        exportMesh(contour, filePath);
-    }
-
-    /**
      * Exports the complete nozzle (convergent + divergent) as a revolved STL mesh.
      * The wall-point list from {@link FullNozzleGeometry#getWallPoints()} spans the
      * injector face (x &lt; 0) through the throat to the exit, so the resulting solid
@@ -167,20 +152,6 @@ public class STLExporter {
         LOG.debug("Geometry-complete STL export complete: {} triangles → {}", triangles.size(), filePath);
     }
 
-    /**
-     * Exports the complete nozzle inner flow surface (convergent + divergent) as a
-     * revolved STL mesh.  Equivalent to {@link #exportMesh(FullNozzleGeometry, Path)};
-     * provided for API symmetry with {@link #exportInnerSurfaceMesh(NozzleContour, Path)}.
-     *
-     * @param fullGeometry Full nozzle geometry (must have been generated)
-     * @param filePath     Destination STL file path
-     * @throws IOException If the file cannot be written
-     */
-    public void exportInnerSurfaceMesh(FullNozzleGeometry fullGeometry, Path filePath)
-            throws IOException {
-        exportMesh(fullGeometry, filePath);
-    }
-    
     /**
      * Generates the full triangle list by revolving the 2D profile around the
      * x-axis.  Each axial segment of the profile contributes
@@ -436,27 +407,6 @@ public class STLExporter {
             exportAsciiSTL(triangles, filePath);
         }
         LOG.debug("Aerospike STL export complete: {} triangles → {}", triangles.size(), filePath);
-    }
-
-    /**
-     * Convenience overload that exports a Rao bell nozzle as a revolved STL mesh.
-     *
-     * @param nozzle   Rao bell nozzle (must have been generated)
-     * @param filePath Destination STL file path
-     * @throws IllegalArgumentException if the nozzle has not been generated
-     * @throws IOException              if the file cannot be written
-     */
-    public void exportMesh(RaoNozzle nozzle, Path filePath) throws IOException {
-        List<Point2D> pts = nozzle.getContourPoints();
-        if (pts.size() < 2) {
-            throw new IllegalArgumentException("RaoNozzle has no contour — call generate() first");
-        }
-        LOG.debug("Exporting Rao nozzle STL mesh: {} points, {} segments → {}",
-                pts.size(), circumferentialSegments, filePath);
-        List<Triangle> triangles = generateTriangles(pts);
-        if (binaryFormat) exportBinarySTL(triangles, filePath);
-        else exportAsciiSTL(triangles, filePath);
-        LOG.debug("Rao nozzle STL export complete: {} triangles → {}", triangles.size(), filePath);
     }
 
     /**

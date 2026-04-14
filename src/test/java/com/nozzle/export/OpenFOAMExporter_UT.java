@@ -22,11 +22,15 @@ package com.nozzle.export;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
+import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
+import com.nozzle.moc.AerospikeNozzle;
+import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.DualBellNozzle;
 import com.nozzle.moc.RaoNozzle;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -274,7 +278,9 @@ class OpenFOAMExporter_UT {
     @DisplayName("exportCase(RaoNozzle) creates all required OpenFOAM case files")
     void exportCaseRaoNozzleCreatesAllRequiredFiles() throws IOException {
         Path caseDir = tempDir.resolve("rao_case");
-        new OpenFOAMExporter().exportCase(new RaoNozzle(params).generate(), caseDir);
+        RaoNozzle nozzle = new RaoNozzle(params).generate();
+        NozzleContour raoContour = NozzleContour.fromPoints(params, nozzle.getContourPoints());
+        new OpenFOAMExporter().exportCase(params, raoContour, caseDir);
 
         assertThat(caseDir.resolve("system/blockMeshDict")).exists();
         assertThat(caseDir.resolve("system/controlDict")).exists();
@@ -288,7 +294,9 @@ class OpenFOAMExporter_UT {
     @DisplayName("exportCase(DualBellNozzle) creates all required OpenFOAM case files")
     void exportCaseDualBellNozzleCreatesAllRequiredFiles() throws IOException {
         Path caseDir = tempDir.resolve("dualbell_case");
-        new OpenFOAMExporter().exportCase(new DualBellNozzle(params).generate(), caseDir);
+        DualBellNozzle nozzle = new DualBellNozzle(params).generate();
+        NozzleContour dualBellContour = NozzleContour.fromPoints(params, nozzle.getContourPoints());
+        new OpenFOAMExporter().exportCase(params, dualBellContour, caseDir);
 
         assertThat(caseDir.resolve("system/blockMeshDict")).exists();
         assertThat(caseDir.resolve("system/controlDict")).exists();
@@ -296,6 +304,340 @@ class OpenFOAMExporter_UT {
         assertThat(caseDir.resolve("0/p")).exists();
         assertThat(caseDir.resolve("0/T")).exists();
         assertThat(caseDir.resolve("0/U")).exists();
+    }
+
+    // -------------------------------------------------------------------------
+    // exportCase(FullNozzleGeometry) — covers the convergent+divergent overload
+    // -------------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("exportCase(FullNozzleGeometry) Tests")
+    class FullNozzleGeometryExportTests {
+
+        private FullNozzleGeometry fullGeometry;
+
+        @BeforeEach
+        void setUpFullGeometry() {
+            fullGeometry = new FullNozzleGeometry(params).generate();
+        }
+
+        @Test
+        @DisplayName("Creates all required OpenFOAM case files")
+        void createsAllRequiredFiles() throws IOException {
+            Path caseDir = tempDir.resolve("full_geom_case");
+            new OpenFOAMExporter().exportCase(params, fullGeometry, caseDir);
+
+            assertThat(caseDir.resolve("system/blockMeshDict")).exists();
+            assertThat(caseDir.resolve("system/controlDict")).exists();
+            assertThat(caseDir.resolve("system/fvSchemes")).exists();
+            assertThat(caseDir.resolve("system/fvSolution")).exists();
+            assertThat(caseDir.resolve("constant/thermophysicalProperties")).exists();
+            assertThat(caseDir.resolve("constant/turbulenceProperties")).exists();
+            assertThat(caseDir.resolve("0/p")).exists();
+            assertThat(caseDir.resolve("0/T")).exists();
+            assertThat(caseDir.resolve("0/U")).exists();
+        }
+
+        @Test
+        @DisplayName("Throws IllegalStateException when FullNozzleGeometry has not been generated")
+        void throwsWhenNotGenerated() {
+            FullNozzleGeometry ungeneratedGeometry = new FullNozzleGeometry(params);
+            Path caseDir = tempDir.resolve("full_geom_empty");
+            assertThatThrownBy(
+                    () -> new OpenFOAMExporter().exportCase(params, ungeneratedGeometry, caseDir))
+                    .isInstanceOf(IllegalStateException.class);
+        }
+
+        @Test
+        @DisplayName("blockMeshDict contains negative x coordinates from the convergent section")
+        void blockMeshDictContainsNegativeXFromConvergentSection() throws IOException {
+            Path caseDir = tempDir.resolve("full_geom_conv");
+            new OpenFOAMExporter().exportCase(params, fullGeometry, caseDir);
+
+            String bmd = Files.readString(caseDir.resolve("system/blockMeshDict"));
+            // Convergent section runs from a negative x (chamber face) to x ≈ 0 (throat).
+            // At least one spline point must have a negative x coordinate.
+            assertThat(bmd).containsPattern("-\\d+\\.\\d+");
+        }
+
+        @Test
+        @DisplayName("Wall point count includes both convergent and divergent sections")
+        void wallPointCountIncludesBothSections() {
+            // FullNozzleGeometry combines convergent + divergent; its total must
+            // exceed a divergent-only contour generated with the same params.
+            NozzleContour divergentOnly = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+            divergentOnly.generate(100);
+
+            assertThat(fullGeometry.getWallPoints().size())
+                    .isGreaterThan(divergentOnly.getContourPoints().size());
+        }
+
+        @Test
+        @DisplayName("controlDict specifies rhoCentralFoam as the application")
+        void controlDictSpecifiesRhoCentralFoam() throws IOException {
+            Path caseDir = tempDir.resolve("full_geom_ctrl");
+            new OpenFOAMExporter().exportCase(params, fullGeometry, caseDir);
+
+            assertThat(Files.readString(caseDir.resolve("system/controlDict")))
+                    .contains("rhoCentralFoam");
+        }
+
+        @Test
+        @DisplayName("Disabling turbulence omits k and omega fields")
+        void disablingTurbulenceOmitsKAndOmega() throws IOException {
+            Path caseDir = tempDir.resolve("full_geom_lam");
+            new OpenFOAMExporter().setTurbulenceEnabled(false)
+                    .exportCase(params, fullGeometry, caseDir);
+
+            assertThat(caseDir.resolve("0/k")).doesNotExist();
+            assertThat(caseDir.resolve("0/omega")).doesNotExist();
+        }
+
+        @Test
+        @DisplayName("FullNozzleGeometry.fromMOC factory produces a valid case")
+        void fromMocFactoryProducesValidCase() throws IOException {
+            CharacteristicNet net = new CharacteristicNet(params).generate();
+            FullNozzleGeometry mocGeometry = FullNozzleGeometry.fromMOC(params, net).generate();
+
+            Path caseDir = tempDir.resolve("full_geom_moc");
+            new OpenFOAMExporter().exportCase(params, mocGeometry, caseDir);
+
+            assertThat(caseDir.resolve("system/blockMeshDict")).exists();
+            assertThat(caseDir.resolve("0/p")).exists();
+            // MOC wall points are real solver output — wall point count must be substantial
+            assertThat(mocGeometry.getWallPoints().size()).isGreaterThan(20);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // exportAerospikeCase — complete coverage
+    // -------------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("exportAerospikeCase Tests")
+    class AerospikeExportTests {
+
+        private AerospikeNozzle nozzle;
+
+        @BeforeEach
+        void setUpAerospike() {
+            nozzle = new AerospikeNozzle(params).generate();
+        }
+
+        @Test
+        @DisplayName("Creates all required OpenFOAM case files")
+        void createsAllRequiredFiles() throws IOException {
+            Path caseDir = tempDir.resolve("aerospike_case");
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+
+            assertThat(caseDir.resolve("system/blockMeshDict")).exists();
+            assertThat(caseDir.resolve("system/controlDict")).exists();
+            assertThat(caseDir.resolve("system/fvSchemes")).exists();
+            assertThat(caseDir.resolve("system/fvSolution")).exists();
+            assertThat(caseDir.resolve("constant/thermophysicalProperties")).exists();
+            assertThat(caseDir.resolve("constant/turbulenceProperties")).exists();
+            assertThat(caseDir.resolve("0/p")).exists();
+            assertThat(caseDir.resolve("0/T")).exists();
+            assertThat(caseDir.resolve("0/U")).exists();
+        }
+
+        @Test
+        @DisplayName("Creates the case directory if it does not exist")
+        void createsCaseDirIfAbsent() throws IOException {
+            Path caseDir = tempDir.resolve("nested/aerospike_case");
+            assertThat(caseDir).doesNotExist();
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+            assertThat(caseDir).isDirectory();
+        }
+
+        // ---- blockMeshDict ----
+
+        @Test
+        @DisplayName("blockMeshDict contains FoamFile header and convertToMeters")
+        void blockMeshDictContainsFoamFileHeader() throws IOException {
+            Path caseDir = tempDir.resolve("aero_bmd_header");
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+
+            String bmd = Files.readString(caseDir.resolve("system/blockMeshDict"));
+            assertThat(bmd).contains("FoamFile");
+            assertThat(bmd).contains("convertToMeters");
+        }
+
+        @Test
+        @DisplayName("blockMeshDict contains vertices, spline edges, and blocks")
+        void blockMeshDictContainsStructuralSections() throws IOException {
+            Path caseDir = tempDir.resolve("aero_bmd_sections");
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+
+            String bmd = Files.readString(caseDir.resolve("system/blockMeshDict"));
+            assertThat(bmd).contains("vertices");
+            assertThat(bmd).contains("spline");
+            assertThat(bmd).contains("blocks");
+        }
+
+        @Test
+        @DisplayName("blockMeshDict contains all five aerospike boundary patches")
+        void blockMeshDictContainsAllAerospikePatch() throws IOException {
+            Path caseDir = tempDir.resolve("aero_bmd_patches");
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+
+            String bmd = Files.readString(caseDir.resolve("system/blockMeshDict"));
+            assertThat(bmd).contains("inlet");
+            assertThat(bmd).contains("outlet");
+            assertThat(bmd).contains("spike");
+            assertThat(bmd).contains("cowl");
+            assertThat(bmd).contains("wedge0");
+            assertThat(bmd).contains("wedge1");
+        }
+
+        @Test
+        @DisplayName("blockMeshDict does not contain an axis patch (annular domain has no axis)")
+        void blockMeshDictHasNoAxisPatch() throws IOException {
+            Path caseDir = tempDir.resolve("aero_bmd_noaxis");
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+
+            // The bell-nozzle case writes an "axis" patch; the aerospike annular
+            // domain has no axis line — neither spike nor cowl are on the axis.
+            assertThat(Files.readString(caseDir.resolve("system/blockMeshDict")))
+                    .doesNotContain("\"axis\"")
+                    .doesNotContain("    axis");
+        }
+
+        @Test
+        @DisplayName("blockMeshDict spike and cowl patches have type wall")
+        void blockMeshDictSpikeAndCowlAreWalls() throws IOException {
+            Path caseDir = tempDir.resolve("aero_bmd_wall");
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+
+            String bmd = Files.readString(caseDir.resolve("system/blockMeshDict"));
+            // Both inner and outer surfaces are solid walls
+            assertThat(bmd).containsPattern("spike[\\s\\S]{0,60}wall");
+            assertThat(bmd).containsPattern("cowl[\\s\\S]{0,60}wall");
+        }
+
+        // ---- controlDict ----
+
+        @Test
+        @DisplayName("controlDict specifies rhoCentralFoam")
+        void controlDictSpecifiesRhoCentralFoam() throws IOException {
+            Path caseDir = tempDir.resolve("aero_ctrl");
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+
+            assertThat(Files.readString(caseDir.resolve("system/controlDict")))
+                    .contains("rhoCentralFoam");
+        }
+
+        // ---- thermophysicalProperties ----
+
+        @Test
+        @DisplayName("thermophysicalProperties contains gas mixture data")
+        void thermophysicalPropertiesContainsGasData() throws IOException {
+            Path caseDir = tempDir.resolve("aero_thermo");
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+
+            String thermo = Files.readString(
+                    caseDir.resolve("constant/thermophysicalProperties"));
+            assertThat(thermo).contains("hePsiThermo");
+            assertThat(thermo).contains("molWeight");
+            assertThat(thermo).contains("Cp");
+        }
+
+        // ---- 0/p ----
+
+        @Test
+        @DisplayName("0/p uses totalPressure at inlet and waveTransmissive at outlet")
+        void pressureFieldBoundaryConditions() throws IOException {
+            Path caseDir = tempDir.resolve("aero_p");
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+
+            String p = Files.readString(caseDir.resolve("0/p"));
+            assertThat(p).contains("totalPressure");
+            assertThat(p).contains("waveTransmissive");
+        }
+
+        @Test
+        @DisplayName("0/p applies zeroGradient to spike and cowl walls")
+        void pressureFieldZeroGradientOnWalls() throws IOException {
+            Path caseDir = tempDir.resolve("aero_p_walls");
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+
+            String p = Files.readString(caseDir.resolve("0/p"));
+            assertThat(p).contains("spike");
+            assertThat(p).contains("cowl");
+            assertThat(p).contains("zeroGradient");
+        }
+
+        @Test
+        @DisplayName("0/p does not contain an axis patch BC")
+        void pressureFieldHasNoAxisPatchBC() throws IOException {
+            Path caseDir = tempDir.resolve("aero_p_noaxis");
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+
+            assertThat(Files.readString(caseDir.resolve("0/p")))
+                    .doesNotContain("    axis");
+        }
+
+        // ---- 0/T ----
+
+        @Test
+        @DisplayName("0/T uses totalTemperature at inlet")
+        void temperatureFieldTotalTempAtInlet() throws IOException {
+            Path caseDir = tempDir.resolve("aero_T");
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+
+            assertThat(Files.readString(caseDir.resolve("0/T")))
+                    .contains("totalTemperature");
+        }
+
+        // ---- 0/U ----
+
+        @Test
+        @DisplayName("0/U applies noSlip to spike and cowl walls")
+        void velocityFieldNoSlipOnWalls() throws IOException {
+            Path caseDir = tempDir.resolve("aero_U");
+            new OpenFOAMExporter().exportAerospikeCase(nozzle, caseDir);
+
+            String u = Files.readString(caseDir.resolve("0/U"));
+            assertThat(u).contains("pressureInletOutletVelocity");
+            assertThat(u).contains("spike");
+            assertThat(u).contains("cowl");
+            assertThat(u).contains("noSlip");
+        }
+
+        // ---- turbulence toggle ----
+
+        @Test
+        @DisplayName("Turbulence enabled writes 0/k and 0/omega with aerospike wall functions")
+        void turbulenceEnabledWritesKAndOmega() throws IOException {
+            Path caseDir = tempDir.resolve("aero_turb_on");
+            new OpenFOAMExporter().setTurbulenceEnabled(true)
+                    .exportAerospikeCase(nozzle, caseDir);
+
+            assertThat(caseDir.resolve("0/k")).exists();
+            assertThat(caseDir.resolve("0/omega")).exists();
+
+            String k = Files.readString(caseDir.resolve("0/k"));
+            assertThat(k).contains("kqRWallFunction");
+            assertThat(k).contains("spike");
+            assertThat(k).contains("cowl");
+
+            String omega = Files.readString(caseDir.resolve("0/omega"));
+            assertThat(omega).contains("omegaWallFunction");
+        }
+
+        @Test
+        @DisplayName("Turbulence disabled omits 0/k and 0/omega and uses laminar model")
+        void turbulenceDisabledOmitsKAndOmega() throws IOException {
+            Path caseDir = tempDir.resolve("aero_turb_off");
+            new OpenFOAMExporter().setTurbulenceEnabled(false)
+                    .exportAerospikeCase(nozzle, caseDir);
+
+            assertThat(caseDir.resolve("0/k")).doesNotExist();
+            assertThat(caseDir.resolve("0/omega")).doesNotExist();
+
+            assertThat(Files.readString(caseDir.resolve("constant/turbulenceProperties")))
+                    .contains("laminar");
+        }
     }
 
     /** Extracts the first grading value from a {@code simpleGrading (1 ((0.2 0.2 <ratio>)(...)) 1)} line. */

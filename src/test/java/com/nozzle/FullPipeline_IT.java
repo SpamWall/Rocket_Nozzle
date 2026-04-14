@@ -372,9 +372,10 @@ class FullPipeline_IT {
         void raoNozzleCfdMeshExportProducesNonEmptyFile(@TempDir Path tempDir) throws Exception {
             NozzleDesignParameters params = loxRp1Params();
             RaoNozzle nozzle = new RaoNozzle(params).generate();
+            NozzleContour contour = NozzleContour.fromPoints(params, nozzle.getContourPoints());
 
             Path outFile = tempDir.resolve("blockMeshDict");
-            new CFDMeshExporter().export(nozzle, outFile, CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
+            new CFDMeshExporter().export(contour, outFile, CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
 
             assertThat(outFile).exists();
             assertThat(outFile.toFile().length()).isGreaterThan(0L);
@@ -387,9 +388,10 @@ class FullPipeline_IT {
         void dualBellNozzleOpenFoamExportCreatesCompleteCaseDir(@TempDir Path tempDir) throws Exception {
             NozzleDesignParameters params = loxRp1Params();
             DualBellNozzle nozzle = new DualBellNozzle(params).generate();
+            NozzleContour contour = NozzleContour.fromPoints(params, nozzle.getContourPoints());
 
             Path caseDir = tempDir.resolve("dualbell_foam");
-            new OpenFOAMExporter().exportCase(nozzle, caseDir);
+            new OpenFOAMExporter().exportCase(params, contour, caseDir);
 
             assertThat(caseDir.resolve("system/blockMeshDict")).exists();
             assertThat(caseDir.resolve("system/controlDict")).exists();

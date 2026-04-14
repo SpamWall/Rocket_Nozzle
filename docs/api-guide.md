@@ -190,6 +190,9 @@ PerformanceCalculator pc = new PerformanceCalculator(params, net, contour, bl, c
 System.out.println(pc.getSpecificImpulse());         // actual Isp, seconds
 System.out.println(pc.getActualThrustCoefficient()); // Cf after losses
 System.out.println(pc.getEfficiency());              // Cf_actual / Cf_ideal
+System.out.println(pc.getThrust());                  // net thrust, Newtons
+System.out.println(pc.getMassFlowRate());            // mass flow rate, kg/s
+System.out.println(pc.getTotalLoss());               // sum of fractional losses
 System.out.println(pc.getDivergenceLoss());          // fractional loss
 System.out.println(pc.getBoundaryLayerLoss());
 System.out.println(pc.getChemicalLoss());
@@ -770,7 +773,17 @@ System.out.printf("Combined Cd  : %.4f%n",    combinedCd);
 // Both modes are accepted by PerformanceCalculator and HeatTransferModel
 ```
 
-**New methods (injector-face mode):**
+**Standard-mode getters (set by `calculate()`):**
+
+| Method                           | Returns                                                      |
+|----------------------------------|--------------------------------------------------------------|
+| `getExitDisplacementThickness()` | δ* at the nozzle exit, metres                                |
+| `getExitMomentumThickness()`     | θ at the nozzle exit, metres                                 |
+| `getCorrectedAreaRatio()`        | (A − A_δ*) / A_throat — effective A/A* after BL displacement |
+| `getThrustCoefficientLoss()`     | Fractional Cf reduction from BL skin-friction                |
+| `getBoundaryLayerProfile()`      | `List<BLPoint>` — per-station δ*, θ, Re_x, Cf                |
+
+**Injector-face mode methods:**
 
 | Method                              | Returns                                                            |
 |-------------------------------------|--------------------------------------------------------------------|
@@ -779,47 +792,221 @@ System.out.printf("Combined Cd  : %.4f%n",    combinedCd);
 | `getBoundaryLayerCdCorrection()`    | (1 − δ*/r_t)² — effective area loss factor                         |
 | `getCombinedCd()`                   | `params.dischargeCoefficient()` × `getBoundaryLayerCdCorrection()` |
 
+### CoolantChannel
+
+Models a regenerative coolant channel running along the nozzle wall.
+Use the two-phase API: call `calculate()` with no heat profile for hydraulic
+sizing, then call `calculate(thermalProfile)` after running `HeatTransferModel`
+to compute thermal performance.
+
+```
+NozzleContour contour = NozzleContour.fromMOCWallPoints(params, net.getWallPoints());
+contour.generate(100);
+
+// Phase 1 — hydraulic sizing (heat profile not yet available)
+CoolantChannel channel = new CoolantChannel(contour)
+        .setChannelGeometry(120, 0.003, 0.005, 0.001)
+        // (numChannels, channelWidth m, channelHeight m, wallThickness m)
+        .setWallConductivity(20.0)      // W/(m·K) — Inconel liner
+        .setCoolant(CoolantChannel.CoolantProperties.RP1,
+                    2.0,    // total coolant mass flow, kg/s
+                    300.0,  // inlet temperature, K
+                    8.5e6)  // inlet pressure, Pa
+        .calculate();       // hydraulic mode — no thermal argument
+
+// Hydraulic outputs
+double d_h    = channel.hydraulicDiameter();     // m
+double A_flow = channel.totalFlowArea();         // m²
+double dP     = channel.getTotalPressureDrop();  // Pa
+
+// Per-station results — profile ordered nozzle exit → throat → ... (high-flux first)
+CoolantChannel.ChannelPoint throat = channel.getProfile().getFirst();
+throat.velocity();          // m/s
+throat.reynoldsNumber();    // dimensionless
+throat.nusseltNumber();     // dimensionless
+throat.heatTransferCoeff(); // h_c, W/(m²·K)
+
+// Phase 2 — run HeatTransferModel with the sized channel, then thermal analysis
+HeatTransferModel htr = new HeatTransferModel(params, contour)
+        .setWallProperties(20.0, 0.003)
+        .setCoolantChannel(channel)   // replaces scalar setCoolantProperties()
+        .calculate(net.getAllPoints());
+
+channel.calculate(htr.getWallThermalProfile());  // thermal mode
+
+// Thermal outputs
+double dT_coolant = channel.getCoolantTemperatureRise();  // K — total rise
+double margin     = channel.getMinBoilingMargin();        // K below saturation
+boolean subcooled = channel.isFullySubcooled();           // false → nucleate boiling
+```
+
+**Built-in coolant fluids:**
+
+| Constant                  | Fluid                                |
+|---------------------------|--------------------------------------|
+| `CoolantProperties.RP1`   | RP-1 kerosene (high-pressure liquid) |
+| `CoolantProperties.LH2`   | Liquid hydrogen                      |
+| `CoolantProperties.LOX`   | Liquid oxygen                        |
+| `CoolantProperties.WATER` | Water (test-stand cold-flow)         |
+
+**Key method summary:**
+
+| Method                           | Returns                                                  |
+|----------------------------------|----------------------------------------------------------|
+| `hydraulicDiameter()`            | D_h = 4A/P_wet, metres                                   |
+| `totalFlowArea()`                | Sum of all channel cross-sections, m²                    |
+| `getTotalPressureDrop()`         | Frictional + momentum pressure drop, Pa                  |
+| `getProfile()`                   | `List<ChannelPoint>` — per-station hydraulics/thermals   |
+| `getCoolantTemperatureRise()`    | T_out − T_in, K (set after thermal `calculate()`)        |
+| `getMinBoilingMargin()`          | Min (T_sat − T_bulk) across all stations, K              |
+| `isFullySubcooled()`             | `true` if bulk temperature < T_sat everywhere            |
+
+---
+
 ### ThermalStressAnalysis
 
 ```
+// Full constructor: thermal profile list from HeatTransferModel, material, wall geometry
 ThermalStressAnalysis stress = new ThermalStressAnalysis(
-        params, htr, ThermalStressAnalysis.Material.CU_CR_ZR).calculate();
+        params,
+        htr.getWallThermalProfile(),          // List<WallThermalPoint>
+        ThermalStressAnalysis.Material.COPPER_ALLOY_CuCrZr,
+        0.003,   // wall thickness, m
+        320.0    // wall conductivity, W/(m·K)
+).calculate();
 
-stress.getPeakVonMisesStress()    // Pa
-stress.getPeakThermalStress()     // Pa
-stress.getPeakPressureStress()    // Pa
-stress.getSafetyFactor()          // vs. yield strength
-stress.getFatigueLife()           // cycles (Basquin / Coffin-Manson)
-stress.getMaxAllowableTemperature() // material limit, K
-```
+// Scalar bounds over the full profile
+stress.getMaxVonMisesStress()     // Pa — peak combined stress
+stress.getMinSafetyFactor()       // min(yield / σ_VM) across all stations
+stress.getMaxDeltaT()             // max through-wall temperature difference, K
+stress.getMinFatigueCycles()      // min estimated start/shutdown cycles
 
-**Available materials:** `CU_CR_ZR`, `INCONEL_718`, `STAINLESS_304`, `TITANIUM_6AL4V`
+// Critical-point drill-down (station with highest σ_VM)
+ThermalStressAnalysis.WallStressPoint cp = stress.getCriticalPoint();
+cp.x()                    // axial position, m
+cp.wallTemperature()      // hot-wall temperature, K
+cp.deltaT()               // through-wall ΔT, K
+cp.thermalHoopStress()    // Timoshenko hoop stress from ΔT, Pa
+cp.pressureHoopStress()   // Lamé hoop stress from Pc, Pa
+cp.pressureAxialStress()  // Lamé axial stress from Pc, Pa
+cp.vonMisesStress()       // combined von Mises, Pa
+cp.safetyFactor()         // yield / σ_VM at this station
+cp.estimatedCycles()      // Basquin / Coffin-Manson life at this station
 
-### AblativeNozzleModel
-
-```
-AblativeNozzleModel ablative = new AblativeNozzleModel(
-        params, htr, AblativeNozzleModel.Material.CARBON_PHENOLIC).calculate();
-
-ablative.getCharRate(2500)          // m/s char recession rate at T=2500K
-ablative.getPeakRecessionRate()     // m/s
-ablative.getMechanicalErosionRate() // m/s
-ablative.getTotalAblatedMass(120)   // kg after 120 s burn
+// Full stress profile
+List<ThermalStressAnalysis.WallStressPoint> profile = stress.getStressProfile();
 ```
 
 **Available materials:**
-`CARBON_PHENOLIC`, `SILICA_PHENOLIC`, `EPDM`, `GRAPHITE`, `CARBON_CARBON`
+
+| Constant              | Description                            |
+|-----------------------|----------------------------------------|
+| `COPPER_ALLOY_CuCrZr` | Cu-Cr-Zr (C18150) — regenerative liner |
+| `INCONEL_718`         | Ni superalloy — mid-temperature walls  |
+| `STAINLESS_304`       | 304 stainless — general structural use |
+| `TITANIUM_6AL4V`      | Ti-6Al-4V — lightweight applications   |
+
+Each material exposes `yieldStrength()` (Pa), `ultimateStrength()` (Pa),
+`thermalExpansion()` (1/K), `youngsModulus()` (Pa), and `temperatureLimit()` (K).
+
+### AblativeNozzleModel
+
+Computes Arrhenius char recession and (optionally) mechanical particle-impact
+erosion for five liner material families.  Build a `HeatTransferModel` thermal
+profile first; the ablative model consumes the per-station wall temperatures.
+
+```
+// Build a baseline heat-transfer profile (ablative nozzles have no active cooling)
+List<HeatTransferModel.WallThermalPoint> heatProfile =
+        new HeatTransferModel(params, contour)
+                .setWallProperties(1.0, 0.020)    // k [W/(m·K)], liner thickness [m]
+                .setCoolantProperties(300.0, 0.0) // T_coolant, h_coolant=0 (none)
+                .calculate(List.of())
+                .getWallThermalProfile();
+
+// Fluent configuration
+AblativeNozzleModel ablative = new AblativeNozzleModel(params, contour)
+        .setMaterial(AblativeNozzleModel.AblativeMaterial.CARBON_PHENOLIC)
+        .setInitialLinerThickness(0.020)   // m — initial liner thickness
+        .setBurnTime(10.0)                 // s — total burn duration
+        .setErosionFactor(1e-5)            // m/s — mechanical erosion coefficient k_e
+        //   ṙ_mech = k_e · (Pc / 1 MPa)^0.8 (alumina impingement model)
+        .calculate(heatProfile);
+
+// Scalar bounds over the full wall
+ablative.getMaxRecessionDepth()          // m — worst-case ablated depth
+ablative.getMinRemainingThickness()      // m — thinnest remaining liner
+ablative.isPerforatedAnywhere()          // true if any station is fully ablated
+ablative.getTotalAblatedMass()           // kg — integrated mass loss
+
+// Per-station profile
+List<AblativeNozzleModel.AblativePoint> profile = ablative.getProfile();
+List<Double> massPerStation = ablative.getAblatedMassPerStation(); // kg per station
+
+AblativeNozzleModel.AblativePoint pt = profile.get(k);
+pt.x()               // axial position, m
+pt.y()               // wall radius, m
+pt.wallTemperature() // gas-side temperature, K
+pt.recessionDepth()  // ablated depth at this station, m
+pt.remainingThickness() // initial − recession, m
+```
+
+**`AblativeMaterial` enum — Arrhenius char rate:**
+
+```
+// Direct char-rate evaluation without a full model run
+double rate = AblativeNozzleModel.AblativeMaterial.CARBON_PHENOLIC.charRateAt(2500); // m/s
+```
+
+| Constant           | Description                                      |
+|--------------------|--------------------------------------------------|
+| `CARBON_PHENOLIC`  | Carbon-reinforced phenolic resin — SRM workhorse |
+| `SILICA_PHENOLIC`  | Silica-phenolic — lower erosion, heavier         |
+| `EPDM`             | EPDM rubber — flexible insulation liner          |
+| `GRAPHITE`         | Bulk graphite — throat insert                    |
+| `CARBON_CARBON`    | C/C composite — high-performance throat          |
 
 ### RadiationCooledExtension
 
-```
-RadiationCooledExtension rad = new RadiationCooledExtension(
-        params, htr, RadiationCooledExtension.Material.RHENIUM).calculate();
+Balances convective heat input (Bartz/Eckert) against Stefan-Boltzmann surface
+radiation to find the equilibrium wall temperature along a high-emissivity nozzle
+extension.  Provide the contour covering the full nozzle; the model processes
+only stations beyond `extensionStartX`.
 
-rad.getEquilibriumWallTemperature()  // K
-rad.isOverTemperature()              // exceeds material limit?
-rad.getMaterialLimit()               // material temperature limit, K
 ```
+// Upper-stage engine: regen-cooled to 30% of bell length, then radiation-cooled
+double extensionStartX = contour.getLength() * 0.30;
+
+RadiationCooledExtension rad = new RadiationCooledExtension(params, contour)
+        .setMaterial(RadiationCooledExtension.ExtensionMaterial.NIOBIUM_C103)
+        .setExtensionStartX(extensionStartX)    // m — start of radiation section
+        .setEnvironmentTemperature(3.0)          // K — background radiation (3K space)
+        .calculate(List.of());                   // pass MOC flow points if available
+
+// Scalar bounds
+double T_max  = rad.getMaxWallTemperature();       // K — hottest station
+double margin = rad.getMinTemperatureMargin();      // K below material limit
+double power  = rad.getTotalRadiatedPower();        // W — total radiated power
+boolean over  = rad.isOvertemperatureAnywhere();    // any station > material limit?
+
+// Per-station profile (only stations in the extension region)
+List<RadiationCooledExtension.ExtensionPoint> profile = rad.getProfile();
+RadiationCooledExtension.ExtensionPoint pt = profile.get(k);
+pt.x()                   // axial position, m
+pt.y()                   // wall radius, m
+pt.wallTemperature()     // equilibrium wall temperature, K
+pt.recoveryTemperature() // adiabatic wall temperature, K
+pt.temperatureMargin()   // material_limit − T_wall, K (negative → overtemperature)
+```
+
+**`ExtensionMaterial` enum:**
+
+| Constant             | Emissivity | T_limit (K) | Typical use                       |
+|----------------------|------------|-------------|-----------------------------------|
+| `NIOBIUM_C103`       | 0.85       | 1650        | Upper-stage bell extensions       |
+| `RHENIUM_IRIDIUM`    | 0.90       | 2200        | High-performance upper stage      |
+| `TITANIUM_6AL_4V`    | 0.70       | 900         | Low-heat-flux outer sections      |
+| `CARBON_CARBON`      | 0.90       | 2000        | Oxygen-free oxidizer environments |
 
 ---
 
@@ -891,10 +1078,6 @@ dxf.exportFullNozzleRevolutionProfile(geom, Path.of("full_profile.dxf"));
 dxf.exportAerospikeContour(aero, Path.of("spike.dxf"));
 // Layers: SPIKE (contour polyline), COWL (annular throat face), AXIS
 
-// Rao bell — convenience overloads (equivalent to the NozzleContour versions)
-dxf.exportContour(raoNozzle, Path.of("rao.dxf"));
-dxf.exportRevolutionProfile(raoNozzle, Path.of("rao_profile.dxf"));
-
 // Dual-bell — includes KINK layer annotation at the inflection point
 dxf.exportDualBellContour(db, Path.of("dual_bell.dxf"));
 // Layers: WALL (full polyline), AXIS (centerline), KINK (POINT + drop-line to axis)
@@ -935,15 +1118,11 @@ step.exportProfileCurve(contour,  Path.of("profile.step"));
 
 // Geometry-complete (convergent + divergent)
 step.exportRevolvedSolid(fullGeom, Path.of("nozzle_full.step"));
-step.exportProfileCurve(fullGeom,  Path.of("profile_full.step"));
 
 // Aerospike
 step.exportAerospikeRevolvedSolid(aero, Path.of("spike.step"));
-step.exportProfileCurve(aero, Path.of("spike_profile.step"));  // truncated spike B-spline curve
 
-// Rao bell and dual-bell convenience overloads
-step.exportRevolvedSolid(raoNozzle, Path.of("rao.step"));
-step.exportProfileCurve(raoNozzle,  Path.of("rao_profile.step"));
+// Dual-bell convenience overloads
 step.exportRevolvedSolid(db, Path.of("dual_bell.step"));
 step.exportProfileCurve(db,  Path.of("dual_bell_profile.step"));
 ```
@@ -958,17 +1137,14 @@ STLExporter stl = new STLExporter()
 
 // Divergent only
 stl.exportMesh(contour, Path.of("nozzle.stl"));
-stl.exportInnerSurfaceMesh(contour, Path.of("nozzle_inner.stl")); // same as exportMesh
 
 // Geometry-complete (convergent + divergent)
 stl.exportMesh(fullGeom, Path.of("nozzle_full.stl"));
-stl.exportInnerSurfaceMesh(fullGeom, Path.of("nozzle_full_inner.stl"));
 
 // Aerospike
 stl.exportAerospikeMesh(aero, Path.of("spike.stl"));
 
-// Rao bell and dual-bell convenience overloads
-stl.exportMesh(raoNozzle, Path.of("rao.stl"));
+// Dual-bell convenience overload
 stl.exportMesh(db, Path.of("dual_bell.stl"));
 
 int triangles = stl.estimateTriangleCount(contour.getContourPoints().size());
@@ -996,10 +1172,6 @@ cfd.export(fullGeom, Path.of("blockMeshDict_full"), CFDMeshExporter.Format.OPENF
 cfd.export(fullGeom, Path.of("nozzle_full.geo"),    CFDMeshExporter.Format.GMSH_GEO);
 cfd.export(fullGeom, Path.of("nozzle_full.xyz"),    CFDMeshExporter.Format.PLOT3D);
 cfd.export(fullGeom, Path.of("nozzle_full.cgns"),   CFDMeshExporter.Format.CGNS);
-
-// Convenience overloads — build NozzleContour internally
-cfd.export(new RaoNozzle(params).generate(),      Path.of("bmd"), CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
-cfd.export(new DualBellNozzle(params).generate(), Path.of("bmd"), CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
 
 // Aerospike — annular domain (spike inner wall, cowl outer wall)
 cfd.exportAerospike(aero, Path.of("aero_bmd"), CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
@@ -1039,10 +1211,6 @@ foam.exportCase(params, contour, Path.of("nozzle_case"));
 
 // Geometry-complete (inlet is at the injector face x_chamber)
 foam.exportCase(params, fullGeom, Path.of("nozzle_case_full"));
-
-// Convenience overloads (build NozzleContour and extract params internally)
-foam.exportCase(new RaoNozzle(params).generate(),      Path.of("rao_case"));
-foam.exportCase(new DualBellNozzle(params).generate(), Path.of("dualbell_case"));
 
 // Aerospike — annular domain, spike inner wall + cowl outer wall
 foam.exportAerospikeCase(aerospikeNozzle, Path.of("aerospike_case"));
@@ -1086,11 +1254,10 @@ rev.export(fullGeom, Path.of("blockMeshDict_3d_full"), RevolvedMeshExporter.Form
 rev.export(fullGeom, Path.of("nozzle_3d_full.geo"),    RevolvedMeshExporter.Format.GMSH_GEO);
 rev.export(fullGeom, Path.of("nozzle_3d_full.xyz"),    RevolvedMeshExporter.Format.PLOT3D);
 
-// Rao bell and dual-bell convenience overloads
-rev.export(raoNozzle, Path.of("rao_3d_bmd"),    RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
-rev.export(db,        Path.of("db_3d_bmd"),     RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
-rev.export(db,        Path.of("db_3d.geo"),     RevolvedMeshExporter.Format.GMSH_GEO);
-rev.export(db,        Path.of("db_3d.xyz"),     RevolvedMeshExporter.Format.PLOT3D);
+// Dual-bell convenience overload
+rev.export(db, Path.of("db_3d_bmd"), RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
+rev.export(db, Path.of("db_3d.geo"), RevolvedMeshExporter.Format.GMSH_GEO);
+rev.export(db, Path.of("db_3d.xyz"), RevolvedMeshExporter.Format.PLOT3D);
 ```
 
 ---

@@ -173,4 +173,179 @@ class PropellantComposition_UT {
                     .isCloseTo(1.0, within(1e-6));
         }
     }
+
+    @Nested
+    @DisplayName("N2O/Ethanol composition presets")
+    class N2oEthanolTests {
+
+        @Test
+        @DisplayName("Nominal (MR ~5.0) is non-empty and normalized")
+        void nominalIsNonEmptyAndNormalized() {
+            comp.setN2oEthanol(5.0);
+            assertThat(comp.get()).isNotEmpty();
+            assertThat(comp.get().values().stream().mapToDouble(Double::doubleValue).sum())
+                    .isCloseTo(1.0, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("Nominal (MR ~5.0) seeds N2 from the N2O nitrogen")
+        void nominalContainsN2() {
+            comp.setN2oEthanol(5.0);
+            assertThat(comp.get()).containsKey("N2");
+        }
+
+        @Test
+        @DisplayName("Nominal (MR ~5.0) seeds H2O from C/H/O balance")
+        void nominalContainsH2O() {
+            comp.setN2oEthanol(5.0);
+            assertThat(comp.get()).containsKey("H2O");
+        }
+
+        @Test
+        @DisplayName("Nominal (MR ~5.0) seeds OH radical")
+        void nominalContainsOH() {
+            comp.setN2oEthanol(5.0);
+            assertThat(comp.get()).containsKey("OH");
+        }
+
+        @Test
+        @DisplayName("Fuel-rich (MR 2.0) contains CO")
+        void fuelRichContainsCO() {
+            comp.setN2oEthanol(2.0);
+            assertThat(comp.get()).containsKey("CO");
+            assertThat(comp.get().values().stream().mapToDouble(Double::doubleValue).sum())
+                    .isCloseTo(1.0, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("Near-stoichiometric (MR ~5.7) contains CO2")
+        void nearStoichContainsCO2() {
+            comp.setN2oEthanol(5.7);
+            assertThat(comp.get()).containsKey("CO2");
+            assertThat(comp.get().values().stream().mapToDouble(Double::doubleValue).sum())
+                    .isCloseTo(1.0, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("N2 mass fraction grows with increasing MR (more N2O → more N2)")
+        void n2FractionGrowsWithMixtureRatio() {
+            comp.setN2oEthanol(3.0);
+            double n2At3 = comp.get().getOrDefault("N2", 0.0);
+            comp.setN2oEthanol(8.0);
+            double n2At8 = comp.get().getOrDefault("N2", 0.0);
+            assertThat(n2At8).isGreaterThan(n2At3);
+        }
+    }
+
+    @Nested
+    @DisplayName("N2O/Propane composition presets")
+    class N2oPropaneTests {
+
+        @Test
+        @DisplayName("Nominal (MR ~8.0) is non-empty and normalized")
+        void nominalIsNonEmptyAndNormalized() {
+            comp.setN2oPropane(8.0);
+            assertThat(comp.get()).isNotEmpty();
+            assertThat(comp.get().values().stream().mapToDouble(Double::doubleValue).sum())
+                    .isCloseTo(1.0, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("Nominal (MR ~8.0) seeds N2 from the N2O nitrogen")
+        void nominalContainsN2() {
+            comp.setN2oPropane(8.0);
+            assertThat(comp.get()).containsKey("N2");
+        }
+
+        @Test
+        @DisplayName("Nominal (MR ~8.0) seeds H2O from C/H/O balance")
+        void nominalContainsH2O() {
+            comp.setN2oPropane(8.0);
+            assertThat(comp.get()).containsKey("H2O");
+        }
+
+        @Test
+        @DisplayName("Nominal (MR ~8.0) seeds OH radical")
+        void nominalContainsOH() {
+            comp.setN2oPropane(8.0);
+            assertThat(comp.get()).containsKey("OH");
+        }
+
+        @Test
+        @DisplayName("Fuel-rich (MR 3.0) contains CO and H2")
+        void fuelRichContainsCoAndH2() {
+            comp.setN2oPropane(3.0);
+            assertThat(comp.get()).containsKey("CO");
+            assertThat(comp.get()).containsKey("H2");
+            assertThat(comp.get().values().stream().mapToDouble(Double::doubleValue).sum())
+                    .isCloseTo(1.0, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("Near-stoichiometric (MR ~10.0) contains CO2")
+        void nearStoichContainsCO2() {
+            comp.setN2oPropane(10.0);
+            assertThat(comp.get()).containsKey("CO2");
+            assertThat(comp.get().values().stream().mapToDouble(Double::doubleValue).sum())
+                    .isCloseTo(1.0, within(1e-6));
+        }
+
+        @Test
+        @DisplayName("N2 mass fraction grows with increasing MR (more N2O → more N2)")
+        void n2FractionGrowsWithMixtureRatio() {
+            comp.setN2oPropane(5.0);
+            double n2At5 = comp.get().getOrDefault("N2", 0.0);
+            comp.setN2oPropane(12.0);
+            double n2At12 = comp.get().getOrDefault("N2", 0.0);
+            assertThat(n2At12).isGreaterThan(n2At5);
+        }
+    }
+
+    @Nested
+    @DisplayName("H2O and OH seeding across all propellant families")
+    class H2oAndOhSeedingTests {
+
+        @Test
+        @DisplayName("LOX/RP-1 near-stoich seeds H2O")
+        void loxRp1SeedsH2O() {
+            comp.setLoxRp1(2.5);
+            assertThat(comp.get()).containsKey("H2O");
+        }
+
+        @Test
+        @DisplayName("LOX/RP-1 near-stoich seeds OH radical (10% of H2O seed)")
+        void loxRp1SeedsOH() {
+            comp.setLoxRp1(2.5);
+            assertThat(comp.get()).containsKey("OH");
+        }
+
+        @Test
+        @DisplayName("LOX/CH4 near-stoich seeds H2O")
+        void loxCh4SeedsH2O() {
+            comp.setLoxCh4(3.5);
+            assertThat(comp.get()).containsKey("H2O");
+        }
+
+        @Test
+        @DisplayName("LOX/CH4 near-stoich seeds OH radical (10% of H2O seed)")
+        void loxCh4SeedsOH() {
+            comp.setLoxCh4(3.5);
+            assertThat(comp.get()).containsKey("OH");
+        }
+
+        @Test
+        @DisplayName("LOX/LH2 near-stoich seeds H2O (C-free branch)")
+        void loxLh2SeedsH2O() {
+            comp.setLoxLh2(6.0);
+            assertThat(comp.get()).containsKey("H2O");
+        }
+
+        @Test
+        @DisplayName("LOX/LH2 near-stoich seeds OH radical (3% of H2O seed, C-free branch)")
+        void loxLh2SeedsOH() {
+            comp.setLoxLh2(6.0);
+            assertThat(comp.get()).containsKey("OH");
+        }
+
+    }
 }

@@ -203,6 +203,162 @@ class ConvergentSection_UT {
     }
 
     // =========================================================================
+    // getLength
+    // =========================================================================
+
+    @Nested
+    @DisplayName("getLength Tests")
+    class GetLengthTests {
+
+        @Test
+        @DisplayName("Returns 0 before generate is called")
+        void zeroBeforeGenerate() {
+            assertThat(new ConvergentSection(defaultParams).getLength()).isEqualTo(0.0);
+        }
+
+        @Test
+        @DisplayName("Equals the magnitude of the first contour point's x-coordinate")
+        void equalsNegatedFirstPointX() {
+            ConvergentSection cs = new ConvergentSection(defaultParams).generate(50);
+            assertThat(cs.getLength())
+                    .isCloseTo(-cs.getContourPoints().getFirst().x(), within(1e-9));
+        }
+
+        @Test
+        @DisplayName("Equals -getChamberFaceX()")
+        void equalsNegatedChamberFaceX() {
+            ConvergentSection cs = new ConvergentSection(defaultParams).generate(50);
+            assertThat(cs.getLength()).isCloseTo(-cs.getChamberFaceX(), within(1e-9));
+        }
+
+        @Test
+        @DisplayName("Grows with larger contraction ratio (more radial distance to cover)")
+        void growsWithContractionRatio() {
+            double len4 = lengthFor(4.0, 30, 1.5);
+            double len8 = lengthFor(8.0, 30, 1.5);
+            assertThat(len8).isGreaterThan(len4);
+        }
+
+        @Test
+        @DisplayName("Grows with smaller half-angle (more gradual cone → longer axial run)")
+        void growsWithSmallerHalfAngle() {
+            double len40 = lengthFor(4.0, 40, 1.5);
+            double len20 = lengthFor(4.0, 20, 1.5);
+            assertThat(len20).isGreaterThan(len40);
+        }
+
+        @Test
+        @DisplayName("Matches the analytical chamber-face formula")
+        void matchesAnalyticalFormula() {
+            double rt  = defaultParams.throatRadius();
+            double rcu = defaultParams.upstreamCurvatureRatio() * rt;
+            double tc  = defaultParams.convergentHalfAngle();
+            double rc  = defaultParams.chamberRadius();
+
+            double arcEndX = -rcu * Math.sin(tc);
+            double arcEndY = rt + rcu * (1.0 - Math.cos(tc));
+            double expectedChamberFaceX = arcEndX - (rc - arcEndY) / Math.tan(tc);
+            double expectedLength = -expectedChamberFaceX;
+
+            ConvergentSection cs = new ConvergentSection(defaultParams).generate(50);
+            assertThat(cs.getLength()).isCloseTo(expectedLength, within(1e-9));
+        }
+
+        private double lengthFor(double cr, double halfDeg, double uRatio) {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(3.0)
+                    .chamberPressure(7e6).chamberTemperature(3500)
+                    .ambientPressure(101325).gasProperties(GasProperties.AIR)
+                    .contractionRatio(cr)
+                    .convergentHalfAngleDegrees(halfDeg)
+                    .upstreamCurvatureRatio(uRatio)
+                    .build();
+            return new ConvergentSection(p).generate(50).getLength();
+        }
+    }
+
+    // =========================================================================
+    // getChamberFaceX
+    // =========================================================================
+
+    @Nested
+    @DisplayName("getChamberFaceX Tests")
+    class GetChamberFaceXTests {
+
+        @Test
+        @DisplayName("Returns 0 before generate is called (field default)")
+        void zeroBeforeGenerate() {
+            assertThat(new ConvergentSection(defaultParams).getChamberFaceX()).isEqualTo(0.0);
+        }
+
+        @Test
+        @DisplayName("Returns a negative value after generate (upstream of throat)")
+        void negativeAfterGenerate() {
+            assertThat(new ConvergentSection(defaultParams).generate(50).getChamberFaceX())
+                    .isNegative();
+        }
+
+        @Test
+        @DisplayName("Equals the x-coordinate of the first contour point")
+        void equalsFirstContourPointX() {
+            ConvergentSection cs = new ConvergentSection(defaultParams).generate(50);
+            assertThat(cs.getChamberFaceX())
+                    .isCloseTo(cs.getContourPoints().getFirst().x(), within(1e-9));
+        }
+
+        @Test
+        @DisplayName("Equals -getLength()")
+        void equalsNegatedLength() {
+            ConvergentSection cs = new ConvergentSection(defaultParams).generate(50);
+            assertThat(cs.getChamberFaceX()).isCloseTo(-cs.getLength(), within(1e-9));
+        }
+
+        @Test
+        @DisplayName("Matches the analytical formula: arcEndX - (r_c - arcEndY) / tan(θ_c)")
+        void matchesAnalyticalFormula() {
+            double rt  = defaultParams.throatRadius();
+            double rcu = defaultParams.upstreamCurvatureRatio() * rt;
+            double tc  = defaultParams.convergentHalfAngle();
+            double rc  = defaultParams.chamberRadius();
+
+            double arcEndX = -rcu * Math.sin(tc);
+            double arcEndY = rt + rcu * (1.0 - Math.cos(tc));
+            double expected = arcEndX - (rc - arcEndY) / Math.tan(tc);
+
+            ConvergentSection cs = new ConvergentSection(defaultParams).generate(50);
+            assertThat(cs.getChamberFaceX()).isCloseTo(expected, within(1e-9));
+        }
+
+        @Test
+        @DisplayName("Becomes more negative with larger contraction ratio")
+        void moreNegativeWithLargerContractionRatio() {
+            double x4 = chamberFaceXFor(4.0, 30, 1.5);
+            double x8 = chamberFaceXFor(8.0, 30, 1.5);
+            assertThat(x8).isLessThan(x4);
+        }
+
+        @Test
+        @DisplayName("Becomes more negative with smaller half-angle")
+        void moreNegativeWithSmallerHalfAngle() {
+            double x40 = chamberFaceXFor(4.0, 40, 1.5);
+            double x20 = chamberFaceXFor(4.0, 20, 1.5);
+            assertThat(x20).isLessThan(x40);
+        }
+
+        private double chamberFaceXFor(double cr, double halfDeg, double uRatio) {
+            NozzleDesignParameters p = NozzleDesignParameters.builder()
+                    .throatRadius(0.05).exitMach(3.0)
+                    .chamberPressure(7e6).chamberTemperature(3500)
+                    .ambientPressure(101325).gasProperties(GasProperties.AIR)
+                    .contractionRatio(cr)
+                    .convergentHalfAngleDegrees(halfDeg)
+                    .upstreamCurvatureRatio(uRatio)
+                    .build();
+            return new ConvergentSection(p).generate(50).getChamberFaceX();
+        }
+    }
+
+    // =========================================================================
     // Sonic-line Cd correction
     // =========================================================================
 
