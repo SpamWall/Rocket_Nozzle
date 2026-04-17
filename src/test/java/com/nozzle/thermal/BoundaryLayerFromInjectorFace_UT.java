@@ -24,6 +24,7 @@ import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
+import com.nozzle.thermal.BoundaryLayerPoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -283,8 +284,8 @@ class BoundaryLayerFromInjectorFace_UT {
                 .calculateFromInjectorFace(fullGeom, null)
                 .getBoundaryLayerProfile();
 
-        double xMin = profile.stream().mapToDouble(BoundaryLayerCorrection.BoundaryLayerPoint::x).min().orElse(0);
-        double xMax = profile.stream().mapToDouble(BoundaryLayerCorrection.BoundaryLayerPoint::x).max().orElse(0);
+        double xMin = profile.stream().mapToDouble(BoundaryLayerPoint::x).min().orElse(0);
+        double xMax = profile.stream().mapToDouble(BoundaryLayerPoint::x).max().orElse(0);
 
         assertThat(xMin).isNegative();   // convergent section covered
         assertThat(xMax).isPositive();   // divergent section covered

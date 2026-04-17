@@ -24,6 +24,7 @@ import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.NozzleContour;
 import com.nozzle.moc.CharacteristicPoint;
+import com.nozzle.thermal.BoundaryLayerPoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -96,10 +97,10 @@ class BoundaryLayerCorrection_UT {
             BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
                     .calculate(List.of());
             
-            List<BoundaryLayerCorrection.BoundaryLayerPoint> profile = bl.getBoundaryLayerProfile();
+            List<BoundaryLayerPoint> profile = bl.getBoundaryLayerProfile();
             assertThat(profile).isNotEmpty();
         }
-        
+
         @Test
         @DisplayName("Should calculate exit displacement thickness")
         void shouldCalculateExitDisplacementThickness() {
@@ -143,7 +144,7 @@ class BoundaryLayerCorrection_UT {
                     .setForceTurbulent(true)
                     .calculate(List.of());
 
-            for (BoundaryLayerCorrection.BoundaryLayerPoint point : bl.getBoundaryLayerProfile()) {
+            for (BoundaryLayerPoint point : bl.getBoundaryLayerProfile()) {
                 assertThat(point.reynoldsNumber()).isGreaterThanOrEqualTo(0);
             }
         }
@@ -154,7 +155,7 @@ class BoundaryLayerCorrection_UT {
             BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
                     .calculate(List.of());
 
-            for (BoundaryLayerCorrection.BoundaryLayerPoint point : bl.getBoundaryLayerProfile()) {
+            for (BoundaryLayerPoint point : bl.getBoundaryLayerProfile()) {
                 double H = point.shapeFactor();
                 assertThat(H).isBetween(1.0, 3.0);
             }
@@ -191,7 +192,7 @@ class BoundaryLayerCorrection_UT {
                     .setForceTurbulent(false)
                     .calculate(List.of());
 
-            List<BoundaryLayerCorrection.BoundaryLayerPoint> profile = bl.getBoundaryLayerProfile();
+            List<BoundaryLayerPoint> profile = bl.getBoundaryLayerProfile();
             assertThat(profile).isNotEmpty();
 
             // First point (runningLength=0) must be laminar
@@ -208,9 +209,9 @@ class BoundaryLayerCorrection_UT {
                     .setTransitionReynolds(1e9)
                     .calculate(List.of());
 
-            List<BoundaryLayerCorrection.BoundaryLayerPoint> profile = bl.getBoundaryLayerProfile();
+            List<BoundaryLayerPoint> profile = bl.getBoundaryLayerProfile();
             assertThat(profile).isNotEmpty();
-            assertThat(profile.stream().noneMatch(BoundaryLayerCorrection.BoundaryLayerPoint::isTurbulent)).isTrue();
+            assertThat(profile.stream().noneMatch(BoundaryLayerPoint::isTurbulent)).isTrue();
         }
     }
 
@@ -245,7 +246,7 @@ class BoundaryLayerCorrection_UT {
             BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, contour)
                     .calculate(List.of(fp));
 
-            List<BoundaryLayerCorrection.BoundaryLayerPoint> profile = bl.getBoundaryLayerProfile();
+            List<BoundaryLayerPoint> profile = bl.getBoundaryLayerProfile();
             assertThat(profile).isNotEmpty();
             // The first contour point is assigned flow data → mach comes from fp
             assertThat(profile.getFirst().mach()).isCloseTo(1.2, within(0.01));

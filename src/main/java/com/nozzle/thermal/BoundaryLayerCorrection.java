@@ -15,7 +15,7 @@
  *  program.  If not, see <https://www.gnu.org/licenses/>.
  *
  *  Contact the owner via the github repository if you would like to license this software for
- *  commercial purposes outside the restrictions imposed by this copyright.
+ *  commercial purposes outside the restrictions induced by this copyright.
  */
 
 package com.nozzle.thermal;
@@ -36,15 +36,15 @@ import java.util.List;
  * and thrust coefficient adjustments.
  */
 public class BoundaryLayerCorrection {
-    
+
     private final NozzleDesignParameters parameters;
     private final NozzleContour contour;
     private final List<BoundaryLayerPoint> blProfile;
-    
+
     // Boundary layer parameters
     private double turbulentTransitionRe = 5e5;
     private boolean forceTurbulent = true;
-    
+
     /**
      * Creates a boundary layer correction model.
      *
@@ -56,7 +56,7 @@ public class BoundaryLayerCorrection {
         this.contour = contour;
         this.blProfile = new ArrayList<>();
     }
-    
+
     /**
      * Sets transition Reynolds number.
      *
@@ -67,7 +67,7 @@ public class BoundaryLayerCorrection {
         this.turbulentTransitionRe = re;
         return this;
     }
-    
+
     /**
      * Forces turbulent boundary layer throughout.
      *
@@ -78,7 +78,7 @@ public class BoundaryLayerCorrection {
         this.forceTurbulent = turbulent;
         return this;
     }
-    
+
     /**
      * Calculates boundary layer starting from the injector face (chamber inlet)
      * and integrating through both the convergent and divergent sections.
@@ -130,11 +130,7 @@ public class BoundaryLayerCorrection {
 
             CharacteristicPoint flow = findNearestFlowPoint(point, flowPoints);
 
-            double mach;
-            double temp;
-            double pressure;
-            double velocity;
-
+            double mach, temp, pressure, velocity;
             if (flow != null) {
                 mach     = flow.mach();
                 temp     = flow.temperature();
@@ -150,43 +146,10 @@ public class BoundaryLayerCorrection {
             double density   = pressure / (gas.gasConstant() * temp);
             double viscosity = gas.calculateViscosity(temp);
             double Re = runningLength > 0 ? density * velocity * runningLength / viscosity : 0.0;
-
             boolean isTurbulent = forceTurbulent || Re > turbulentTransitionRe;
 
-            double delta;
-            double deltaStar;
-            double theta;
-
-            if (runningLength < 1e-12) {
-                delta = 0; deltaStar = 0; theta = 0;
-            } else if (isTurbulent) {
-                delta     = 0.37   * runningLength / Math.pow(Re, 0.2);
-                deltaStar = delta  / 8.0;
-                theta     = 7.0 / 72.0 * delta;
-            } else {
-                delta     = 5.0   * runningLength / Math.sqrt(Re + 1.0);
-                deltaStar = 1.72  * runningLength / Math.sqrt(Re + 1.0);
-                theta     = 0.664 * runningLength / Math.sqrt(Re + 1.0);
-            }
-
-            double compCorrection = 1.0 + 0.2 * (gamma - 1.0) * mach * mach;
-            delta     *= compCorrection;
-            deltaStar *= compCorrection;
-            theta     *= compCorrection;
-
-            double cf;
-            if (runningLength < 1e-12 || Re < 1.0) {
-                cf = 0.0;
-            } else if (isTurbulent) {
-                cf = 0.074 / Math.pow(Re, 0.2);
-            } else {
-                cf = 1.328 / Math.sqrt(Re + 1.0);
-            }
-            cf *= 0.9; // Tw/Taw correction
-
-            blProfile.add(new BoundaryLayerPoint(
-                    point.x(), point.y(), runningLength, Re,
-                    delta, deltaStar, theta, cf, isTurbulent, mach));
+            blProfile.add(computeBlKernel(point.x(), point.y(), runningLength,
+                    Re, isTurbulent, gamma, mach));
         }
 
         return this;
@@ -259,7 +222,7 @@ public class BoundaryLayerCorrection {
      * @return Estimated Mach number ≥ 0
      */
     private double estimateMachFromFullGeometry(FullNozzleGeometry geom,
-                                                 double x, double y) {
+                                                double x, double y) {
         double rt     = geom.getThroatRadius();
         double aRatio = (y / rt) * (y / rt);
         GasProperties gas = parameters.gasProperties();
@@ -288,90 +251,48 @@ public class BoundaryLayerCorrection {
      */
     public BoundaryLayerCorrection calculate(List<CharacteristicPoint> flowPoints) {
         blProfile.clear();
-        
+
         List<Point2D> contourPoints = contour.getContourPoints();
         if (contourPoints.isEmpty()) {
             contour.generate(100);
             contourPoints = contour.getContourPoints();
         }
-        
+
         GasProperties gas = parameters.gasProperties();
         double gamma = gas.gamma();
-        
-        // Running length from throat
+
         double runningLength = 0;
         Point2D prevPoint = contourPoints.getFirst();
-        
+
         for (int i = 0; i < contourPoints.size(); i++) {
             Point2D point = contourPoints.get(i);
-            
+
             if (i > 0) {
                 runningLength += prevPoint.distanceTo(point);
             }
             prevPoint = point;
-            
-            // Find local flow conditions
+
             CharacteristicPoint flow = findNearestFlowPoint(point, flowPoints);
-            
+
             double mach = flow != null ? flow.mach() : estimateMach(point.x());
-            double temp = flow != null ? flow.temperature() 
+            double temp = flow != null ? flow.temperature()
                     : parameters.chamberTemperature() * gas.isentropicTemperatureRatio(mach);
             double pressure = flow != null ? flow.pressure()
                     : parameters.chamberPressure() * gas.isentropicPressureRatio(mach);
             double velocity = flow != null ? flow.velocity() : mach * gas.speedOfSound(temp);
-            
-            double density = pressure / (gas.gasConstant() * temp);
+
+            double density   = pressure / (gas.gasConstant() * temp);
             double viscosity = gas.calculateViscosity(temp);
-            
-            // Local Reynolds number
             double Re = density * velocity * runningLength / viscosity;
-            
-            // Determine if turbulent
             boolean isTurbulent = forceTurbulent || Re > turbulentTransitionRe;
-            
-            // Calculate boundary layer thickness
-            double delta, deltaStar, theta;
-            
-            if (isTurbulent) {
-                // Turbulent boundary layer (1/7 power law)
-                delta = 0.37 * runningLength / Math.pow(Re, 0.2);
-                deltaStar = delta / 8.0; // Displacement thickness
-                theta = 7.0 / 72.0 * delta; // Momentum thickness
-            } else {
-                // Laminar boundary layer (Blasius)
-                delta = 5.0 * runningLength / Math.sqrt(Re + 1);
-                deltaStar = 1.72 * runningLength / Math.sqrt(Re + 1);
-                theta = 0.664 * runningLength / Math.sqrt(Re + 1);
-            }
-            
-            // Compressibility correction (Van Driest II)
-            double compCorrection = 1.0 + 0.2 * (gamma - 1) * mach * mach;
-            delta *= compCorrection;
-            deltaStar *= compCorrection;
-            theta *= compCorrection;
-            
-            // Skin friction coefficient
-            double cf;
-            if (isTurbulent) {
-                cf = 0.074 / Math.pow(Re, 0.2);
-            } else {
-                cf = 1.328 / Math.sqrt(Re + 1);
-            }
-            
-            // Compressibility correction for skin friction
-            double Tw_Taw = 0.9; // Wall to adiabatic wall temp ratio
-            cf *= Math.pow(Tw_Taw, 0.5);
-            
-            BoundaryLayerPoint blPoint = new BoundaryLayerPoint(
-                    point.x(), point.y(), runningLength, Re,
-                    delta, deltaStar, theta, cf, isTurbulent, mach
-            );
-            blProfile.add(blPoint);
+
+            blProfile.add(computeBlKernel(point.x(), point.y(), runningLength,
+                    Re, isTurbulent, gamma, mach));
         }
-        
+
         return this;
     }
-    
+
     /**
      * Estimates the local Mach number at axial position {@code x} when no
      * MOC flow-field point is available nearby.
@@ -417,13 +338,11 @@ public class BoundaryLayerCorrection {
         try {
             r = contour.getRadiusAt(x);
         } catch (Exception e) {
-            // Contour spline not defined at x; fall back to chamber M≈0 estimate
             return 0.1;
         }
-        double aRatio = (r / rt) * (r / rt);   // A/A* at this position
-        if (aRatio <= 1.0) return 1.0;          // at or past throat
+        double aRatio = (r / rt) * (r / rt);
+        if (aRatio <= 1.0) return 1.0;
 
-        // Bisection on isentropic area-Mach relation for the subsonic root
         var gas = parameters.gasProperties();
         double lo = 0.001, hi = 1.0;
         for (int iter = 0; iter < 60; iter++) {
@@ -433,7 +352,7 @@ public class BoundaryLayerCorrection {
         }
         return 0.5 * (lo + hi);
     }
-    
+
     /**
      * Finds the characteristic flow point nearest to a given wall location using
      * the minimum Euclidean distance in the (x, y) plane.
@@ -445,12 +364,12 @@ public class BoundaryLayerCorrection {
      *         {@code flowPoints} is {@code null} or empty
      */
     private CharacteristicPoint findNearestFlowPoint(Point2D wallPoint,
-                                                      List<CharacteristicPoint> flowPoints) {
+                                                     List<CharacteristicPoint> flowPoints) {
         if (flowPoints == null || flowPoints.isEmpty()) return null;
-        
+
         CharacteristicPoint nearest = null;
         double minDist = Double.MAX_VALUE;
-        
+
         for (CharacteristicPoint fp : flowPoints) {
             double dx = fp.x() - wallPoint.x();
             double dy = fp.y() - wallPoint.y();
@@ -460,10 +379,61 @@ public class BoundaryLayerCorrection {
                 nearest = fp;
             }
         }
-        
+
         return nearest;
     }
-    
+
+    /**
+     * Computes boundary-layer thicknesses and skin friction at a single wall point.
+     * Applies the 1/7-power-law (turbulent) or Blasius (laminar) flat-plate
+     * correlations with a Van Driest compressibility correction and a Tw/Taw = 0.9
+     * wall-temperature skin-friction factor.
+     *
+     * @param x             Axial position in metres
+     * @param y             Radial wall position in metres
+     * @param runningLength Wall arc length from the first profile point (metres)
+     * @param Re            Local running-length Reynolds number
+     * @param isTurbulent   {@code true} for turbulent correlations
+     * @param gamma         Specific heat ratio
+     * @param mach          Local Mach number
+     * @return Computed {@link BoundaryLayerPoint}
+     */
+    private static BoundaryLayerPoint computeBlKernel(
+            double x, double y, double runningLength,
+            double Re, boolean isTurbulent, double gamma, double mach) {
+
+        double delta, deltaStar, theta;
+        if (runningLength < 1e-12) {
+            delta = 0; deltaStar = 0; theta = 0;
+        } else if (isTurbulent) {
+            delta     = 0.37  * runningLength / Math.pow(Re, 0.2);
+            deltaStar = delta / 8.0;
+            theta     = 7.0 / 72.0 * delta;
+        } else {
+            delta     = 5.0   * runningLength / Math.sqrt(Re + 1.0);
+            deltaStar = 1.72  * runningLength / Math.sqrt(Re + 1.0);
+            theta     = 0.664 * runningLength / Math.sqrt(Re + 1.0);
+        }
+
+        double compCorrection = 1.0 + 0.2 * (gamma - 1.0) * mach * mach;
+        delta     *= compCorrection;
+        deltaStar *= compCorrection;
+        theta     *= compCorrection;
+
+        double cf;
+        if (runningLength < 1e-12 || Re < 1.0) {
+            cf = 0.0;
+        } else if (isTurbulent) {
+            cf = 0.074 / Math.pow(Re, 0.2);
+        } else {
+            cf = 1.328 / Math.sqrt(Re + 1.0);
+        }
+        cf *= 0.9; // Tw/Taw wall-temperature correction
+
+        return new BoundaryLayerPoint(x, y, runningLength, Re,
+                delta, deltaStar, theta, cf, isTurbulent, mach);
+    }
+
     /**
      * Calculates effective area ratio with boundary layer correction.
      *
@@ -471,16 +441,14 @@ public class BoundaryLayerCorrection {
      */
     public double getCorrectedAreaRatio() {
         if (blProfile.isEmpty()) return parameters.exitAreaRatio();
-        
+
         double rt = parameters.throatRadius();
         BoundaryLayerPoint exitBL = blProfile.getLast();
-        
-        // Effective radius reduced by displacement thickness
+
         double rEffective = exitBL.y() - exitBL.displacementThickness();
-        
         return (rEffective * rEffective) / (rt * rt);
     }
-    
+
     /**
      * Calculates thrust coefficient loss due to boundary layer.
      *
@@ -488,32 +456,28 @@ public class BoundaryLayerCorrection {
      */
     public double getThrustCoefficientLoss() {
         if (blProfile.isEmpty()) return 0;
-        
-        // Integrate skin friction drag
+
         double dragCoeff = 0;
         List<Point2D> contourPoints = contour.getContourPoints();
-        
+
         for (int i = 1; i < blProfile.size() && i < contourPoints.size(); i++) {
             BoundaryLayerPoint prev = blProfile.get(i - 1);
             BoundaryLayerPoint curr = blProfile.get(i);
             Point2D p1 = contourPoints.get(i - 1);
             Point2D p2 = contourPoints.get(i);
-            
-            double ds = p1.distanceTo(p2);
+
+            double ds   = p1.distanceTo(p2);
             double rAvg = (p1.y() + p2.y()) / 2;
             double cfAvg = (prev.skinFrictionCoeff() + curr.skinFrictionCoeff()) / 2;
-            
-            // Surface area element
+
             double dA = 2 * Math.PI * rAvg * ds;
-            
-            // Add to drag coefficient (normalized by throat area)
             double At = Math.PI * parameters.throatRadius() * parameters.throatRadius();
             dragCoeff += cfAvg * dA / At;
         }
-        
+
         return dragCoeff;
     }
-    
+
     /**
      * Gets the boundary layer profile.
      *
@@ -522,7 +486,7 @@ public class BoundaryLayerCorrection {
     public List<BoundaryLayerPoint> getBoundaryLayerProfile() {
         return new ArrayList<>(blProfile);
     }
-    
+
     /**
      * Gets displacement thickness at exit.
      *
@@ -532,7 +496,7 @@ public class BoundaryLayerCorrection {
         if (blProfile.isEmpty()) return 0;
         return blProfile.getLast().displacementThickness();
     }
-    
+
     /**
      * Gets momentum thickness at exit.
      *
@@ -541,58 +505,5 @@ public class BoundaryLayerCorrection {
     public double getExitMomentumThickness() {
         if (blProfile.isEmpty()) return 0;
         return blProfile.getLast().momentumThickness();
-    }
-    
-    /**
-     * Immutable snapshot of boundary-layer quantities at a single wall point.
-     *
-     * @param x                     Axial position in metres (from contour origin)
-     * @param y                     Radial position (wall radius) in metres
-     * @param runningLength         Integrated wall arc length from the first contour
-     *                              point to this point, used as the reference length
-     *                              for boundary-layer scaling (metres)
-     * @param reynoldsNumber        Local running-length Reynolds number
-     *                              {@code Re = ρ · V · s / μ} (dimensionless)
-     * @param thickness             Full boundary-layer thickness δ in metres, including
-     *                              the Van Driest compressibility correction
-     * @param displacementThickness Displacement thickness δ* in metres
-     *                              (δ/8 turbulent, 1.72·s/√Re laminar)
-     * @param momentumThickness     Momentum thickness θ in metres
-     *                              (7/72·δ turbulent, 0.664·s/√Re laminar)
-     * @param skinFrictionCoeff     Local skin-friction coefficient cf (dimensionless),
-     *                              corrected for the wall-to-adiabatic-wall temperature ratio
-     * @param isTurbulent           {@code true} if the boundary layer is turbulent at this point
-     *                              (either forced turbulent or Re exceeds transition threshold)
-     * @param mach                  Local Mach number used for the compressibility correction
-     */
-    public record BoundaryLayerPoint(
-            double x,
-            double y,
-            double runningLength,
-            double reynoldsNumber,
-            double thickness,
-            double displacementThickness,
-            double momentumThickness,
-            double skinFrictionCoeff,
-            boolean isTurbulent,
-            double mach
-    ) {
-        /**
-         * Returns the incompressible shape factor {@code H = δ* / θ}.
-         * Typical values: ~1.3 turbulent, ~2.6 laminar.
-         *
-         * @return Shape factor; returns {@code 1.4} if momentum thickness is zero
-         */
-        public double shapeFactor() {
-            return momentumThickness > 0 ? displacementThickness / momentumThickness : 1.4;
-        }
-        
-        @SuppressWarnings("NullableProblems")
-        @Override
-        public String toString() {
-            return String.format("BL[x=%.4f, δ*=%.2e, cf=%.4f, %s]",
-                    x, displacementThickness, skinFrictionCoeff,
-                    isTurbulent ? "turbulent" : "laminar");
-        }
     }
 }
