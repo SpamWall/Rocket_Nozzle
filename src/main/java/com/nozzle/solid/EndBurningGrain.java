@@ -15,7 +15,7 @@
  *  program.  If not, see <https://www.gnu.org/licenses/>.
  *
  *  Contact the owner via the github repository if you would like to license this software for
- *  commercial purposes outside the restrictions imposed by this copyright.
+ *  commercial purposes outside the restrictions invoke by this copyright.
  */
 
 package com.nozzle.solid;
@@ -41,20 +41,21 @@ package com.nozzle.solid;
  * <p>References: Sutton &amp; Biblarz, <em>Rocket Propulsion Elements</em>,
  * 9th ed., §12.3; Humble, Henry &amp; Larson, <em>Space Propulsion Analysis and
  * Design</em>, §4.
+ *
+ * @param diameter grain (and burning-face) diameter D [m]; must be positive
+ * @param length   grain length L [m]; must be positive
  */
-public final class EndBurningGrain implements GrainGeometry {
-
-    private final double diameter;  // D [m]
-    private final double length;    // L [m]
+public record EndBurningGrain(
+        double diameter,
+        double length
+) implements GrainGeometry {
 
     /**
-     * Creates an end-burning grain.
+     * Compact constructor — validates all components.
      *
-     * @param diameter grain (and burning-face) diameter D [m]; must be positive
-     * @param length   grain length L [m]; must be positive
-     * @throws IllegalArgumentException if either parameter is non-positive
+     * @throws IllegalArgumentException if either component is non-positive
      */
-    public EndBurningGrain(double diameter, double length) {
+    public EndBurningGrain {
         if (diameter <= 0) {
             throw new IllegalArgumentException(
                     "Diameter must be positive; got " + diameter);
@@ -63,8 +64,6 @@ public final class EndBurningGrain implements GrainGeometry {
             throw new IllegalArgumentException(
                     "Length must be positive; got " + length);
         }
-        this.diameter = diameter;
-        this.length   = length;
     }
 
     /**
@@ -107,18 +106,4 @@ public final class EndBurningGrain implements GrainGeometry {
                 diameter * 1000,
                 length   * 1000);
     }
-
-    /**
-     * Returns the grain diameter [m].
-     *
-     * @return diameter [m]
-     */
-    public double diameter() { return diameter; }
-
-    /**
-     * Returns the grain length [m].
-     *
-     * @return length [m]
-     */
-    public double length() { return length; }
 }

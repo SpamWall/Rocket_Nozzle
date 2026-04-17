@@ -46,7 +46,7 @@ package com.nozzle.solid;
  * mass conservation through the burn trajectory.
  *
  * <p>Burnout occurs when the bore reaches the case wall (radial web exhausted)
- * or when the two end faces meet at the segment centre (axial web exhausted),
+ * or when the two end faces meet at the segment center (axial web exhausted),
  * whichever comes first:
  * <pre>
  *   w = min((D_o − D_p)/2,  L/2)
@@ -56,25 +56,25 @@ package com.nozzle.solid;
  *
  * <p>References: Sutton &amp; Biblarz, <em>Rocket Propulsion Elements</em>,
  * 9th ed., §12.3; Nakka, R., <em>Solid Propellant Grain Design</em>, 2023.
+ *
+ * @param outerDiameter  outer grain diameter D_o [m]; must be positive
+ * @param portDiameter   initial bore (port) diameter D_p [m]; must be in (0, D_o)
+ * @param segmentLength  length of each segment L [m]; must be positive
+ * @param numSegments    number of identical segments N; must be ≥ 1
  */
-public final class BatesGrain implements GrainGeometry {
-
-    private final double outerDiameter;  // D_o [m]
-    private final double portDiameter;   // D_p [m]
-    private final double segmentLength;  // L   [m]
-    private final int    numSegments;    // N
+public record BatesGrain(
+        double outerDiameter,
+        double portDiameter,
+        double segmentLength,
+        int    numSegments
+) implements GrainGeometry {
 
     /**
-     * Creates a multi-segment BATES grain.
+     * Compact constructor — validates all components.
      *
-     * @param outerDiameter  outer grain diameter D_o [m]; must be positive
-     * @param portDiameter   initial bore (port) diameter D_p [m]; must be in (0, D_o)
-     * @param segmentLength  length of each segment L [m]; must be positive
-     * @param numSegments    number of identical segments N; must be ≥ 1
-     * @throws IllegalArgumentException if any parameter is out of range
+     * @throws IllegalArgumentException if any component is out of range
      */
-    public BatesGrain(double outerDiameter, double portDiameter,
-                      double segmentLength, int numSegments) {
+    public BatesGrain {
         if (outerDiameter <= 0) {
             throw new IllegalArgumentException(
                     "Outer diameter must be positive; got " + outerDiameter);
@@ -91,10 +91,6 @@ public final class BatesGrain implements GrainGeometry {
             throw new IllegalArgumentException(
                     "Number of segments must be >= 1; got " + numSegments);
         }
-        this.outerDiameter = outerDiameter;
-        this.portDiameter  = portDiameter;
-        this.segmentLength = segmentLength;
-        this.numSegments   = numSegments;
     }
 
     /**
@@ -109,8 +105,8 @@ public final class BatesGrain implements GrainGeometry {
      */
     @Override
     public double burningArea(double webBurned) {
-        double boreDiameter     = portDiameter + 2.0 * webBurned;
-        double effectiveLength  = segmentLength - 2.0 * webBurned;
+        double boreDiameter    = portDiameter + 2.0 * webBurned;
+        double effectiveLength = segmentLength - 2.0 * webBurned;
         double lateral  = Math.PI * boreDiameter * effectiveLength;
         double endFaces = 0.5 * Math.PI * (outerDiameter * outerDiameter
                                            - boreDiameter * boreDiameter);
@@ -133,7 +129,7 @@ public final class BatesGrain implements GrainGeometry {
      * {@inheritDoc}
      *
      * <p>{@code w = min((D_o − D_p)/2,  L/2)} — the lesser of the radial
-     * (bore-to-wall) web and the axial (face-to-centre) web.
+     * (bore-to-wall) web and the axial (face-to-center) web.
      */
     @Override
     public double webThickness() {
@@ -151,34 +147,6 @@ public final class BatesGrain implements GrainGeometry {
                 portDiameter  * 1000,
                 segmentLength * 1000);
     }
-
-    /**
-     * Returns the outer grain diameter D_o [m].
-     *
-     * @return outer diameter [m]
-     */
-    public double outerDiameter() { return outerDiameter; }
-
-    /**
-     * Returns the initial bore (port) diameter D_p [m].
-     *
-     * @return port diameter [m]
-     */
-    public double portDiameter() { return portDiameter; }
-
-    /**
-     * Returns the segment length L [m].
-     *
-     * @return segment length [m]
-     */
-    public double segmentLength() { return segmentLength; }
-
-    /**
-     * Returns the number of segments N.
-     *
-     * @return segment count
-     */
-    public int numSegments() { return numSegments; }
 
     /**
      * Returns the segment length at which the grain exhibits exactly neutral

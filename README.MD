@@ -41,6 +41,24 @@ structural analysis, and multi-format CAD/CFD export.
   harmonic-mean curvature model; for Rao defaults (r_cd/r_t = 0.382,
   r_cu/r_t = 1.5, γ = 1.4) this gives Cd ≈ 0.9962
 
+### Solid Motor Ballistics
+- **Vieille's law burn rate** — `r = a₀ · exp(σ_p · (T−T_ref)) · P^n`; five
+  built-in propellants: APCP/HTPB, APCP/PBAN, KNSU, KNDX, double-base
+- **Grain geometry** — `BatesGrain` (cylindrical bore + two free annular end
+  faces; corrected `L−2y` effective-length formula guarantees exact mass
+  conservation) and `EndBurningGrain` (perfectly neutral)
+- **Quasi-steady chamber simulation** — `SolidMotorChamber` forward-Euler
+  trajectory from ignition to burnout; outputs time-series pressure, mass
+  flow, and burn rate
+- **Throat sizing** — invert the Kn equation `P_c = (ρ_p · a · K_n · c*)^(1/(1−n))`
+  to size `A_t` for a target initial chamber pressure
+- **MIL-STD temperature sweep** — evaluate ballistic sensitivity over the
+  −40 °C to +71 °C qualification range
+- **Pipeline bridge** — `BurnTrajectory.toNozzleParameters()` overlays average
+  (or peak) `P_c`, `T_c`, and combustion `GasProperties` onto a
+  `NozzleDesignParameters` template, feeding directly into the contour,
+  performance, thermal, and export pipeline
+
 ### Chemistry
 - **Frozen and equilibrium flow** — selectable per analysis stage
 - **Gibbs free energy minimization** — multi-species equilibrium solver
@@ -207,6 +225,96 @@ PerformanceCalculator perf = new PerformanceCalculator(params, net, contour, bl,
 System.out.printf("Isp        : %.1f s%n",   perf.getSpecificImpulse());
 System.out.printf("Cf (actual): %.4f%n",      perf.getActualThrustCoefficient());
 System.out.printf("Efficiency : %.2f %%%n",   perf.getEfficiency() * 100);
+```
+
+---
+
+## Solid Motor Ballistics
+
+### Propellant
+
+```java
+SolidPropellant p = SolidPropellant.APCP_HTPB();
+
+System.out.printf("Burn rate @ 7 MPa : %.2f mm/s%n", p.burnRate(7e6) * 1000);
+System.out.printf("Pressure exponent : %.3f%n",       p.burnRateExponent());
+System.out.printf("c*                : %.0f m/s%n",   p.characteristicVelocity());
+System.out.printf("T_c               : %.0f K%n",     p.chamberTemperature());
+```
+
+Built-in propellants: `APCP_HTPB()`, `APCP_PBAN()`, `KNSU()`, `KNDX()`, `DOUBLE_BASE()`.
+
+### Grain geometry
+
+```java
+// BATES grain: 4 segments, Do=100 mm, Dp=50 mm, L=75 mm
+BatesGrain grain = new BatesGrain(0.100, 0.050, 0.075, 4);
+
+System.out.printf("Web thickness : %.1f mm%n", grain.webThickness() * 1000);
+System.out.printf("Ab(0)         : %.4f m²%n", grain.burningArea(0.0));
+System.out.printf("Propellant vol: %.1f cm³%n", grain.propellantVolume() * 1e6);
+
+// End-burning grain: diameter=75 mm, length=200 mm (perfectly neutral)
+EndBurningGrain ebGrain = new EndBurningGrain(0.075, 0.200);
+```
+
+### Throat sizing (target initial P_c)
+
+```java
+double targetPc = 7.0e6;   // 7 MPa
+double ab0 = grain.burningArea(0.0);
+double at  = ab0 * p.density() * p.burnRateCoefficient()
+             * p.characteristicVelocity()
+             / Math.pow(targetPc, 1.0 - p.burnRateExponent());
+```
+
+### Ballistic simulation
+
+```java
+SolidMotorChamber chamber = new SolidMotorChamber(p, grain, at);
+BurnTrajectory traj = chamber.computeBurnTrajectory(294.0);  // 294 K nominal
+
+System.out.printf("Propellant mass : %.4f kg%n",  traj.propellantMass());
+System.out.printf("Burn time       : %.3f s%n",   traj.burnTime());
+System.out.printf("Average Pc      : %.3f MPa%n", traj.averagePressure() / 1e6);
+System.out.printf("Peak Pc         : %.3f MPa%n", traj.maxPressure()     / 1e6);
+```
+
+### MIL-STD temperature sweep
+
+```java
+BurnTrajectory cold = chamber.computeBurnTrajectory(233.0);  // −40 °C
+BurnTrajectory hot  = chamber.computeBurnTrajectory(344.0);  // +71 °C
+
+System.out.printf("Pressure swing: %+.1f %%%n",
+        (hot.averagePressure() - cold.averagePressure())
+        / cold.averagePressure() * 100.0);
+```
+
+### Bridge to the nozzle design pipeline
+
+```java
+NozzleDesignParameters template = NozzleDesignParameters.builder()
+        .throatRadius(Math.sqrt(at / Math.PI))
+        .exitMach(3.5)
+        .ambientPressure(101325)
+        .axisymmetric(true)
+        .lengthFraction(0.8)
+        .build();
+
+// Average Pc (nominal design point)
+NozzleDesignParameters params = traj.toNozzleParameters(template);
+
+// Peak Pc (structural sizing)
+NozzleDesignParameters paramsMax = traj.toNozzleParametersAtMaxPressure(template);
+
+// Drop straight into the contour/performance/thermal/export pipeline
+NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+PerformanceCalculator perf = new PerformanceCalculator(params, null, contour, null, null);
+perf.calculate();
+
+System.out.printf("Delivered Isp : %.1f s%n",  perf.getSummary().specificImpulseSeconds());
+System.out.printf("Thrust        : %.3f kN%n", perf.getSummary().thrustNewtons() / 1000);
 ```
 
 ---
@@ -664,6 +772,7 @@ if (warnings.isEmpty()) {
 | `com.nozzle.core`         | `NozzleDesignParameters`, `GasProperties`, `PerformanceCalculator`, `FlowSeparationPredictor`, `Units`                                            |
 | `com.nozzle.moc`          | `CharacteristicNet`, `RaoNozzle`, `AerospikeNozzle`, `DualBellNozzle`, `CharacteristicPoint`                                                      |
 | `com.nozzle.geometry`     | `NozzleContour` (five contour families), `ConvergentSection`, `FullNozzleGeometry`, `Point2D`                                                     |
+| `com.nozzle.solid`        | `SolidPropellant`, `GrainGeometry`, `BatesGrain`, `EndBurningGrain`, `SolidMotorChamber`, `BurnTrajectory` |
 | `com.nozzle.chemistry`    | `ChemistryModel`, `OFSweep`, `GibbsMinimizer`, `NasaSpeciesDatabase`                                                                              |
 | `com.nozzle.thermal`      | `HeatTransferModel`, `BoundaryLayerCorrection`, `CoolantChannel`, `ThermalStressAnalysis`, `AblativeNozzleModel`, `RadiationCooledExtension`      |
 | `com.nozzle.export`       | `CFDMeshExporter`, `OpenFOAMExporter`, `CSVExporter`, `DXFExporter`, `STEPExporter`, `STLExporter`, `RevolvedMeshExporter`                        |

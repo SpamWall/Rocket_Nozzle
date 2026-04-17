@@ -41,6 +41,11 @@ import com.nozzle.optimization.AltitudeAdaptiveOptimizer;
 import com.nozzle.optimization.MonteCarloUncertainty;
 import com.nozzle.io.DesignDocument;
 import com.nozzle.io.NozzleSerializer;
+import com.nozzle.solid.BatesGrain;
+import com.nozzle.solid.BurnTrajectory;
+import com.nozzle.solid.GrainGeometry;
+import com.nozzle.solid.SolidMotorChamber;
+import com.nozzle.solid.SolidPropellant;
 import com.nozzle.thermal.AblativeNozzleModel;
 import com.nozzle.thermal.BoundaryLayerCorrection;
 import com.nozzle.thermal.RadiationCooledExtension;
@@ -90,6 +95,10 @@ import java.util.List;
  *   correction, getPeakFluxPoint() / getPeakFluxX() showing how r_cu shifts the peak
  * - Curved sonic-line initial data line: Hall (1962) x_s(r) = coeff·r²·(1/R_cd + 1/(3·R_cu)) replaces the flat
  *   plane; offset and first-row wall x are printed in the basic MOC demonstration to make the correction visible
+ * - Solid motor nozzle design: SolidPropellant Vieille's law (APCP/HTPB, APCP/PBAN, KNSU, KNDX, double-base),
+ *   BatesGrain and EndBurningGrain geometry, SolidMotorChamber quasi-steady ballistic simulation,
+ *   BurnTrajectory toNozzleParameters() bridge to the existing contour/performance/thermal pipeline,
+ *   MIL-STD temperature-sensitivity sweep (−40 °C to +71 °C), burn-pressure-trace CSV export
  */
 public class Main {
 
@@ -135,6 +144,7 @@ public class Main {
             demonstrateBoundaryLayerFromInjectorFace();
             demonstrateHeatFluxPeakLocation();
             demonstratePlanarWindTunnelNozzle(outputDir);
+            demonstrateSolidMotor(outputDir);
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -2641,5 +2651,193 @@ public class Main {
         System.out.println("  equation (no r-term), giving a slightly different wall contour");
         System.out.println("  than the equivalent axisymmetric design at the same Mach number.");
         System.out.println("  Physical throat area = 2 × throatRadius × throatWidth.");
+    }
+
+    /**
+     * Demonstrates solid propellant motor ballistics and nozzle design for
+     * solid rocket motors.
+     *
+     * <p>Shows:
+     * <ul>
+     *   <li>APCP/HTPB 4-segment BATES grain — ballistic simulation at 294 K</li>
+     *   <li>Throat sizing from a target initial chamber pressure via the Kn equation</li>
+     *   <li>Burn trajectory: time, web, pressure, burning area, burn rate, mass flow</li>
+     *   <li>MIL-STD temperature sensitivity sweep (−40 °C to +71 °C)</li>
+     *   <li>Burn pressure trace exported as CSV</li>
+     *   <li>{@link BurnTrajectory#toNozzleParameters} bridging into the Rao-bell
+     *       MOC contour, {@link PerformanceCalculator}, DXF/CSV/STEP export</li>
+     *   <li>KNSU candy-propellant comparison motor</li>
+     * </ul>
+     *
+     * @param outputDir root output directory; a {@code solid_motor/} subdirectory
+     *                  is created automatically
+     */
+    private static void demonstrateSolidMotor(Path outputDir) throws Exception {
+        System.out.println("\n--- SOLID MOTOR NOZZLE DESIGN ---\n");
+
+        Path solidDir = outputDir.resolve("solid_motor");
+        Files.createDirectories(solidDir);
+
+        // ── 1. Propellant and grain ───────────────────────────────────────────
+        SolidPropellant propellant = SolidPropellant.APCP_HTPB();
+        BatesGrain      grain      = new BatesGrain(0.100, 0.050, 0.075, 4);
+
+        System.out.println("Propellant: APCP/HTPB composite");
+        System.out.printf("  Density            : %.0f kg/m³%n",  propellant.density());
+        System.out.printf("  Burn rate at 7 MPa : %.2f mm/s%n",   propellant.burnRate(7.0e6) * 1000);
+        System.out.printf("  Pressure exponent n: %.3f%n",        propellant.burnRateExponent());
+        System.out.printf("  Temp sensitivity   : %.4f /K%n",     propellant.temperatureSensitivity());
+        System.out.printf("  c*                 : %.0f m/s%n",    propellant.characteristicVelocity());
+        System.out.printf("  T_c (flame)        : %.0f K%n",      propellant.chamberTemperature());
+
+        System.out.println("\nGrain: " + grain.name());
+        System.out.printf("  Web thickness      : %.1f mm%n",     grain.webThickness()    * 1000);
+        System.out.printf("  Burning area Ab(0) : %.4f m²%n",     grain.burningArea(0.0));
+        System.out.printf("  Propellant volume  : %.2f cm³%n",    grain.propellantVolume() * 1.0e6);
+
+        // ── 2. Throat sizing — target initial Pc ≈ 7 MPa ─────────────────────
+        // Invert the Kn equation: At = Ab · ρ_p · a · c* / P^(1−n)
+        double targetPc = 7.0e6;
+        double ab0      = grain.burningArea(0.0);
+        double at       = ab0 * propellant.density()
+                          * propellant.burnRateCoefficient()
+                          * propellant.characteristicVelocity()
+                          / Math.pow(targetPc, 1.0 - propellant.burnRateExponent());
+        double rt       = Math.sqrt(at / Math.PI);
+
+        System.out.printf("%nThroat sized for %.1f MPa initial Pc:%n", targetPc / 1e6);
+        System.out.printf("  Throat area    : %.4f cm²%n", at  * 1.0e4);
+        System.out.printf("  Throat radius  : %.2f mm%n",  rt  * 1000);
+        System.out.printf("  Initial Kn     : %.1f%n",     ab0 / at);
+
+        // ── 3. Ballistic simulation ───────────────────────────────────────────
+        SolidMotorChamber chamber    = new SolidMotorChamber(propellant, grain, at);
+        BurnTrajectory    trajectory = chamber.computeBurnTrajectory(294.0, 0.001);
+
+        System.out.println("\nBurn trajectory (T_prop = 294 K, 21 °C):");
+        System.out.printf("  Propellant mass    : %.4f kg%n",  trajectory.propellantMass());
+        System.out.printf("  Burn time          : %.3f s%n",   trajectory.burnTime());
+        System.out.printf("  Initial Pc         : %.3f MPa%n", chamber.chamberPressure(0.0) / 1e6);
+        System.out.printf("  Average Pc         : %.3f MPa%n", trajectory.averagePressure()       / 1e6);
+        System.out.printf("  Peak Pc            : %.3f MPa%n", trajectory.maxPressure()            / 1e6);
+        System.out.printf("  Avg mass flow rate : %.5f kg/s%n", trajectory.averageMassFlowRate());
+        System.out.printf("  Trajectory points  : %d%n",       trajectory.size());
+
+        // ── 4. MIL-STD temperature sensitivity (−40 °C to +71 °C) ────────────
+        BurnTrajectory trajectoryCold = chamber.computeBurnTrajectory(233.0);
+        BurnTrajectory trajectoryHot  = chamber.computeBurnTrajectory(344.0);
+
+        System.out.println("\nTemperature sensitivity (MIL-STD qualification range):");
+        System.out.printf("  %-12s  burn time = %.3f s,  avg Pc = %.3f MPa%n",
+                "Cold (−40 °C):", trajectoryCold.burnTime(), trajectoryCold.averagePressure() / 1e6);
+        System.out.printf("  %-12s  burn time = %.3f s,  avg Pc = %.3f MPa%n",
+                "Nom (+21 °C):", trajectory.burnTime(), trajectory.averagePressure() / 1e6);
+        System.out.printf("  %-12s  burn time = %.3f s,  avg Pc = %.3f MPa%n",
+                "Hot (+71 °C):", trajectoryHot.burnTime(), trajectoryHot.averagePressure() / 1e6);
+        System.out.printf("  Pressure swing cold→hot: %+.1f%%%n",
+                (trajectoryHot.averagePressure() - trajectoryCold.averagePressure())
+                / trajectoryCold.averagePressure() * 100.0);
+
+        // ── 5. Export burn-pressure trace CSV ─────────────────────────────────
+        Path traceCsv = solidDir.resolve("burn_trace_apcp_htpb.csv");
+        try (var w = Files.newBufferedWriter(traceCsv)) {
+            w.write("time_s,web_burned_mm,chamber_pressure_MPa,"
+                    + "burning_area_m2,burn_rate_mm_s,mass_flow_kg_s\n");
+            for (int i = 0; i < trajectory.size(); i++) {
+                w.write(String.format("%.5f,%.4f,%.5f,%.6f,%.5f,%.6f%n",
+                        trajectory.timeAt(i),
+                        trajectory.webBurnedAt(i)      * 1000,
+                        trajectory.chamberPressureAt(i) / 1.0e6,
+                        trajectory.burningAreaAt(i),
+                        trajectory.burnRateAt(i)        * 1000,
+                        trajectory.massFlowRateAt(i)));
+            }
+        }
+        System.out.printf("%nBurn trace CSV     → %s  (%d points)%n",
+                traceCsv.getFileName(), trajectory.size());
+
+        // ── 6. Bridge to nozzle design ────────────────────────────────────────
+        NozzleDesignParameters nozzleTemplate = NozzleDesignParameters.builder()
+                .throatRadius(rt)
+                .exitMach(3.5)
+                .ambientPressure(101325)
+                .numberOfCharLines(30)
+                .wallAngleInitialDegrees(30)
+                .lengthFraction(0.8)
+                .axisymmetric(true)
+                .build();
+
+        NozzleDesignParameters nozzleParams = trajectory.toNozzleParameters(nozzleTemplate);
+
+        System.out.println("\nNozzle design at average chamber conditions:");
+        System.out.printf("  Chamber pressure   : %.3f MPa%n", nozzleParams.chamberPressure() / 1e6);
+        System.out.printf("  Chamber temperature: %.0f K%n",   nozzleParams.chamberTemperature());
+        System.out.printf("  Gas γ              : %.3f%n",     nozzleParams.gasProperties().gamma());
+        System.out.printf("  Exit Mach          : %.1f%n",     nozzleParams.exitMach());
+        System.out.printf("  Area ratio Ae/At   : %.3f%n",     nozzleParams.exitAreaRatio());
+        System.out.printf("  Exit radius        : %.2f mm%n",  nozzleParams.exitRadius()  * 1000);
+        System.out.printf("  Ideal Isp          : %.1f s%n",   nozzleParams.idealSpecificImpulse());
+
+        // ── 7. Rao bell contour and delivered performance ─────────────────────
+        NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, nozzleParams);
+
+        PerformanceCalculator perf = new PerformanceCalculator(
+                nozzleParams, null, contour, null, null);
+        perf.calculate();
+        PerformanceCalculator.PerformanceSummary summary = perf.getSummary();
+
+        System.out.println("\nRao bell nozzle delivered performance:");
+        System.out.printf("  Ideal Cf           : %.4f%n",    summary.idealCf());
+        System.out.printf("  Actual Cf          : %.4f%n",    summary.actualCf());
+        System.out.printf("  Nozzle efficiency  : %.2f%%%n",  summary.efficiency() * 100);
+        System.out.printf("  Delivered Isp      : %.1f s%n",  summary.specificImpulseSeconds());
+        System.out.printf("  Thrust             : %.3f kN%n", summary.thrustNewtons()       / 1000);
+        System.out.printf("  Mass flow rate     : %.5f kg/s%n", summary.massFlowRateKgPerSec());
+
+        // ── 8. Export nozzle contour ──────────────────────────────────────────
+        Path dxfPath  = solidDir.resolve("srm_nozzle.dxf");
+        Path csvPath  = solidDir.resolve("srm_nozzle_contour.csv");
+        Path stepPath = solidDir.resolve("srm_nozzle.step");
+        new DXFExporter().exportContour(contour, dxfPath);
+        new CSVExporter().exportContour(contour, csvPath);
+        new STEPExporter().exportRevolvedSolid(contour, stepPath);
+        System.out.println("\nNozzle contour exports:");
+        System.out.printf("  DXF profile        → %s%n", dxfPath.getFileName());
+        System.out.printf("  CSV contour        → %s%n", csvPath.getFileName());
+        System.out.printf("  STEP revolved solid→ %s%n", stepPath.getFileName());
+
+        // ── 9. KNSU candy-propellant comparison ───────────────────────────────
+        System.out.println("\nKNSU candy-propellant comparison motor:");
+        SolidPropellant knsu       = SolidPropellant.KNSU();
+        GrainGeometry   knsuGrain  = new BatesGrain(0.075, 0.030, 0.055, 2);
+
+        double knsuAb0  = knsuGrain.burningArea(0.0);
+        double knsuAt   = knsuAb0 * knsu.density()
+                          * knsu.burnRateCoefficient()
+                          * knsu.characteristicVelocity()
+                          / Math.pow(2.0e6, 1.0 - knsu.burnRateExponent());
+        SolidMotorChamber knsuChamber    = new SolidMotorChamber(knsu, knsuGrain, knsuAt);
+        BurnTrajectory    knsuTrajectory = knsuChamber.computeBurnTrajectory(294.0);
+
+        NozzleDesignParameters knsuNozzle = knsuTrajectory.toNozzleParameters(
+                NozzleDesignParameters.builder()
+                        .throatRadius(Math.sqrt(knsuAt / Math.PI))
+                        .exitMach(3.0)
+                        .ambientPressure(101325)
+                        .numberOfCharLines(20)
+                        .wallAngleInitialDegrees(30)
+                        .lengthFraction(0.8)
+                        .axisymmetric(true)
+                        .build());
+
+        System.out.printf("  Grain              : %s%n",       knsuGrain.name());
+        System.out.printf("  c*                 : %.0f m/s  (APCP: %.0f m/s)%n",
+                knsu.characteristicVelocity(), propellant.characteristicVelocity());
+        System.out.printf("  Burn time          : %.3f s%n",   knsuTrajectory.burnTime());
+        System.out.printf("  Avg Pc             : %.3f MPa%n", knsuTrajectory.averagePressure() / 1e6);
+        System.out.printf("  Ideal Isp          : %.1f s  (APCP: %.1f s)%n",
+                knsuNozzle.idealSpecificImpulse(), nozzleParams.idealSpecificImpulse());
+
+        System.out.printf("%nSolid motor output saved to: %s%n", solidDir.toAbsolutePath());
     }
 }

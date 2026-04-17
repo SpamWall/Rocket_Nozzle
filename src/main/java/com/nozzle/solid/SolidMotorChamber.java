@@ -70,6 +70,13 @@ import java.util.List;
  * @see SolidPropellant
  * @see GrainGeometry
  * @see BurnTrajectory
+ *
+ * NOTE: This class should NOT be a Record Class.  A Record Class is data: describing what something is.
+ * SolidMotorChamber is a simulator: its purpose is computeBurnTrajectory(). The analogous pair in the rest of the
+ * library is NozzleDesignParameters (record) vs. PerformanceCalculator (class) — the same split between configuration
+ * carrier and computation engine.
+ * Making it a record would be technically valid but semantically misleading: a reader seeing record SolidMotorChamber
+ * expects a data type, not something that runs a forward-Euler integration.
  */
 public class SolidMotorChamber {
 
@@ -293,9 +300,10 @@ public class SolidMotorChamber {
 
         double propMass = propellant.density() * grain.propellantVolume();
 
-        LOG.debug("SolidMotorChamber: grain='{}' steps={} burnTime={:.3f}s avgPc={:.2f}MPa",
-                grain.name(), steps, tArr[n - 1],
-                pcArr[0]);
+        LOG.debug("SolidMotorChamber: grain='{}' steps={} burnTime={}s avgPc={}MPa",
+                grain.name(), n - 1,
+                String.format("%.3f", tArr[n - 1]),
+                String.format("%.2f", pcArr[0] / 1e6));
 
         return new BurnTrajectory(
                 tArr, yArr, pcArr, abArr, rArr, mdotArr,
