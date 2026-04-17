@@ -150,6 +150,82 @@ public record GasProperties(
     );
 
     /**
+     * Combustion products for APCP/HTPB propellant (typical 68% AP / 18% Al / 14% HTPB
+     * by mass, O/F ≈ 2.12).  Products are primarily CO, HCl, H₂O, CO₂, N₂, and condensed
+     * Al₂O₃ (two-phase; effective γ and M are for the gas phase only).
+     * Source: Sutton &amp; Biblarz, <em>Rocket Propulsion Elements</em>, 9th ed., Table 5-1;
+     * Nakka, R., <em>Solid Propellant Grain Design</em>, 2023.
+     */
+    public static final GasProperties APCP_HTPB_PRODUCTS = new GasProperties(
+            1.21,
+            25.0,
+            332.6,
+            8.0e-5,
+            1000.0,
+            200.0
+    );
+
+    /**
+     * Combustion products for APCP/PBAN propellant (Space-Shuttle-SRB type,
+     * nominally 69.6% AP / 16% Al / 12% PBAN / 2.4% epoxy cure, O/F ≈ 2.27).
+     * Products: CO, HCl, H₂O, CO₂, N₂, Al₂O₃ (condensed).
+     * Source: Sutton &amp; Biblarz, 9th ed., §13; Thiokol/ATK SRB data.
+     */
+    public static final GasProperties APCP_PBAN_PRODUCTS = new GasProperties(
+            1.20,
+            25.2,
+            330.0,
+            8.0e-5,
+            1000.0,
+            200.0
+    );
+
+    /**
+     * Combustion products for KNSU (potassium nitrate / sucrose, 65/35 by mass).
+     * Products are K₂CO₃, CO₂, H₂O, CO, N₂ at typical operating pressures around
+     * 1–7 MPa.  Values are from Nakka's equilibrium calculations (2002).
+     * Source: Nakka, R., <em>KN-Sucrose Propellant</em>, Rev. 2 (2002).
+     */
+    public static final GasProperties KNSU_PRODUCTS = new GasProperties(
+            1.133,
+            41.98,
+            198.1,
+            5.0e-5,
+            800.0,
+            200.0
+    );
+
+    /**
+     * Combustion products for KNDX (potassium nitrate / dextrose, 65/35 by mass).
+     * Slightly lower flame temperature and higher average molecular weight than KNSU
+     * due to the higher carbon content of dextrose.
+     * Source: Nakka, R., <em>KN-Dextrose Propellant</em>, Rev. 1 (2005).
+     */
+    public static final GasProperties KNDX_PRODUCTS = new GasProperties(
+            1.135,
+            42.39,
+            196.1,
+            5.0e-5,
+            800.0,
+            200.0
+    );
+
+    /**
+     * Combustion products for double-base propellant (typical JPN formulation:
+     * 52% nitrocellulose / 43% nitroglycerin / 5% additives by mass).
+     * Products: CO, CO₂, H₂O, N₂ (no metal fuel; no HCl).
+     * Source: Sutton &amp; Biblarz, 9th ed., Table 5-1.
+     */
+    public static final GasProperties DOUBLE_BASE_PRODUCTS = new GasProperties(
+            1.25,
+            22.0,
+            377.9,
+            5.0e-5,
+            1000.0,
+            200.0
+    );
+
+    /**
      * Compact constructor with validation.
      */
     public GasProperties {
