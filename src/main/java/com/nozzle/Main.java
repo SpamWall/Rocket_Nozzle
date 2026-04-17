@@ -44,6 +44,8 @@ import com.nozzle.io.NozzleSerializer;
 import com.nozzle.solid.BatesGrain;
 import com.nozzle.solid.BurnTrajectory;
 import com.nozzle.solid.GrainGeometry;
+import com.nozzle.solid.RaspImporter;
+import com.nozzle.solid.RaspMotorData;
 import com.nozzle.solid.SolidMotorChamber;
 import com.nozzle.solid.SolidPropellant;
 import com.nozzle.thermal.AblativeNozzleModel;
@@ -95,6 +97,9 @@ import java.util.List;
  *   correction, getPeakFluxPoint() / getPeakFluxX() showing how r_cu shifts the peak
  * - Curved sonic-line initial data line: Hall (1962) x_s(r) = coeff·r²·(1/R_cd + 1/(3·R_cu)) replaces the flat
  *   plane; offset and first-row wall x are printed in the basic MOC demonstration to make the correction visible
+ * - RASP .eng import: RaspImporter parses OpenMotor/ThrustCurve .eng files;
+ *   RaspMotorData.toNozzleParameters() inverts the isentropic Cf equation to
+ *   recover chamber pressure from thrust and feeds the pipeline
  * - Solid motor nozzle design: SolidPropellant Vieille's law (APCP/HTPB, APCP/PBAN, KNSU, KNDX, double-base),
  *   BatesGrain and EndBurningGrain geometry, SolidMotorChamber quasi-steady ballistic simulation,
  *   BurnTrajectory toNozzleParameters() bridge to the existing contour/performance/thermal pipeline,
@@ -145,6 +150,7 @@ public class Main {
             demonstrateHeatFluxPeakLocation();
             demonstratePlanarWindTunnelNozzle(outputDir);
             demonstrateSolidMotor(outputDir);
+            demonstrateRaspImport(outputDir);
 
             System.out.printf("\n%s%n", "=".repeat(70));
             System.out.println("  All demonstrations completed successfully!");
@@ -2840,5 +2846,89 @@ public class Main {
                 knsuNozzle.idealSpecificImpulse(), nozzleParams.idealSpecificImpulse());
 
         System.out.printf("%nSolid motor output saved to: %s%n", solidDir.toAbsolutePath());
+    }
+
+    private static void demonstrateRaspImport(Path outputDir) throws Exception {
+        System.out.println("\n--- RASP .ENG IMPORT (OpenMotor bridge) ---\n");
+
+        // ── 1. Write a synthetic .eng file ────────────────────────────────────
+        // Representative APCP/HTPB H-class motor:
+        //   29 mm casing, 193 mm long, 0.101 kg propellant, ~174 N average thrust
+        Path engDir = outputDir.resolve("rasp_import");
+        Files.createDirectories(engDir);
+        Path engFile = engDir.resolve("H174-14.eng");
+        Files.writeString(engFile,
+                "; Synthetic APCP/HTPB H-class motor — demonstration\n" +
+                "H174-14 38 193 14 0.101 0.187 DEMO\n" +
+                "   0.000    0.000\n" +
+                "   0.050  155.000\n" +
+                "   0.150  178.000\n" +
+                "   0.300  181.000\n" +
+                "   0.450  180.000\n" +
+                "   0.500  175.000\n" +
+                "   0.550  172.000\n" +
+                "   0.580    0.000\n" +
+                ";\n");
+        System.out.printf("Wrote synthetic .eng file: %s%n%n", engFile.getFileName());
+
+        // ── 2. Parse the file ─────────────────────────────────────────────────
+        RaspMotorData motor = RaspImporter.load(engFile);
+        System.out.println("Parsed motor: " + motor);
+        System.out.printf("  Class              : %s%n",      motor.motorClass());
+        System.out.printf("  Total impulse      : %.1f N·s%n", motor.totalImpulseNs());
+        System.out.printf("  Burn time          : %.3f s%n",   motor.burnTime());
+        System.out.printf("  Average thrust     : %.1f N%n",   motor.averageThrustN());
+        System.out.printf("  Peak thrust        : %.1f N%n",   motor.maxThrustN());
+        System.out.printf("  Delivered Isp      : %.1f s%n",   motor.specificImpulseSeconds());
+        System.out.printf("  Avg mass flow      : %.5f kg/s%n", motor.averageMassFlowRateKgPerS());
+        System.out.printf("  Data points        : %d%n",       motor.size());
+
+        // ── 3. Bridge to nozzle pipeline ──────────────────────────────────────
+        // Template provides throat geometry, gas properties, and flame temperature.
+        // Chamber pressure is inferred from the thrust curve via Cf inversion.
+        double throatRadius = 0.009;   // 9 mm — sized for this impulse class
+        NozzleDesignParameters template = NozzleDesignParameters.builder()
+                .throatRadius(throatRadius)
+                .exitMach(3.0)
+                .ambientPressure(101325)
+                .chamberPressure(5.0e6)             // placeholder — overridden below
+                .chamberTemperature(3200)            // APCP/HTPB flame temperature
+                .gasProperties(GasProperties.APCP_HTPB_PRODUCTS)
+                .axisymmetric(true)
+                .lengthFraction(0.8)
+                .numberOfCharLines(25)
+                .wallAngleInitialDegrees(30)
+                .build();
+
+        NozzleDesignParameters params    = motor.toNozzleParameters(template);
+        NozzleDesignParameters paramsMax = motor.toNozzleParametersAtMaxPressure(template);
+
+        System.out.println("\nChamber conditions from thrust-curve inversion:");
+        System.out.printf("  Average Pc (design): %.3f MPa%n", params.chamberPressure()    / 1e6);
+        System.out.printf("  Peak Pc (structural): %.3f MPa%n", paramsMax.chamberPressure() / 1e6);
+        System.out.printf("  Area ratio Ae/At   : %.3f%n",      params.exitAreaRatio());
+        System.out.printf("  Exit radius        : %.2f mm%n",   params.exitRadius() * 1000);
+        System.out.printf("  Ideal Isp          : %.1f s%n",    params.idealSpecificImpulse());
+
+        // ── 4. Rao bell contour at average conditions ─────────────────────────
+        NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+        contour.generate(60);
+
+        PerformanceCalculator perf = new PerformanceCalculator(
+                params, null, contour, null, null);
+        perf.calculate();
+        PerformanceCalculator.PerformanceSummary summary = perf.getSummary();
+
+        System.out.println("\nRao bell nozzle performance (at average Pc):");
+        System.out.printf("  Ideal Cf           : %.4f%n",   summary.idealCf());
+        System.out.printf("  Actual Cf          : %.4f%n",   summary.actualCf());
+        System.out.printf("  Nozzle efficiency  : %.2f%%%n", summary.efficiency() * 100);
+        System.out.printf("  Delivered Isp      : %.1f s%n", summary.specificImpulseSeconds());
+        System.out.printf("  Thrust             : %.2f N%n", summary.thrustNewtons());
+
+        // ── 5. Export contour ─────────────────────────────────────────────────
+        new DXFExporter().exportContour(contour, engDir.resolve("H174_nozzle.dxf"));
+        new CSVExporter().exportContour(contour, engDir.resolve("H174_nozzle.csv"));
+        System.out.printf("%nExports saved to: %s%n", engDir.toAbsolutePath());
     }
 }

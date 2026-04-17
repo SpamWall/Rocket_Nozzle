@@ -32,7 +32,7 @@ structural analysis, and multi-format CAD/CFD export.
   derived quantities `convergentLength()` and `convergentLengthRatio()` give
   the axial extent of the convergent section and its ratio to throat diameter
 - **Planar (2-D rectangular) nozzle support** — set `axisymmetric(false)` and
-  `throatWidth(w)` to model wind-tunnel or linear aerospike nozzles with a
+  `throatWidth(w)` to model wind-tunnel or linear Aerospike nozzles with a
   rectangular cross-section; throat area becomes `2 × r_t × w` and all
   derived quantities (exit area, mass flow, thrust) scale accordingly;
   the CSV exporter emits `throat_width` only when the geometry is planar
@@ -58,6 +58,11 @@ structural analysis, and multi-format CAD/CFD export.
   (or peak) `P_c`, `T_c`, and combustion `GasProperties` onto a
   `NozzleDesignParameters` template, feeding directly into the contour,
   performance, thermal, and export pipeline
+- **RASP `.eng` import** — `RaspImporter` parses OpenMotor / ThrustCurve `.eng`
+  thrust-curve files; `RaspMotorData.toNozzleParameters()` inverts the
+  isentropic Cf equation to recover `P_c` from measured thrust and feeds
+  directly into the same nozzle pipeline (supports single- and multi-motor
+  files, NAR motor classification, and peak-pressure structural sizing)
 
 ### Chemistry
 - **Frozen and equilibrium flow** — selectable per analysis stage
@@ -316,6 +321,97 @@ perf.calculate();
 System.out.printf("Delivered Isp : %.1f s%n",  perf.getSummary().specificImpulseSeconds());
 System.out.printf("Thrust        : %.3f kN%n", perf.getSummary().thrustNewtons() / 1000);
 ```
+
+---
+
+## RASP `.eng` Import (OpenMotor Bridge)
+
+`RaspImporter` reads the RASP `.eng` thrust-curve format used by OpenMotor,
+ThrustCurve.org, and most hobby-rocketry simulation tools.  `RaspMotorData`
+exposes the parsed data, derived performance quantities, and a direct bridge
+into the nozzle design pipeline.
+
+### Loading a file
+
+```java
+// Single motor (first definition in the file)
+RaspMotorData motor = RaspImporter.load(Path.of("H128-14.eng"));
+
+// All motors from a multi-motor file
+List<RaspMotorData> motors = RaspImporter.loadAll(Path.of("aerotech_catalog.eng"));
+```
+
+### Derived performance quantities
+
+```java
+System.out.printf("Motor class   : %s%n",      motor.motorClass());          // e.g. "H"
+System.out.printf("Total impulse : %.1f N·s%n", motor.totalImpulseNs());
+System.out.printf("Burn time     : %.3f s%n",   motor.burnTime());
+System.out.printf("Average thrust: %.1f N%n",   motor.averageThrustN());
+System.out.printf("Peak thrust   : %.1f N%n",   motor.maxThrustN());
+System.out.printf("Isp           : %.1f s%n",   motor.specificImpulseSeconds());
+System.out.printf("Avg mdot      : %.4f kg/s%n", motor.averageMassFlowRateKgPerS());
+```
+
+### Bridge to the nozzle pipeline
+
+A `.eng` file records thrust, not chamber pressure.  `toNozzleParameters()`
+inverts the isentropic thrust-coefficient equation to recover `P_c` from the
+measured thrust:
+
+```
+P_c = (F + p_a · A_e) / (sqrt_term · A_t + (p_e/P_c) · A_e)
+```
+
+where `sqrt_term`, `p_e/P_c`, and `A_e/A_t` depend only on `γ` and `M_e`
+(supplied via the template) — no iteration required.
+
+Because `.eng` files do not record flame temperature or gas composition,
+those must be set on the template before calling the bridge:
+
+```java
+NozzleDesignParameters template = NozzleDesignParameters.builder()
+        .throatRadius(0.012)
+        .exitMach(3.0)
+        .ambientPressure(101325)
+        .chamberPressure(5.0e6)                       // placeholder — overridden
+        .chamberTemperature(3200)                      // from propellant data sheet
+        .gasProperties(GasProperties.APCP_HTPB_PRODUCTS)
+        .axisymmetric(true)
+        .lengthFraction(0.8)
+        .build();
+
+// Design point: average chamber pressure over the burn
+NozzleDesignParameters params    = motor.toNozzleParameters(template);
+
+// Structural sizing: peak chamber pressure
+NozzleDesignParameters paramsMax = motor.toNozzleParametersAtMaxPressure(template);
+
+System.out.printf("Average Pc : %.2f MPa%n", params.chamberPressure()    / 1e6);
+System.out.printf("Peak Pc    : %.2f MPa%n", paramsMax.chamberPressure() / 1e6);
+
+// Feed into contour, performance, thermal, and export pipeline as normal
+NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
+contour.generate(60);
+
+PerformanceCalculator perf = new PerformanceCalculator(params, null, contour, null, null);
+perf.calculate();
+System.out.printf("Delivered Isp : %.1f s%n", perf.getSummary().specificImpulseSeconds());
+```
+
+### `.eng` file format
+
+```
+; Comment lines start with semicolon
+<name> <diameter_mm> <length_mm> <delays> <prop_mass_kg> <total_mass_kg> <manufacturer>
+   <time_s>  <thrust_N>
+   <time_s>  <thrust_N>
+   ...
+;   ← optional terminator (or end of file)
+```
+
+Multiple motor definitions may appear in one file; each is terminated by a
+`;` line or end of file.
 
 ---
 
@@ -767,18 +863,18 @@ if (warnings.isEmpty()) {
 
 ## Package Overview
 
-| Package                   | Contents                                                                                                                                          |
-|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| `com.nozzle.core`         | `NozzleDesignParameters`, `GasProperties`, `PerformanceCalculator`, `FlowSeparationPredictor`, `Units`                                            |
-| `com.nozzle.moc`          | `CharacteristicNet`, `RaoNozzle`, `AerospikeNozzle`, `DualBellNozzle`, `CharacteristicPoint`                                                      |
-| `com.nozzle.geometry`     | `NozzleContour` (five contour families), `ConvergentSection`, `FullNozzleGeometry`, `Point2D`                                                     |
-| `com.nozzle.solid`        | `SolidPropellant`, `GrainGeometry`, `BatesGrain`, `EndBurningGrain`, `SolidMotorChamber`, `BurnTrajectory` |
-| `com.nozzle.chemistry`    | `ChemistryModel`, `OFSweep`, `GibbsMinimizer`, `NasaSpeciesDatabase`                                                                              |
-| `com.nozzle.thermal`      | `HeatTransferModel`, `BoundaryLayerCorrection`, `CoolantChannel`, `ThermalStressAnalysis`, `AblativeNozzleModel`, `RadiationCooledExtension`      |
-| `com.nozzle.export`       | `CFDMeshExporter`, `OpenFOAMExporter`, `CSVExporter`, `DXFExporter`, `STEPExporter`, `STLExporter`, `RevolvedMeshExporter`                        |
-| `com.nozzle.optimization` | `AltitudeAdaptiveOptimizer`, `MonteCarloUncertainty`                                                                                              |
-| `com.nozzle.validation`   | `NASASP8120Validator`                                                                                                                             |
-| `com.nozzle.io`           | `NozzleSerializer`, `DesignDocument`                                                                                                              |
+| Package                   | Contents                                                                                                                                                           |
+|---------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `com.nozzle.core`         | `NozzleDesignParameters`, `GasProperties`, `PerformanceCalculator`, `FlowSeparationPredictor`, `Units`                                                             |
+| `com.nozzle.moc`          | `CharacteristicNet`, `RaoNozzle`, `AerospikeNozzle`, `DualBellNozzle`, `CharacteristicPoint`                                                                       |
+| `com.nozzle.geometry`     | `NozzleContour` (five contour families), `ConvergentSection`, `FullNozzleGeometry`, `Point2D`                                                                      |
+| `com.nozzle.solid`        | `SolidPropellant`, `GrainGeometry`, `BatesGrain`, `EndBurningGrain`, `SolidMotorChamber`, `BurnTrajectory`, `RaspImporter`, `RaspMotorData`                        |
+| `com.nozzle.chemistry`    | `ChemistryModel`, `OFSweep`, `GibbsMinimizer`, `NasaSpeciesDatabase`                                                                                               |
+| `com.nozzle.thermal`      | `HeatTransferModel`, `BoundaryLayerCorrection`, `BoundaryLayerPoint`, `CoolantChannel`, `ThermalStressAnalysis`, `AblativeNozzleModel`, `RadiationCooledExtension` |
+| `com.nozzle.export`       | `CFDMeshExporter`, `OpenFOAMExporter`, `CSVExporter`, `DXFExporter`, `STEPExporter`, `STLExporter`, `RevolvedMeshExporter`                                         |
+| `com.nozzle.optimization` | `AltitudeAdaptiveOptimizer`, `MonteCarloUncertainty`                                                                                                               |
+| `com.nozzle.validation`   | `NASASP8120Validator`                                                                                                                                              |
+| `com.nozzle.io`           | `NozzleSerializer`, `DesignDocument`                                                                                                                               |
 
 ---
 

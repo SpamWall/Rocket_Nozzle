@@ -326,4 +326,159 @@ class RaoNozzle_UT {
             assertThat(comparison.mocThrustCoefficient()).isGreaterThan(0);
         }
     }
+
+    // -----------------------------------------------------------------------
+    // getParameters
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("getParameters Tests")
+    class GetParametersTests {
+
+        @Test
+        @DisplayName("getParameters() returns the same instance passed at construction")
+        void returnsConstructorInstance() {
+            assertThat(raoNozzle.getParameters()).isSameAs(params);
+        }
+
+        @Test
+        @DisplayName("getParameters() still returns same instance after generate()")
+        void unchangedAfterGenerate() {
+            raoNozzle.generate();
+            assertThat(raoNozzle.getParameters()).isSameAs(params);
+        }
+
+        @Test
+        @DisplayName("getParameters() reflects the correct throat radius")
+        void reflectsThroatRadius() {
+            assertThat(raoNozzle.getParameters().throatRadius())
+                    .isEqualTo(params.throatRadius());
+        }
+
+        @Test
+        @DisplayName("getParameters() is consistent across the three-arg constructor")
+        void threeArgConstructorPreservesParams() {
+            RaoNozzle custom = new RaoNozzle(params, 0.9, 50);
+            assertThat(custom.getParameters()).isSameAs(params);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // NozzleComparison.thrustCoefficientDifference
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("NozzleComparison.thrustCoefficientDifference Tests")
+    class ThrustCoefficientDifferenceTests {
+
+        @Test
+        @DisplayName("thrustCoefficientDifference() = |Cf_Rao - Cf_MOC| when Rao > MOC")
+        void differenceWhenRaoGreater() {
+            RaoNozzle.NozzleComparison c =
+                    new RaoNozzle.NozzleComparison(0, 0, 0, 1.80, 1.75, 0.5, 0.48);
+            assertThat(c.thrustCoefficientDifference()).isCloseTo(0.05, within(1e-10));
+        }
+
+        @Test
+        @DisplayName("thrustCoefficientDifference() = |Cf_Rao - Cf_MOC| when MOC > Rao")
+        void differenceWhenMocGreater() {
+            RaoNozzle.NozzleComparison c =
+                    new RaoNozzle.NozzleComparison(0, 0, 0, 1.70, 1.82, 0.5, 0.52);
+            assertThat(c.thrustCoefficientDifference()).isCloseTo(0.12, within(1e-10));
+        }
+
+        @Test
+        @DisplayName("thrustCoefficientDifference() is zero when coefficients are equal")
+        void differenceIsZeroWhenEqual() {
+            RaoNozzle.NozzleComparison c =
+                    new RaoNozzle.NozzleComparison(0, 0, 0, 1.75, 1.75, 0.5, 0.5);
+            assertThat(c.thrustCoefficientDifference()).isEqualTo(0.0);
+        }
+
+        @Test
+        @DisplayName("thrustCoefficientDifference() is always non-negative")
+        void alwaysNonNegative() {
+            raoNozzle.generate();
+            CharacteristicNet mocNet = new CharacteristicNet(params).generate();
+            RaoNozzle.NozzleComparison comparison = raoNozzle.compareTo(mocNet);
+            assertThat(comparison.thrustCoefficientDifference()).isGreaterThanOrEqualTo(0.0);
+        }
+
+        @Test
+        @DisplayName("thrustCoefficientDifference() equals abs(raoThrustCoefficient - mocThrustCoefficient)")
+        void equalsManualAbsDifference() {
+            raoNozzle.generate();
+            CharacteristicNet mocNet = new CharacteristicNet(params).generate();
+            RaoNozzle.NozzleComparison comparison = raoNozzle.compareTo(mocNet);
+            double expected = Math.abs(
+                    comparison.raoThrustCoefficient() - comparison.mocThrustCoefficient());
+            assertThat(comparison.thrustCoefficientDifference())
+                    .isCloseTo(expected, within(1e-12));
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // NozzleComparison.toString
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("NozzleComparison.toString Tests")
+    class NozzleComparisonToStringTests {
+
+        private RaoNozzle.NozzleComparison comparison;
+
+        @BeforeEach
+        void buildComparison() {
+            comparison = new RaoNozzle.NozzleComparison(
+                    0.001, 0.0005, Math.toRadians(0.5), 1.78, 1.76, 0.450, 0.438);
+        }
+
+        @Test
+        @DisplayName("toString() starts with 'NozzleComparison['")
+        void startsWithPrefix() {
+            assertThat(comparison.toString()).startsWith("NozzleComparison[");
+        }
+
+        @Test
+        @DisplayName("toString() contains Cf_Rao label and value")
+        void containsCfRao() {
+            assertThat(comparison.toString())
+                    .contains("Cf_Rao=")
+                    .contains("1.7800");
+        }
+
+        @Test
+        @DisplayName("toString() contains Cf_MOC label and value")
+        void containsCfMoc() {
+            assertThat(comparison.toString())
+                    .contains("Cf_MOC=")
+                    .contains("1.7600");
+        }
+
+        @Test
+        @DisplayName("toString() contains maxΔr in mm")
+        void containsMaxDeltaR() {
+            // maxRadiusDifference = 0.001 m → 1.0000 mm
+            assertThat(comparison.toString())
+                    .contains("maxΔr=")
+                    .contains("1.0000 mm");
+        }
+
+        @Test
+        @DisplayName("toString() contains L_Rao and L_MOC lengths")
+        void containsLengths() {
+            assertThat(comparison.toString())
+                    .contains("L_Rao=0.4500 m")
+                    .contains("L_MOC=0.4380 m");
+        }
+
+        @Test
+        @DisplayName("toString() output from compareTo() is non-empty and well-formed")
+        void compareToToStringWellFormed() {
+            raoNozzle.generate();
+            CharacteristicNet mocNet = new CharacteristicNet(params).generate();
+            String s = raoNozzle.compareTo(mocNet).toString();
+            assertThat(s).startsWith("NozzleComparison[").endsWith("]");
+        }
+    }
 }
