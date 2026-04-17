@@ -53,3 +53,6 @@ Thumbs.db
 # Claude Code — exclude machine-local settings but keep shared instructions
 .claude/settings.local.json
 
+# Nozzle design output files
+nozzle_output/
+
