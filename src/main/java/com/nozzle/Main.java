@@ -2780,6 +2780,7 @@ public class Main {
 
         // ── 7. Rao bell contour and delivered performance ─────────────────────
         NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, nozzleParams);
+        contour.generate(60);
 
         PerformanceCalculator perf = new PerformanceCalculator(
                 nozzleParams, null, contour, null, null);
