@@ -14,23 +14,30 @@ used individually or composed into a full design pipeline.
 
 ```
 com.nozzle
+├── (root)        Main — thin dispatcher to com.nozzle.examples
 ├── core          NozzleDesignParameters, GasProperties, PerformanceCalculator,
-│                 FlowSeparationPredictor, ShockExpansionModel, Units
-├── moc           CharacteristicNet, RaoNozzle, DualBellNozzle,
-│                 AerospikeNozzle, AerospikeContour, CharacteristicPoint,
-│                 AltitudePerformance
+│                 FlowSeparationPredictor, ShockExpansionModel,
+│                 NozzlePerformanceMap, Units
+├── moc           CharacteristicNet, MinimumLengthNozzle, ViscousMOCSolver,
+│                 RaoNozzle, DualBellNozzle, AerospikeNozzle, AerospikeContour,
+│                 CharacteristicPoint, AltitudePerformance
 ├── geometry      NozzleContour (five contour families), ConvergentSection,
 │                 FullNozzleGeometry, Point2D
 ├── chemistry     ChemistryModel, OFSweep, GibbsMinimizer,
 │                 NasaSpeciesDatabase, SpeciesData, PropellantComposition
+├── solid         SolidPropellant, GrainGeometry, BatesGrain, EndBurningGrain,
+│                 SolidMotorChamber, BurnTrajectory, ErosiveBurningModel,
+│                 TwoPhaseFlowModel, RaspImporter, RaspMotorData
 ├── thermal       HeatTransferModel, BoundaryLayerCorrection, CoolantChannel,
 │                 ThermalStressAnalysis, AblativeNozzleModel,
 │                 RadiationCooledExtension
 ├── export        CFDMeshExporter, OpenFOAMExporter, CSVExporter, DXFExporter,
-│                 STEPExporter, STLExporter, RevolvedMeshExporter
+│                 STEPExporter, STLExporter, RevolvedMeshExporter, RaspExporter
 ├── optimization  AltitudeAdaptiveOptimizer, MonteCarloUncertainty
 ├── validation    NASASP8120Validator
-└── io            NozzleSerializer, DesignDocument
+├── io            NozzleSerializer, DesignDocument
+└── examples      33 Demonstrate* classes — one per feature area, each
+                  independently runnable via public static void main
 ```
 
 ---

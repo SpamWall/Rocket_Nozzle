@@ -24,6 +24,7 @@ import com.nozzle.chemistry.ChemistryModel;
 import com.nozzle.chemistry.OFSweep;
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
+import com.nozzle.core.NozzlePerformanceMap;
 import com.nozzle.core.PerformanceCalculator;
 import com.nozzle.export.CFDMeshExporter;
 import com.nozzle.export.CSVExporter;
@@ -33,9 +34,14 @@ import com.nozzle.io.DesignDocument;
 import com.nozzle.io.NozzleSerializer;
 import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.DualBellNozzle;
+import com.nozzle.moc.MinimumLengthNozzle;
 import com.nozzle.moc.RaoNozzle;
+import com.nozzle.moc.ViscousMOCSolver;
+import com.nozzle.solid.ErosiveBurningModel;
+import com.nozzle.solid.SolidPropellant;
 import com.nozzle.thermal.BoundaryLayerCorrection;
 import com.nozzle.thermal.HeatTransferModel;
+import com.nozzle.thermal.TwoPhaseFlowModel;
 import com.nozzle.validation.NASASP8120Validator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -656,6 +662,319 @@ class FullPipeline_IT {
 
             assertThat(isp4).isGreaterThan(isp3);
             assertThat(isp6).isGreaterThan(isp4);
+        }
+    }
+
+    // =========================================================================
+    // Minimum-Length Nozzle
+    // =========================================================================
+
+    @Nested
+    @DisplayName("Minimum-Length Nozzle integration")
+    class MinimumLengthNozzleIntegrationTests {
+
+        private NozzleDesignParameters mlnParams() {
+            return NozzleDesignParameters.builder()
+                    .throatRadius(0.05)
+                    .exitMach(3.0)
+                    .chamberPressure(5e6)
+                    .chamberTemperature(3200)
+                    .ambientPressure(101325)
+                    .gasProperties(GasProperties.APCP_HTPB_PRODUCTS)
+                    .numberOfCharLines(12)
+                    .wallAngleInitialDegrees(25)
+                    .lengthFraction(0.8)
+                    .axisymmetric(true)
+                    .build();
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Generate returns non-empty wall with monotonically increasing x and r")
+        void wallMonotonicallyIncreases() {
+            MinimumLengthNozzle mln = new MinimumLengthNozzle(mlnParams()).generate();
+            List<com.nozzle.moc.CharacteristicPoint> wall = mln.getWallPoints();
+
+            assertThat(wall).hasSizeGreaterThan(2);
+
+            for (int i = 1; i < wall.size(); i++) {
+                assertThat(wall.get(i).x()).isGreaterThan(wall.get(i - 1).x());
+                assertThat(wall.get(i).y()).isGreaterThanOrEqualTo(wall.get(i - 1).y());
+            }
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Exit Mach matches design target within tolerance")
+        void exitMachMatchesTarget() {
+            NozzleDesignParameters params = mlnParams();
+            MinimumLengthNozzle mln = new MinimumLengthNozzle(params).generate();
+            List<com.nozzle.moc.CharacteristicPoint> wall = mln.getWallPoints();
+
+            double exitMach = wall.getLast().mach();
+            // Coarse mesh (12 char lines) has ~6% discretization error; unit tests verify accuracy
+            assertThat(exitMach).isCloseTo(params.exitMach(), within(0.25));
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("MLN is shorter than equivalent cone nozzle")
+        void mlnShorterThanCone() {
+            NozzleDesignParameters params = mlnParams();
+            MinimumLengthNozzle mln = new MinimumLengthNozzle(params).generate();
+            List<com.nozzle.moc.CharacteristicPoint> wall = mln.getWallPoints();
+
+            double mlnLength = wall.getLast().x() - wall.getFirst().x();
+            double exitRadius = wall.getLast().y();
+            double throatRadius = params.throatRadius();
+            // 15-degree half-angle cone length for same area ratio
+            double coneLength = (exitRadius - throatRadius) / Math.tan(Math.toRadians(15));
+
+            assertThat(mlnLength).isLessThan(coneLength);
+        }
+    }
+
+    // =========================================================================
+    // Viscous MOC Solver
+    // =========================================================================
+
+    @Nested
+    @DisplayName("ViscousMOCSolver integration")
+    class ViscousMOCSolverIntegrationTests {
+
+        private NozzleDesignParameters viscousParams() {
+            return NozzleDesignParameters.builder()
+                    .throatRadius(0.05)
+                    .exitMach(3.0)
+                    .chamberPressure(7e6)
+                    .chamberTemperature(3500)
+                    .ambientPressure(101325)
+                    .gasProperties(GasProperties.APCP_HTPB_PRODUCTS)
+                    .numberOfCharLines(15)
+                    .wallAngleInitialDegrees(25)
+                    .lengthFraction(0.8)
+                    .axisymmetric(true)
+                    .build();
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Discharge coefficient is in physical range [0.90, 1.00]")
+        void dischargeCoefficientInRange() {
+            CharacteristicNet net = new CharacteristicNet(viscousParams()).generate();
+            ViscousMOCSolver viscous = new ViscousMOCSolver(net).solve();
+
+            assertThat(viscous.dischargeCoefficient())
+                    .isGreaterThanOrEqualTo(0.90)
+                    .isLessThanOrEqualTo(1.00);
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Physical wall radius is larger than inviscid at every station")
+        void physicalWallLargerThanInviscid() {
+            CharacteristicNet net = new CharacteristicNet(viscousParams()).generate();
+            ViscousMOCSolver viscous = new ViscousMOCSolver(net).solve();
+
+            for (ViscousMOCSolver.ViscousWallPoint wp : viscous.getCorrectedWall()) {
+                assertThat(wp.rPhysical()).isGreaterThanOrEqualTo(wp.rInviscid());
+            }
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Viscous Isp loss fraction is small (< 5%)")
+        void viscousIspLossSmall() {
+            CharacteristicNet net = new CharacteristicNet(viscousParams()).generate();
+            ViscousMOCSolver viscous = new ViscousMOCSolver(net).solve();
+
+            assertThat(viscous.viscousIspLossFraction())
+                    .isGreaterThanOrEqualTo(0.0)
+                    .isLessThan(0.05);
+        }
+    }
+
+    // =========================================================================
+    // Two-Phase Flow Model
+    // =========================================================================
+
+    @Nested
+    @DisplayName("TwoPhaseFlowModel integration")
+    class TwoPhaseFlowModelIntegrationTests {
+
+        private NozzleDesignParameters apcpParams() {
+            return NozzleDesignParameters.builder()
+                    .throatRadius(0.05)
+                    .exitMach(3.0)
+                    .chamberPressure(7e6)
+                    .chamberTemperature(3500)
+                    .ambientPressure(101325)
+                    .gasProperties(GasProperties.APCP_HTPB_PRODUCTS)
+                    .numberOfCharLines(15)
+                    .wallAngleInitialDegrees(25)
+                    .lengthFraction(0.8)
+                    .axisymmetric(true)
+                    .build();
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Two-phase efficiency is in (0, 1] for 18% Al APCP")
+        void efficiencyInRange() {
+            NozzleDesignParameters params = apcpParams();
+            List<com.nozzle.moc.CharacteristicPoint> wall =
+                    new CharacteristicNet(params).generate().getWallPoints();
+
+            TwoPhaseFlowModel model = new TwoPhaseFlowModel(params, 0.30).solve(wall);
+
+            assertThat(model.twoPhaseEfficiency())
+                    .isGreaterThan(0.0)
+                    .isLessThanOrEqualTo(1.0);
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Isp loss for 18% Al is at most 10%")
+        void ispLossWithinTypicalBand() {
+            NozzleDesignParameters params = apcpParams();
+            List<com.nozzle.moc.CharacteristicPoint> wall =
+                    new CharacteristicNet(params).generate().getWallPoints();
+
+            TwoPhaseFlowModel model = new TwoPhaseFlowModel(params, 0.30).solve(wall);
+
+            assertThat(model.ispLossFraction())
+                    .isGreaterThanOrEqualTo(0.0)
+                    .isLessThanOrEqualTo(0.10);
+        }
+
+        @Test
+        @Timeout(value = 30, unit = TimeUnit.SECONDS)
+        @DisplayName("Particle trajectory spans throat to exit with increasing velocity")
+        void trajectorySpansNozzle() {
+            NozzleDesignParameters params = apcpParams();
+            List<com.nozzle.moc.CharacteristicPoint> wall =
+                    new CharacteristicNet(params).generate().getWallPoints();
+
+            TwoPhaseFlowModel model = new TwoPhaseFlowModel(params, 0.30).solve(wall);
+            List<TwoPhaseFlowModel.ParticleState> trajectory = model.getParticleTrajectory();
+
+            assertThat(trajectory).hasSizeGreaterThan(1);
+            assertThat(trajectory.getLast().x()).isGreaterThan(trajectory.getFirst().x());
+            assertThat(trajectory.getLast().velocity()).isGreaterThan(trajectory.getFirst().velocity());
+        }
+    }
+
+    // =========================================================================
+    // Nozzle Performance Map
+    // =========================================================================
+
+    @Nested
+    @DisplayName("NozzlePerformanceMap integration")
+    class NozzlePerformanceMapIntegrationTests {
+
+        private NozzleDesignParameters mapParams() {
+            return NozzleDesignParameters.builder()
+                    .throatRadius(0.03)
+                    .exitMach(4.0)
+                    .chamberPressure(6e6)
+                    .chamberTemperature(3400)
+                    .ambientPressure(101325)
+                    .gasProperties(GasProperties.LOX_RP1_PRODUCTS)
+                    .numberOfCharLines(15)
+                    .wallAngleInitialDegrees(25)
+                    .lengthFraction(0.8)
+                    .axisymmetric(true)
+                    .build();
+        }
+
+        @Test
+        @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        @DisplayName("Map generates Isp values for every altitude and expansion ratio")
+        void mapPopulatesAllEntries() {
+            NozzlePerformanceMap map = new NozzlePerformanceMap(mapParams()).generate();
+
+            assertThat(map.getAltitudes()).isNotEmpty();
+            assertThat(map.getExpansionRatios()).isNotEmpty();
+
+            for (double altKm : map.getAltitudes()) {
+                for (double eps : map.getExpansionRatios()) {
+                    assertThat(map.isp(altKm, eps)).isFinite().isPositive();
+                }
+            }
+        }
+
+        @Test
+        @Timeout(value = 60, unit = TimeUnit.SECONDS)
+        @DisplayName("Optimum expansion ratio increases with altitude")
+        void optimumEpsilonIncreasesWithAltitude() {
+            NozzlePerformanceMap map = new NozzlePerformanceMap(mapParams()).generate();
+            double[] altitudesKm = map.getAltitudes();
+
+            double prevOptEps = Double.NaN;
+            for (double altKm : altitudesKm) {
+                double optEps = map.optimumExpansionRatio(altKm);
+                if (!Double.isNaN(prevOptEps)) {
+                    assertThat(optEps).isGreaterThanOrEqualTo(prevOptEps);
+                }
+                prevOptEps = optEps;
+            }
+        }
+    }
+
+    // =========================================================================
+    // Erosive Burning Model
+    // =========================================================================
+
+    @Nested
+    @DisplayName("ErosiveBurningModel integration")
+    class ErosiveBurningModelIntegrationTests {
+
+        @Test
+        @DisplayName("Augmented burn rate is always >= base burn rate")
+        void augmentedRateAlwaysAtLeastBase() {
+            SolidPropellant prop = SolidPropellant.APCP_HTPB();
+            ErosiveBurningModel model = new ErosiveBurningModel(prop);
+
+            double r0 = 0.008; // 8 mm/s baseline
+            for (double G : new double[]{0, 100, 200, 500, 1000}) {
+                assertThat(model.augmentedBurnRate(r0, G)).isGreaterThanOrEqualTo(r0);
+            }
+        }
+
+        @Test
+        @DisplayName("No erosion below threshold mass flux")
+        void noErosionBelowThreshold() {
+            SolidPropellant prop = SolidPropellant.APCP_HTPB();
+            ErosiveBurningModel model = new ErosiveBurningModel(prop);
+
+            double r0 = 0.008;
+            assertThat(model.erosiveBurnRate(r0, ErosiveBurningModel.DEFAULT_THRESHOLD - 1))
+                    .isZero();
+        }
+
+        @Test
+        @DisplayName("Erosive fraction increases with mass flux above threshold")
+        void erosiveFractionIncreasesWithFlux() {
+            SolidPropellant prop = SolidPropellant.APCP_HTPB();
+            ErosiveBurningModel model = new ErosiveBurningModel(prop);
+
+            double r0 = 0.005;
+            double frac200 = model.erosiveFraction(r0, 200);
+            double frac500 = model.erosiveFraction(r0, 500);
+            double frac1000 = model.erosiveFraction(r0, 1000);
+
+            assertThat(frac500).isGreaterThan(frac200);
+            assertThat(frac1000).isGreaterThan(frac500);
+        }
+
+        @Test
+        @DisplayName("Axially-averaged erosion chained with coreFlux is non-negative")
+        void axiallyAveragedErosionNonNegative() {
+            SolidPropellant prop = SolidPropellant.APCP_HTPB();
+            ErosiveBurningModel model = new ErosiveBurningModel(prop);
+
+            double avgErosion = model.axiallyAveragedErosion(0.008, 0.025, 0.30);
+            assertThat(avgErosion).isGreaterThanOrEqualTo(0.0);
         }
     }
 }

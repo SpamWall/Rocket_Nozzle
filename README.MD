@@ -13,6 +13,15 @@ structural analysis, and multi-format CAD/CFD export.
   curved sonic surface (Hall 1962: x_s(r) = coeff·r²·(1/R_cd + 1/(3·R_cu))) rather than
   a flat plane, removing leading-order bias from the first few characteristic rows;
   axisymmetric source-term correction applied throughout
+- **Minimum-Length Nozzle (MLN)** — `MinimumLengthNozzle` implements the Foelsch/Hall
+  algorithm: maximum wall angle θ_max = ν(M_e)/2 at the throat corner,
+  characteristic propagation from the curved sonic initial-data line,
+  axis-reflection symmetry condition, and termination when θ_wall ≤ 0;
+  reports nozzle length, exit A/A★, and L/L_cone ratio
+- **Viscous MOC correction** — `ViscousMOCSolver` applies a White (1974) compressible
+  turbulent flat-plate boundary-layer displacement correction to the inviscid MOC wall;
+  the physical (machined) wall is outset by δ★(x) at each station; reports Cd_BL and
+  viscous Isp-loss fraction
 - **Contour families** — Rao optimum bell, conical, Truncated Ideal Contour (TIC),
   MOC-generated, and custom cubic spline
 - **Rao bell nozzle** — empirical optimum bell with length fraction control and
@@ -40,6 +49,11 @@ structural analysis, and multi-format CAD/CFD export.
   computes the geometric sonic-line Cd from the Kliegel & Levine (1969)
   harmonic-mean curvature model; for Rao defaults (r_cd/r_t = 0.382,
   r_cu/r_t = 1.5, γ = 1.4) this gives Cd ≈ 0.9962
+- **Performance map** — `NozzlePerformanceMap` generates a 2-D grid of Isp vs
+  altitude (0–80 km, US Standard Atmosphere) and expansion ratio; reports the
+  optimum ε at each altitude, handles flow separation via the Summerfield
+  criterion, and interpolates via `isp(altKm, eps)` and
+  `optimumExpansionRatio(altKm)`
 
 ### Solid Motor Ballistics
 - **Vieille's law burn rate** — `r = a₀ · exp(σ_p · (T−T_ref)) · P^n`; five
@@ -54,6 +68,14 @@ structural analysis, and multi-format CAD/CFD export.
   to size `A_t` for a target initial chamber pressure
 - **MIL-STD temperature sweep** — evaluate ballistic sensitivity over the
   −40 °C to +71 °C qualification range
+- **Erosive burning** — `ErosiveBurningModel` implements the Lenoir-Robillard (1957)
+  model: `r_e = α · G^0.8 · exp(−β · r_0 · ρ_p / G)` with self-limiting
+  transpiration-blocking term; provides `augmentedBurnRate`, `erosiveFraction`,
+  `coreFlux`, and `axiallyAveragedErosion` (Simpson's-rule integral over grain length)
+- **Two-phase flow losses** — `TwoPhaseFlowModel` performs 1-D Lagrangian particle
+  tracking (Schiller-Naumann drag, Ranz-Marshall heat transfer) through the MOC
+  wall-point gas field; reports two-phase efficiency η_2φ and Isp-loss fraction;
+  built-in Al₂O₃ defaults for APCP/HTPB with 18 % aluminum
 - **Pipeline bridge** — `BurnTrajectory.toNozzleParameters()` overlays average
   (or peak) `P_c`, `T_c`, and combustion `GasProperties` onto a
   `NozzleDesignParameters` template, feeding directly into the contour,
@@ -63,6 +85,9 @@ structural analysis, and multi-format CAD/CFD export.
   isentropic Cf equation to recover `P_c` from measured thrust and feeds
   directly into the same nozzle pipeline (supports single- and multi-motor
   files, NAR motor classification, and peak-pressure structural sizing)
+- **RASP `.eng` export** — `RaspExporter` writes a thrust-time curve computed
+  from a `BurnTrajectory` into the standard RASP `.eng` format so outputs
+  can be imported by OpenMotor, RASAero II, and ThrustCurve.org
 
 ### Chemistry
 - **Frozen and equilibrium flow** — selectable per analysis stage
@@ -77,7 +102,8 @@ structural analysis, and multi-format CAD/CFD export.
 
 ### Thermal and Structural Analysis
 - **Boundary layer correction** — displacement and momentum thickness,
-  skin-friction loss
+  skin-friction loss; `calculateFromInjectorFace()` starts BL growth at the
+  chamber inlet for a physically accurate throat δ★ and combined Cd
 - **Heat transfer model** — Bartz/Eckert convective correlation plus radiation;
   wall temperature and heat-flux profiles along the contour; `calculateFullProfile()`
   covers the complete wall (convergent + divergent) and reports the heat-flux peak
@@ -131,6 +157,7 @@ structural analysis, and multi-format CAD/CFD export.
 | OpenFOAM blockMesh (full 3-D revolved)         | ✓                | —           | ✓         | ✓                      |
 | Gmsh .geo (full 3-D revolved)                  | ✓                | —           | ✓         | ✓                      |
 | Plot3D .xyz (full 3-D revolved)                | ✓                | —           | ✓         | ✓                      |
+| RASP .eng (thrust-curve export)                | ✓ (solid motor)  | —           | —         | —                      |
 
 Every exporter accepts a `FullNozzleGeometry` overload that covers the complete
 internal wall from injector face (x < 0) to nozzle exit (x > 0).
@@ -155,11 +182,65 @@ STEP exports include both a revolved solid and a profile B-spline curve.
 mvn clean package
 ```
 
-Run the demonstration application:
+Run all demonstrations:
 
 ```bash
 mvn exec:java -Dexec.mainClass="com.nozzle.Main"
 ```
+
+Run a single demonstration by name:
+
+```bash
+mvn exec:java -Dexec.mainClass="com.nozzle.Main" -Dexec.args="solidmotor"
+mvn exec:java -Dexec.mainClass="com.nozzle.examples.DemonstrateSolidMotor"
+```
+
+Each class in `com.nozzle.examples` has its own `public static void main` and
+can be run independently without loading any other demonstration.
+
+---
+
+## Demonstrations (`com.nozzle.examples`)
+
+Each `Demonstrate*` class is a self-contained runnable that exercises one area
+of the library. Pass its lower-case name (no `Demonstrate` prefix) to `Main`
+to run just that one, or run the class directly.
+
+| Class                                        | What it shows                                                             |
+|----------------------------------------------|---------------------------------------------------------------------------|
+| `DemonstrateBasicDesign`                     | MOC net, sonic-line offset, performance, CSV export                       |
+| `DemonstrateRaoComparison`                   | MOC vs Rao bell length and exit-angle comparison                          |
+| `DemonstrateTruncatedIdealContour`           | TIC at three truncation fractions                                         |
+| `DemonstrateThermalAnalysis`                 | Bartz heat transfer, coolant channel, BL correction                       |
+| `DemonstrateChemistryModeling`               | Frozen/equilibrium Isp comparison table                                   |
+| `DemonstrateValidation`                      | NASA SP-8120 validation checks                                            |
+| `DemonstrateOptimization`                    | Altitude-adaptive Isp optimizer                                           |
+| `DemonstrateUncertaintyAnalysis`             | Monte Carlo sensitivity analysis                                          |
+| `DemonstrateFlowSeparationAndShockExpansion` | Summerfield/Schmucker/Stark criteria, shock-expansion altitude sweep      |
+| `DemonstrateThermalStressAnalysis`           | Timoshenko stress, von Mises, fatigue life for four materials             |
+| `DemonstrateExports`                         | DXF, STEP, STL, CSV, CFDMesh, OpenFOAM, Gmsh, Plot3D, 3-D revolved        |
+| `DemonstrateAerospikeNozzle`                 | MOC kernel-flow spike, altitude performance, all exports                  |
+| `DemonstrateAblativeLiner`                   | Arrhenius char-rate, erosion supplement, material comparison              |
+| `DemonstrateRadiationCooledExtension`        | Equilibrium wall temperature, material comparison                         |
+| `DemonstrateSerialization`                   | Three-stage NozzleSerializer workflow                                     |
+| `DemonstrateYPlusGrading`                    | y⁺-derived first-cell height via CFDMeshExporter / OpenFOAMExporter       |
+| `DemonstrateRevolvedMesh`                    | RevolvedMeshExporter in OpenFOAM / Gmsh / Plot3D, y⁺ grading              |
+| `DemonstrateOFSweep`                         | O/F sweep across five propellant families, Isp-optimal vs c★-optimal      |
+| `DemonstrateDualBellNozzle`                  | Dual-bell sweep, DLR cross-check, all exports                             |
+| `DemonstrateThroatCurvatureRatio`            | r_cd/r_t effect on MOC, Rao bell, and conical contours                    |
+| `DemonstrateConvergentSection`               | Convergent geometry, Cd sweep, BL comparison, exports                     |
+| `DemonstrateUnitsConversion`                 | US-customary ↔ SI conversion utilities                                    |
+| `DemonstrateFullNozzleGeometry`              | Chamber-face-to-exit geometry, MOC-backed variant, DXF exports            |
+| `DemonstrateBoundaryLayerFromInjectorFace`   | Injector-face BL vs throat-only: throat δ★, combined Cd                   |
+| `DemonstrateHeatFluxPeakLocation`            | Peak heat-flux shift with r_cu; `calculateFullProfile()` vs `calculate()` |
+| `DemonstratePlanarWindTunnelNozzle`          | 2-D rectangular nozzle, span sensitivity, DXF/CSV/STL/STEP exports        |
+| `DemonstrateSolidMotor`                      | APCP/HTPB BATES ballistics, MIL-STD sweep, KNSU comparison, exports       |
+| `DemonstrateRaspImport`                      | RASP .eng parse, thrust-curve inversion, Rao bell design, exports         |
+| `DemonstrateMinimumLengthNozzle`             | MLN geometry, Mach sweep, length comparison vs Rao bell                   |
+| `DemonstrateViscousMOCSolver`                | BL displacement wall, Cd vs Pc sensitivity table                          |
+| `DemonstrateTwoPhaseFlowModel`               | Al₂O₃ Lagrangian tracking, η_2φ vs α and d_p                              |
+| `DemonstrateNozzlePerformanceMap`            | 2-D Isp map, altitude-optimum ε table, fixed-nozzle peak Isp              |
+| `DemonstrateErosiveBurning`                  | Lenoir-Robillard model: G sweep, axial average, blocking, Pc sensitivity  |
 
 ---
 
@@ -167,7 +248,7 @@ mvn exec:java -Dexec.mainClass="com.nozzle.Main"
 
 ### 1. Define design intent
 
-```
+```java
 NozzleDesignParameters params = NozzleDesignParameters.builder()
         .throatRadius(0.05)               // 50 mm throat radius
         .exitMach(3.5)
@@ -190,7 +271,7 @@ NozzleDesignParameters params = NozzleDesignParameters.builder()
 
 ### 2. Run the MOC solver
 
-```
+```java
 CharacteristicNet net = new CharacteristicNet(params).generate();
 
 System.out.printf("Wall points : %d%n", net.getWallPoints().size());
@@ -199,7 +280,7 @@ System.out.printf("Exit A/A*  : %.4f%n", net.calculateExitAreaRatio());
 
 ### 3. Build the wall contour
 
-```
+```java
 // From MOC wall points (recommended)
 NozzleContour contour = NozzleContour.fromMOCWallPoints(params, net.getWallPoints());
 contour.generate(200);   // 200 discrete points along the wall
@@ -208,18 +289,20 @@ contour.generate(200);   // 200 discrete points along the wall
 NozzleContour raoContour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
 raoContour.generate(200);
 
-// Truncated Ideal Contour (TIC) — truncation fraction set by lengthFraction
-NozzleContour ticContour = new NozzleContour(NozzleContour.ContourType.TRUNCATED_IDEAL, params);
-ticContour.generate(200);
+// Minimum-Length Nozzle (shortest possible for uniform exit flow)
+MinimumLengthNozzle mln = new MinimumLengthNozzle(params).generate();
+System.out.printf("MLN length : %.2f mm  (%.1f%% shorter than Rao)%n",
+        mln.nozzleLength() * 1000,
+        (1.0 - mln.nozzleLength() / raoContour.getLength()) * 100.0);
 
-// Conical nozzle
-NozzleContour conical = new NozzleContour(NozzleContour.ContourType.CONICAL, params);
-conical.generate(200);
+// Viscous-corrected wall (outset by δ★ for physically correct machined profile)
+ViscousMOCSolver viscous = new ViscousMOCSolver(net).solve();
+System.out.printf("Cd_BL      : %.5f%n", viscous.dischargeCoefficient());
 ```
 
 ### 4. Calculate performance
 
-```
+```java
 BoundaryLayerCorrection bl  = new BoundaryLayerCorrection(params, net).calculate();
 HeatTransferModel       htr = new HeatTransferModel(params, net, bl).calculate();
 ChemistryModel          chem = ChemistryModel.equilibrium(params.gasProperties());
@@ -230,6 +313,121 @@ PerformanceCalculator perf = new PerformanceCalculator(params, net, contour, bl,
 System.out.printf("Isp        : %.1f s%n",   perf.getSpecificImpulse());
 System.out.printf("Cf (actual): %.4f%n",      perf.getActualThrustCoefficient());
 System.out.printf("Efficiency : %.2f %%%n",   perf.getEfficiency() * 100);
+```
+
+---
+
+## Minimum-Length Nozzle
+
+The MLN is the theoretically shortest supersonic nozzle that produces
+a specified uniform exit Mach number. All turning is concentrated at the
+throat corner (Prandtl-Meyer fan); the wall downstream is derived entirely
+from characteristic reflections.
+
+```java
+MinimumLengthNozzle mln = new MinimumLengthNozzle(params).generate();
+
+System.out.printf("Max wall angle   : %.2f°%n",
+        Math.toDegrees(mln.getMaximumWallAngle()));
+System.out.printf("Nozzle length    : %.2f mm%n", mln.nozzleLength() * 1000);
+System.out.printf("Exit area ratio  : %.4f%n",    mln.exitAreaRatio());
+System.out.printf("L / L_cone(15°)  : %.4f%n",    mln.lengthRatioVsCone());
+```
+
+---
+
+## Viscous MOC Solver
+
+Applies the White (1974) compressible turbulent flat-plate displacement
+correction to the inviscid MOC wall. The machined wall is outset by δ★(x)
+to maintain the design exit Mach number.
+
+```java
+CharacteristicNet net    = new CharacteristicNet(params).generate();
+ViscousMOCSolver  viscous = new ViscousMOCSolver(net).solve();
+
+System.out.printf("Discharge coefficient : %.5f%n", viscous.dischargeCoefficient());
+System.out.printf("Viscous Isp loss      : %.3f%%%n",
+        viscous.viscousIspLossFraction() * 100.0);
+
+// Per-station data
+for (ViscousMOCSolver.ViscousWallPoint wp : viscous.getCorrectedWall()) {
+    System.out.printf("x=%.2f mm  r_inv=%.4f mm  δ*=%.2f μm  r_phys=%.4f mm%n",
+            wp.x() * 1000, wp.rInviscid() * 1000,
+            wp.displacementThickness() * 1e6, wp.rPhysical() * 1000);
+}
+```
+
+---
+
+## Nozzle Performance Map
+
+Generates a 2-D Isp map over altitude (0–80 km) and expansion ratio.
+
+```java
+NozzlePerformanceMap map = new NozzlePerformanceMap(params)
+        .altitudePoints(30)
+        .expansionRatioPoints(40)
+        .maxExpansionRatio(100.0)
+        .generate();
+
+// Point query
+double isp = map.isp(10.0, 25.0);              // Isp at 10 km, ε = 25
+
+// Optimum ε at each altitude
+double optEps = map.optimumExpansionRatio(20.0); // ε that maximises Isp at 20 km
+
+// Peak Isp for a fixed-ε nozzle across all altitudes
+double peakIsp = map.peakIspForFixedNozzle(20.0);
+```
+
+---
+
+## Two-Phase Flow Model
+
+Lagrangian Al₂O₃ particle tracking through the MOC gas field.
+
+```java
+// Default: Al₂O₃ properties for APCP/HTPB with 18 % aluminium
+double alpha = 0.30;   // condensed-phase mass fraction
+TwoPhaseFlowModel model = new TwoPhaseFlowModel(params, alpha)
+        .solve(net.getWallPoints());
+
+System.out.printf("Two-phase η : %.4f%n", model.twoPhaseEfficiency());
+System.out.printf("Isp loss    : %.2f%%%n", model.ispLossFraction() * 100.0);
+System.out.printf("Delivered Isp: %.1f s%n",
+        params.idealSpecificImpulse() * model.twoPhaseEfficiency());
+
+// Custom particle properties
+TwoPhaseFlowModel custom = new TwoPhaseFlowModel(
+        params, 0.25,
+        4e-6,                               // d_p: 4 µm Sauter mean
+        TwoPhaseFlowModel.AL2O3_DENSITY,
+        TwoPhaseFlowModel.AL2O3_SPECIFIC_HEAT)
+        .solve(net.getWallPoints());
+```
+
+---
+
+## Erosive Burning Model
+
+Lenoir-Robillard (1957) model with transpiration-blocking term.
+
+```java
+SolidPropellant     prop  = SolidPropellant.APCP_HTPB();
+ErosiveBurningModel model = new ErosiveBurningModel(prop);  // default α, β, G_th
+
+double r0 = prop.burnRate(7e6);               // base burn rate at 7 MPa
+double G  = 400.0;                            // core mass flux kg/m²/s
+
+double rTotal  = model.augmentedBurnRate(r0, G);   // r_0 + r_e
+double fraction = model.erosiveFraction(r0, G);    // r_e / r_0
+
+// Axially-averaged erosion over a grain of length L and bore radius ri
+double avgRe = model.axiallyAveragedErosion(r0, 0.025, 0.150);
+
+// Local core flux at axial position z from head end
+double Gz = model.coreFlux(r0, 0.025, 0.075);
 ```
 
 ---
@@ -344,7 +542,7 @@ List<RaspMotorData> motors = RaspImporter.loadAll(Path.of("aerotech_catalog.eng"
 ### Derived performance quantities
 
 ```java
-System.out.printf("Motor class   : %s%n",      motor.motorClass());          // e.g. "H"
+System.out.printf("Motor class   : %s%n",      motor.motorClass());
 System.out.printf("Total impulse : %.1f N·s%n", motor.totalImpulseNs());
 System.out.printf("Burn time     : %.3f s%n",   motor.burnTime());
 System.out.printf("Average thrust: %.1f N%n",   motor.averageThrustN());
@@ -354,20 +552,6 @@ System.out.printf("Avg mdot      : %.4f kg/s%n", motor.averageMassFlowRateKgPerS
 ```
 
 ### Bridge to the nozzle pipeline
-
-A `.eng` file records thrust, not chamber pressure.  `toNozzleParameters()`
-inverts the isentropic thrust-coefficient equation to recover `P_c` from the
-measured thrust:
-
-```
-P_c = (F + p_a · A_e) / (sqrt_term · A_t + (p_e/P_c) · A_e)
-```
-
-where `sqrt_term`, `p_e/P_c`, and `A_e/A_t` depend only on `γ` and `M_e`
-(supplied via the template) — no iteration required.
-
-Because `.eng` files do not record flame temperature or gas composition,
-those must be set on the template before calling the bridge:
 
 ```java
 NozzleDesignParameters template = NozzleDesignParameters.builder()
@@ -381,16 +565,9 @@ NozzleDesignParameters template = NozzleDesignParameters.builder()
         .lengthFraction(0.8)
         .build();
 
-// Design point: average chamber pressure over the burn
 NozzleDesignParameters params    = motor.toNozzleParameters(template);
-
-// Structural sizing: peak chamber pressure
 NozzleDesignParameters paramsMax = motor.toNozzleParametersAtMaxPressure(template);
 
-System.out.printf("Average Pc : %.2f MPa%n", params.chamberPressure()    / 1e6);
-System.out.printf("Peak Pc    : %.2f MPa%n", paramsMax.chamberPressure() / 1e6);
-
-// Feed into contour, performance, thermal, and export pipeline as normal
 NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
 contour.generate(60);
 
@@ -410,14 +587,26 @@ System.out.printf("Delivered Isp : %.1f s%n", perf.getSummary().specificImpulseS
 ;   ← optional terminator (or end of file)
 ```
 
-Multiple motor definitions may appear in one file; each is terminated by a
-`;` line or end of file.
+---
+
+## RASP `.eng` Export
+
+`RaspExporter` writes a thrust-time curve from a `BurnTrajectory` into the RASP
+`.eng` format for use in OpenMotor, RASAero II, and ThrustCurve.org.
+
+```java
+SolidMotorChamber chamber  = new SolidMotorChamber(propellant, grain, at);
+BurnTrajectory    traj     = chamber.computeBurnTrajectory(294.0);
+
+new RaspExporter().export(traj, Path.of("motor.eng"),
+        "MyMotor-38mm", 38.0, 193.0, "0", "DEMO");
+```
 
 ---
 
 ## O/F Sweep and Optimum Search
 
-```
+```java
 OFSweep sweep = OFSweep.adiabatic(
         OFSweep.Propellant.LOX_RP1,
         7e6,    // Pc (Pa)
@@ -440,7 +629,7 @@ NozzleDesignParameters optimisedParams = NozzleDesignParameters.builder()
 
 ## Isp Comparison (Frozen vs Equilibrium)
 
-```
+```java
 ChemistryModel chem = ChemistryModel.equilibrium(GasProperties.LOX_RP1_PRODUCTS);
 
 ChemistryModel.IspComparison isp = chem.compareIsp(
@@ -456,14 +645,11 @@ System.out.printf("Delta          : %.1f s%n",   isp.delta());
 System.out.printf("Delta %%        : %.2f %%%n", isp.deltaPercent());
 ```
 
-`ChemistryModel` also exposes `calculateFrozenIsp` and
-`calculateEquilibriumIsp` separately if only one value is needed.
-
 ---
 
 ## Aerospike Nozzle
 
-```
+```java
 AerospikeNozzle aero = new AerospikeNozzle(
         params,
         0.4,   // spike inner-to-throat radius ratio
@@ -485,7 +671,7 @@ AltitudePerformance ap = aero.calculateAltitudePerformance(altitudes);
 
 ## Dual-Bell Nozzle
 
-```
+```java
 DualBellNozzle db = new DualBellNozzle(params, 4.0).generate();  // transition AR = 4.0
 
 DualBellNozzle.PerformanceSummary s = db.getPerformanceSummary();
@@ -499,26 +685,22 @@ System.out.printf("Transition at    : %.0f Pa%n",  s.transitionPressure());
 
 ## Ablative Liner
 
-`AblativeNozzleModel` computes Arrhenius char recession and optional mechanical
-erosion for five liner material families. Build a heat-transfer profile first,
-then run the ablative model.
-
-```
+```java
 NozzleContour contour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
 contour.generate(60);
 
 List<HeatTransferModel.WallThermalPoint> heatProfile =
         new HeatTransferModel(params, contour)
-                .setWallProperties(1.0, 0.020)    // carbon-phenolic: k, liner thickness
-                .setCoolantProperties(300.0, 0.0) // no active cooling
+                .setWallProperties(1.0, 0.020)
+                .setCoolantProperties(300.0, 0.0)
                 .calculate(List.of())
                 .getWallThermalProfile();
 
 AblativeNozzleModel ablative = new AblativeNozzleModel(params, contour)
         .setMaterial(AblativeNozzleModel.AblativeMaterial.CARBON_PHENOLIC)
-        .setInitialLinerThickness(0.020)  // 20 mm
-        .setBurnTime(10.0)                // seconds
-        .setErosionFactor(1e-5)           // mechanical erosion coefficient, m/s
+        .setInitialLinerThickness(0.020)
+        .setBurnTime(10.0)
+        .setErosionFactor(1e-5)
         .calculate(heatProfile);
 
 System.out.printf("Max recession    : %.4f mm%n", ablative.getMaxRecessionDepth() * 1000);
@@ -528,26 +710,19 @@ System.out.printf("Perforated anywhere: %s%n",    ablative.isPerforatedAnywhere(
 ```
 
 Available materials: `CARBON_PHENOLIC`, `SILICA_PHENOLIC`, `EPDM`, `GRAPHITE`,
-`CARBON_CARBON`.  The `AblativeMaterial` enum exposes `charRateAt(T)` for quick
-Arrhenius evaluation without running a full model.
+`CARBON_CARBON`.
 
 ---
 
 ## Radiation-Cooled Extension
 
-`RadiationCooledExtension` balances convective heat input against surface
-radiation to find the equilibrium wall temperature of a high-emissivity nozzle
-extension.
-
-```
-// LOX/LH2 upper-stage engine — bell regeneratively cooled to x_start;
-// extension is radiation-cooled from x_start to exit.
-double extensionStartX = contour.getLength() * 0.30;  // 30 % of bell length
+```java
+double extensionStartX = contour.getLength() * 0.30;
 
 RadiationCooledExtension rad = new RadiationCooledExtension(params, contour)
         .setMaterial(RadiationCooledExtension.ExtensionMaterial.NIOBIUM_C103)
         .setExtensionStartX(extensionStartX)
-        .setEnvironmentTemperature(3.0)   // deep-space (K)
+        .setEnvironmentTemperature(3.0)
         .calculate(List.of());
 
 System.out.printf("Max wall temperature : %.0f K%n",  rad.getMaxWallTemperature());
@@ -556,46 +731,29 @@ System.out.printf("Total radiated power : %.2f kW%n", rad.getTotalRadiatedPower(
 System.out.printf("Overtemperature      : %s%n",      rad.isOvertemperatureAnywhere());
 ```
 
-Available materials: `NIOBIUM_C103`, `RHENIUM_IRIDIUM`, `TITANIUM_6AL_4V`,
-`CARBON_CARBON`. Each material records an emissivity and a temperature limit;
-`isOvertemperatureAnywhere()` flags if any station exceeds that limit.
+Available materials: `NIOBIUM_C103`, `RHENIUM_IRIDIUM`, `TITANIUM_6AL_4V`, `CARBON_CARBON`.
 
 ---
 
 ## Convergent Section
 
-`ConvergentSection` generates the wall contour from the chamber face to just
-upstream of the throat and computes the geometric discharge-coefficient
-correction arising from sonic-line curvature.
-
-```
+```java
 ConvergentSection conv = new ConvergentSection(params).generate(60);
 
 System.out.printf("Convergent length : %.3f m%n",  conv.getLength());
 System.out.printf("Chamber radius    : %.3f m%n",  conv.getChamberRadius());
 System.out.printf("Sonic-line Cd     : %.4f%n",    conv.getSonicLineCdCorrection());
 
-// Wall points can be prepended to a divergent contour
-List<Point2D> convergentWall = conv.getContourPoints();  // chamber face → just upstream of throat
-```
-
-The same Cd value is also available directly from the parameters record without
-constructing a `ConvergentSection`:
-
-```
-double cd = params.dischargeCoefficient();  // geometric sonic-line Cd
+// Or from params directly (no ConvergentSection needed)
+double cd = params.dischargeCoefficient();
 ```
 
 ---
 
 ## Full Nozzle Geometry
 
-`FullNozzleGeometry` combines a `ConvergentSection` and a divergent `NozzleContour`
-into a single wall-point list ordered from the injector face (x < 0) to the exit
-(x > 0). All geometry-complete exporters accept this object.
-
-```
-// Default: Rao bell divergent + ConvergentSection derived from params
+```java
+// Rao bell divergent + ConvergentSection derived from params
 FullNozzleGeometry geom = new FullNozzleGeometry(params).generate(50, 100);
 
 List<Point2D> wall = geom.getWallPoints(); // injector face → exit
@@ -606,234 +764,94 @@ System.out.printf("Sonic-line Cd : %.4f%n",   geom.getSonicLineCd());
 // MOC-derived divergent section
 CharacteristicNet net = new CharacteristicNet(params).generate();
 FullNozzleGeometry mocGeom = FullNozzleGeometry.fromMOC(params, net).generate(50, 0);
-// pass 0 for numDivergentPoints to keep the MOC wall as-is
-```
 
-Pass a `FullNozzleGeometry` to any of the full-nozzle DXF export methods:
-
-```
-DXFExporter exporter = new DXFExporter().setScaleFactor(1000);
-
-// Profile only (WALL + AXIS + THROAT layers)
-exporter.exportFullNozzleProfile(geom, Path.of("nozzle.dxf"));
-
-// Closed revolution sketch (adds INLET and OUTLET face lines)
-exporter.exportFullNozzleRevolutionProfile(geom, Path.of("profile.dxf"));
+// DXF export
+DXFExporter dxf = new DXFExporter().setScaleFactor(1000);
+dxf.exportFullNozzleProfile(geom, Path.of("nozzle.dxf"));
+dxf.exportFullNozzleRevolutionProfile(geom, Path.of("profile.dxf"));
 ```
 
 ---
 
 ## Unit Conversion
 
-`Units` provides named static conversion methods for use at system input/output
-boundaries. All internal calculations use SI.
-
-```
-// Length
-double mm  = Units.metersToMillimeters(0.05);    // → 50.0
-double ft  = Units.metersToFeet(0.3048);         // → 1.0
-double m   = Units.inchesToMeters(2.0);          // → 0.0508
-
-// Pressure
-double psi = Units.pascalsToPsi(101_325.0);      // ≈ 14.696
-double pa  = Units.psiToPascals(100.0);          // ≈ 689 476
-
-// Temperature
-double f   = Units.kelvinToFahrenheit(288.15);   // ≈ 59.0
-double k   = Units.fahrenheitToKelvin(59.0);     // → 288.15
-
-// Specific heat (propulsion-specific unit)
-double btu = Units.jPerKgKToBtuPerLbmR(4186.8);  // ≈ 1.0
-double cp  = Units.btuPerLbmRToJPerKgK(0.24);   // ≈ 1005
-
-// Specific impulse
-double s   = Units.lbfSPerLbmToSeconds(300.0);  // → 300.0  (already dimensionless)
+```java
+double mm  = Units.metersToMillimeters(0.05);     // → 50.0
+double psi = Units.pascalsToPsi(101_325.0);        // ≈ 14.696
+double pa  = Units.psiToPascals(100.0);            // ≈ 689 476
+double f   = Units.kelvinToFahrenheit(288.15);     // ≈ 59.0
+double btu = Units.jPerKgKToBtuPerLbmR(4186.8);   // ≈ 1.0
 ```
 
 ---
 
 ## Thermal Analysis
 
-```
-// Boundary layer starting from the throat (divergent section only)
-BoundaryLayerCorrection bl  = new BoundaryLayerCorrection(params, net).calculate();
+```java
+// Boundary layer from throat (divergent section only)
+BoundaryLayerCorrection bl = new BoundaryLayerCorrection(params, net).calculate();
 
-// Boundary layer starting from the injector face (more accurate throat δ*)
-BoundaryLayerCorrection blFull = new BoundaryLayerCorrection(params, net)
-        .calculateFromInjectorFace(fullGeom, net.getFlowPoints());
+// Boundary layer from injector face (more accurate throat δ★)
+FullNozzleGeometry fullGeom = new FullNozzleGeometry(params).generate(50, 100);
+BoundaryLayerCorrection blFull = new BoundaryLayerCorrection(params, contour)
+        .setForceTurbulent(true)
+        .calculateFromInjectorFace(fullGeom, null);
 
 System.out.printf("Throat δ*           : %.4f mm%n",
         blFull.getThroatDisplacementThickness() * 1000);
-System.out.printf("BL Cd correction    : %.4f%n",
-        blFull.getBoundaryLayerCdCorrection());
-System.out.printf("Combined Cd (geo×BL): %.4f%n",
-        blFull.getCombinedCd());
+System.out.printf("Combined Cd (geo×BL): %.4f%n", blFull.getCombinedCd());
 
-// Divergent-only heat transfer (fast; peak is always in the divergent section)
-NozzleContour contour = NozzleContour.fromMOCWallPoints(params, net.getWallPoints());
-HeatTransferModel htr = new HeatTransferModel(params, contour)
-        .setWallProperties(20.0, 0.003)
-        .setCoolantProperties(300.0, 5000.0)
-        .calculate(net.getAllPoints());
-
-System.out.printf("Max wall temp  : %.0f K%n",     htr.getMaxWallTemperature());
-System.out.printf("Max heat flux  : %.2e W/m²%n",  htr.getMaxHeatFlux());
-System.out.printf("Peak at x      : %+.3f mm%n",   htr.getPeakFluxX() * 1000);
-
-// Full-profile heat transfer — covers convergent section (x < 0) as well,
-// so the peak can be identified even when it sits upstream of the throat.
-// The Bartz curvature correction uses parametric r_cd / r_cu in the arc zone.
-FullNozzleGeometry fullGeom = new FullNozzleGeometry(params).generate(50, 100);
+// Full-profile heat transfer
 HeatTransferModel htrFull = new HeatTransferModel(params, contour)
         .setWallProperties(20.0, 0.003)
         .setCoolantProperties(300.0, 5000.0)
-        .calculateFullProfile(fullGeom, net.getAllPoints());
+        .calculateFullProfile(fullGeom, null);
 
 HeatTransferModel.WallThermalPoint peak = htrFull.getPeakFluxPoint();
 System.out.printf("Peak location  : %+.3f mm (+ = downstream of throat)%n",
         peak.x() * 1000);
 System.out.printf("Peak heat flux : %.2e W/m²%n", peak.totalHeatFlux());
-System.out.printf("Peak wall temp : %.0f K%n",    peak.wallTemperature());
-
-// Regenerative coolant channel
-CoolantChannel channel = new CoolantChannel(contour)
-        .setChannelGeometry(120, 0.003, 0.005, 0.001)
-        .setWallConductivity(20.0)
-        .setCoolant(CoolantChannel.CoolantProperties.RP1, 2.0, 300.0, 8.5e6)
-        .calculate();
-
-channel.calculate(htr.getWallThermalProfile());  // thermal analysis
-System.out.printf("Coolant temp rise    : %.1f K%n", channel.getCoolantTemperatureRise());
-System.out.printf("Min boiling margin   : %.1f K%n", channel.getMinBoilingMargin());
-
-// Thermal stress and fatigue
-ThermalStressAnalysis stress = new ThermalStressAnalysis(
-        params, htr.getWallThermalProfile(),
-        ThermalStressAnalysis.Material.COPPER_ALLOY_CuCrZr, 0.003, 320.0).calculate();
-
-System.out.printf("Peak von Mises stress: %.1f MPa%n",
-        stress.getMaxVonMisesStress() / 1e6);
-System.out.printf("Min safety factor    : %.2f%n",   stress.getMinSafetyFactor());
-System.out.printf("Min fatigue life     : %.0f cycles%n", stress.getMinFatigueCycles());
 ```
 
 ---
 
 ## CAD and CFD Export
 
-All exporters accept either a divergent-only `NozzleContour` or a geometry-complete
-`FullNozzleGeometry`.  When `FullNozzleGeometry` is passed the exported file covers
-the full internal wall from injector face to exit.
+```java
+// DXF
+new DXFExporter().setScaleFactor(1000)
+        .exportFullNozzleProfile(fullGeom, Path.of("full_nozzle.dxf"));
 
-### DXF (2D profile)
-```
-FullNozzleGeometry fullGeom = new FullNozzleGeometry(params).generate(50, 100);
-DXFExporter dxf = new DXFExporter().setScaleFactor(1000);
+// STEP revolved solid
+new STEPExporter().exportRevolvedSolid(fullGeom, Path.of("nozzle_full.step"));
 
-// Divergent section only
-dxf.exportContour(contour, Path.of("nozzle.dxf"));
+// STL mesh
+new STLExporter().setCircumferentialSegments(72).setBinaryFormat(true)
+        .exportMesh(fullGeom, Path.of("nozzle_full.stl"));
 
-// Full nozzle (injector face → exit)
-dxf.exportFullNozzleProfile(fullGeom, Path.of("full_nozzle.dxf"));
-dxf.exportFullNozzleRevolutionProfile(fullGeom, Path.of("full_nozzle_rev.dxf"));
-```
+// CFD mesh with y⁺ grading
+new CFDMeshExporter()
+        .setAxialCells(200).setRadialCells(80).setFirstLayerThickness(1e-5)
+        .export(fullGeom, Path.of("blockMeshDict"), CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
 
-### CSV (wall contour)
-```
-CSVExporter csv = new CSVExporter();
-
-csv.exportContour(contour,   Path.of("contour_div.csv")); // x, y, angle_deg
-csv.exportContour(fullGeom,  Path.of("contour_full.csv")); // + section column
-```
-
-### STEP (3D revolved solid)
-```
-STEPExporter step = new STEPExporter().setScaleFactor(1000).setAuthor("Me");
-
-step.exportRevolvedSolid(contour,  Path.of("nozzle.step"));      // divergent only
-step.exportRevolvedSolid(fullGeom, Path.of("nozzle_full.step")); // full nozzle
-step.exportProfileCurve(contour,   Path.of("profile.step"));     // profile curve
-```
-
-### STL (3D revolved mesh)
-```
-STLExporter stl = new STLExporter().setCircumferentialSegments(72).setBinaryFormat(true);
-
-stl.exportMesh(contour,  Path.of("nozzle.stl"));      // divergent only
-stl.exportMesh(fullGeom, Path.of("nozzle_full.stl")); // full nozzle
-```
-
-### CFD mesh files (2D axisymmetric)
-
-`setFirstLayerThickness(y₁)` enables y⁺-controlled wall-normal grading.
-When set, the first cell height is fixed at `y₁` and the expansion ratio is
-derived automatically per format (`g = H/y₁` for OpenFOAM blockMesh,
-`r = (H/y₁)^(1/N)` for Gmsh, where H is the exit radius or annular gap).
-Omit it to use a fixed `expansionRatio` instead.
-
-```
-CFDMeshExporter cfd = new CFDMeshExporter()
-        .setAxialCells(200).setRadialCells(80).setFirstLayerThickness(1e-5);
-
-// Divergent only — all four formats
-cfd.export(contour, Path.of("blockMeshDict"), CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
-cfd.export(contour, Path.of("nozzle.geo"),    CFDMeshExporter.Format.GMSH_GEO);
-cfd.export(contour, Path.of("nozzle.xyz"),    CFDMeshExporter.Format.PLOT3D);
-cfd.export(contour, Path.of("nozzle.cgns"),   CFDMeshExporter.Format.CGNS);
-
-// Geometry-complete (convergent + divergent — captures the transonic throat)
-cfd.export(fullGeom, Path.of("blockMeshDict_full"), CFDMeshExporter.Format.OPENFOAM_BLOCKMESH);
-cfd.export(fullGeom, Path.of("nozzle_full.geo"),    CFDMeshExporter.Format.GMSH_GEO);
-cfd.export(fullGeom, Path.of("nozzle_full.xyz"),    CFDMeshExporter.Format.PLOT3D);
-```
-
-### Complete OpenFOAM case (rhoCentralFoam)
-```
-// Divergent only
-new OpenFOAMExporter()
-        .setAxialCells(300).setRadialCells(100)
-        .setTurbulenceEnabled(true).setFirstLayerThickness(1e-5)
-        .exportCase(params, contour, Path.of("nozzle_case"));
-
-// Geometry-complete (inlet is at the injector face)
+// Complete OpenFOAM case
 new OpenFOAMExporter()
         .setAxialCells(300).setRadialCells(100).setTurbulenceEnabled(true)
-        .exportCase(params, fullGeom, Path.of("nozzle_case_full"));
+        .exportCase(params, fullGeom, Path.of("nozzle_case"));
 
-// Aerospike — annular domain (spike inner wall + cowl outer wall)
-// Patches: inlet, outlet, spike (wall), cowl (wall), wedge0, wedge1
-new OpenFOAMExporter()
-        .setAxialCells(150).setRadialCells(60)
-        .exportAerospikeCase(aerospikeNozzle, Path.of("aerospike_case"));
-```
-
-The exported case is ready to run with:
-```bash
-blockMesh && rhoCentralFoam
-```
-
-### Full 3-D revolved mesh
-```
-RevolvedMeshExporter rev = new RevolvedMeshExporter()
-        .setAxialCells(100).setRadialCells(40).setAzimuthalCells(16);
-
-// Divergent only
-rev.export(contour,  Path.of("blockMeshDict_3d"), RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
-
-// Geometry-complete
-rev.export(fullGeom, Path.of("blockMeshDict_3d_full"), RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
-rev.export(fullGeom, Path.of("nozzle_3d_full.geo"),    RevolvedMeshExporter.Format.GMSH_GEO);
-rev.export(fullGeom, Path.of("nozzle_3d_full.xyz"),    RevolvedMeshExporter.Format.PLOT3D);
+// Full 3-D revolved mesh
+new RevolvedMeshExporter()
+        .setAxialCells(100).setRadialCells(40).setAzimuthalCells(16)
+        .export(fullGeom, Path.of("blockMeshDict_3d"), RevolvedMeshExporter.Format.OPENFOAM_BLOCKMESH);
 ```
 
 ---
 
 ## Persistent Workflows (Serialization)
 
-```
+```java
 // Stage 1 — save design intent
-DesignDocument doc = DesignDocument.parametersOnly(params);
-NozzleSerializer.save(doc, Path.of("nozzle.json"));
+NozzleSerializer.save(DesignDocument.parametersOnly(params), Path.of("nozzle.json"));
 
 // Stage 2 — load, solve, save
 DesignDocument loaded = NozzleSerializer.load(Path.of("nozzle.json"));
@@ -842,14 +860,13 @@ NozzleSerializer.save(loaded.withNet(net), Path.of("nozzle.json"));
 
 // Stage 3 — load and analyze
 DesignDocument solved = NozzleSerializer.load(Path.of("nozzle.json"));
-// ... run performance, thermal, export ...
 ```
 
 ---
 
 ## NASA SP-8120 Validation
 
-```
+```java
 NASASP8120Validator validator = new NASASP8120Validator(params, net, contour);
 List<String> warnings = validator.validate();
 if (warnings.isEmpty()) {
@@ -863,18 +880,20 @@ if (warnings.isEmpty()) {
 
 ## Package Overview
 
-| Package                   | Contents                                                                                                                                                           |
-|---------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `com.nozzle.core`         | `NozzleDesignParameters`, `GasProperties`, `PerformanceCalculator`, `FlowSeparationPredictor`, `Units`                                                             |
-| `com.nozzle.moc`          | `CharacteristicNet`, `RaoNozzle`, `AerospikeNozzle`, `DualBellNozzle`, `CharacteristicPoint`                                                                       |
-| `com.nozzle.geometry`     | `NozzleContour` (five contour families), `ConvergentSection`, `FullNozzleGeometry`, `Point2D`                                                                      |
-| `com.nozzle.solid`        | `SolidPropellant`, `GrainGeometry`, `BatesGrain`, `EndBurningGrain`, `SolidMotorChamber`, `BurnTrajectory`, `RaspImporter`, `RaspMotorData`                        |
-| `com.nozzle.chemistry`    | `ChemistryModel`, `OFSweep`, `GibbsMinimizer`, `NasaSpeciesDatabase`                                                                                               |
-| `com.nozzle.thermal`      | `HeatTransferModel`, `BoundaryLayerCorrection`, `BoundaryLayerPoint`, `CoolantChannel`, `ThermalStressAnalysis`, `AblativeNozzleModel`, `RadiationCooledExtension` |
-| `com.nozzle.export`       | `CFDMeshExporter`, `OpenFOAMExporter`, `CSVExporter`, `DXFExporter`, `STEPExporter`, `STLExporter`, `RevolvedMeshExporter`                                         |
-| `com.nozzle.optimization` | `AltitudeAdaptiveOptimizer`, `MonteCarloUncertainty`                                                                                                               |
-| `com.nozzle.validation`   | `NASASP8120Validator`                                                                                                                                              |
-| `com.nozzle.io`           | `NozzleSerializer`, `DesignDocument`                                                                                                                               |
+| Package                   | Contents                                                                                                                                                                                |
+|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `com.nozzle`              | `Main` — thin dispatcher to `com.nozzle.examples`                                                                                                                                       |
+| `com.nozzle.core`         | `NozzleDesignParameters`, `GasProperties`, `PerformanceCalculator`, `FlowSeparationPredictor`, `ShockExpansionModel`, `NozzlePerformanceMap`, `Units`                                   |
+| `com.nozzle.moc`          | `CharacteristicNet`, `MinimumLengthNozzle`, `ViscousMOCSolver`, `RaoNozzle`, `AerospikeNozzle`, `DualBellNozzle`, `CharacteristicPoint`, `AltitudePerformance`                          |
+| `com.nozzle.geometry`     | `NozzleContour` (five contour families), `ConvergentSection`, `FullNozzleGeometry`, `Point2D`                                                                                           |
+| `com.nozzle.solid`        | `SolidPropellant`, `GrainGeometry`, `BatesGrain`, `EndBurningGrain`, `SolidMotorChamber`, `BurnTrajectory`, `ErosiveBurningModel`, `TwoPhaseFlowModel`, `RaspImporter`, `RaspMotorData` |
+| `com.nozzle.chemistry`    | `ChemistryModel`, `OFSweep`, `GibbsMinimizer`, `NasaSpeciesDatabase`                                                                                                                    |
+| `com.nozzle.thermal`      | `HeatTransferModel`, `BoundaryLayerCorrection`, `CoolantChannel`, `ThermalStressAnalysis`, `AblativeNozzleModel`, `RadiationCooledExtension`                                            |
+| `com.nozzle.export`       | `CFDMeshExporter`, `OpenFOAMExporter`, `CSVExporter`, `DXFExporter`, `STEPExporter`, `STLExporter`, `RevolvedMeshExporter`, `RaspExporter`                                              |
+| `com.nozzle.optimization` | `AltitudeAdaptiveOptimizer`, `MonteCarloUncertainty`                                                                                                                                    |
+| `com.nozzle.validation`   | `NASASP8120Validator`                                                                                                                                                                   |
+| `com.nozzle.io`           | `NozzleSerializer`, `DesignDocument`                                                                                                                                                    |
+| `com.nozzle.examples`     | 33 `Demonstrate*` classes — one per feature area, each independently runnable                                                                                                           |
 
 ---
 
