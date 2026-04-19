@@ -27,7 +27,7 @@ import com.nozzle.geometry.NozzleContour;
 /** Demonstrates Truncated Ideal Contour (TIC) as a fifth contour family. */
 public class DemonstrateTruncatedIdealContour {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- TRUNCATED IDEAL CONTOUR (TIC) ---\n");
 
         final double RT      = 0.05;

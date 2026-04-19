@@ -258,6 +258,6 @@ public class ViscousMOCSolver {
         // Thermal conductivity from Eucken approximation: k ≈ μ × Cp × (9γ−5)/(4γ)
         double kThermal = mu * Cp * (9.0 * gas.gamma() - 5.0) / (4.0 * gas.gamma());
         double Pr = mu * Cp / kThermal;
-        return Math.min(Math.max(Pr, 0.5), 1.0);   // physical range for gases
+        return Math.clamp(Pr, 0.5, 1.0);   // physical range for gases
     }
 }

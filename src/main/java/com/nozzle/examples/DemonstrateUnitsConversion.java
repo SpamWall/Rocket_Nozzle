@@ -27,7 +27,7 @@ import com.nozzle.core.Units;
 /** Demonstrates US-customary ↔ SI unit conversion utilities. */
 public class DemonstrateUnitsConversion {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- UNITS CONVERSION UTILITIES ---\n");
 
         double throatIn   = 2.0;

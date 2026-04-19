@@ -30,7 +30,7 @@ import com.nozzle.thermal.HeatTransferModel;
 /** Demonstrates how upstream curvature ratio shifts the peak heat-flux location. */
 public class DemonstrateHeatFluxPeakLocation {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- HEAT FLUX PEAK LOCATION ---\n");
 
         NozzleDesignParameters standardParams = NozzleDesignParameters.builder()

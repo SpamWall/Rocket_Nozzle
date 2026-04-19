@@ -35,7 +35,7 @@ import java.nio.file.Path;
 /** Demonstrates RASP .eng import and bridge to the nozzle design pipeline. */
 public class DemonstrateRaspImport {
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);
         System.out.println("\n--- RASP .ENG IMPORT (OpenMotor bridge) ---\n");
@@ -44,17 +44,19 @@ public class DemonstrateRaspImport {
         Files.createDirectories(engDir);
         Path engFile = engDir.resolve("H174-14.eng");
         Files.writeString(engFile,
-                "; Synthetic APCP/HTPB H-class motor — demonstration\n" +
-                "H174-14 38 193 14 0.101 0.187 DEMO\n" +
-                "   0.000    0.000\n" +
-                "   0.050  155.000\n" +
-                "   0.150  178.000\n" +
-                "   0.300  181.000\n" +
-                "   0.450  180.000\n" +
-                "   0.500  175.000\n" +
-                "   0.550  172.000\n" +
-                "   0.580    0.000\n" +
-                ";\n");
+              """
+                    ; Synthetic APCP/HTPB H-class motor — demonstration
+                    H174-14 38 193 14 0.101 0.187 DEMO
+                       0.000    0.000
+                       0.050  155.000
+                       0.150  178.000
+                       0.300  181.000
+                       0.450  180.000
+                       0.500  175.000
+                       0.550  172.000
+                       0.580    0.000
+                    ;
+                    """);
         System.out.printf("Wrote synthetic .eng file: %s%n%n", engFile.getFileName());
 
         RaspMotorData motor = RaspImporter.load(engFile);

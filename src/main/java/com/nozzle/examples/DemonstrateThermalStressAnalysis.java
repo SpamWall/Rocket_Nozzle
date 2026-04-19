@@ -34,7 +34,7 @@ import java.util.List;
 /** Demonstrates thermal stress and fatigue life analysis. */
 public class DemonstrateThermalStressAnalysis {
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);
         System.out.println("\n--- THERMAL STRESS & FATIGUE LIFE ANALYSIS ---\n");

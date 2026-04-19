@@ -33,7 +33,7 @@ import java.nio.file.Path;
 /** Demonstrates y⁺-controlled first-cell-height grading for CFD meshes. */
 public class DemonstrateYPlusGrading {
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);
         System.out.println("\n--- y⁺-CONTROLLED FIRST-CELL-HEIGHT GRADING ---\n");
@@ -65,7 +65,7 @@ public class DemonstrateYPlusGrading {
         double Cf      = 0.026 * Math.pow(ReThroat, -0.2);
         double uTau    = aT * Math.sqrt(Cf / 2.0);
         double nu      = muT / rhoT;
-        double y1      = 1.0 * nu / uTau;
+        double y1      = nu / uTau;
 
         System.out.printf("Throat flow conditions:%n");
         System.out.printf("  Throat temperature:   %.0f K%n",   Tt);

@@ -28,7 +28,7 @@ import com.nozzle.core.ShockExpansionModel;
 /** Demonstrates flow separation prediction and shock-expansion off-design analysis. */
 public class DemonstrateFlowSeparationAndShockExpansion {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- FLOW SEPARATION & SHOCK-EXPANSION OFF-DESIGN ---\n");
 
         NozzleDesignParameters seaLevel = NozzleDesignParameters.builder()

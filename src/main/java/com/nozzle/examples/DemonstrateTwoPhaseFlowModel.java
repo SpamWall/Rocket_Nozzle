@@ -25,10 +25,10 @@ import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.thermal.TwoPhaseFlowModel;
 
-/** Demonstrates two-phase flow Isp loss modelling with Al2O3 particles (Lagrangian tracking). */
+/** Demonstrates two-phase flow Isp loss modeling with Al2O3 particles (Lagrangian tracking). */
 public class DemonstrateTwoPhaseFlowModel {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- TWO-PHASE FLOW MODEL (Al\u2082O\u2083 PARTICLES) ---\n");
 
         NozzleDesignParameters params = NozzleDesignParameters.builder()
@@ -65,14 +65,14 @@ public class DemonstrateTwoPhaseFlowModel {
         System.out.printf("  Delivered Isp:      %.1f s%n",
                 params.idealSpecificImpulse() * model.twoPhaseEfficiency());
 
-        var traj = model.getParticleTrajectory();
+        var trajectory = model.getParticleTrajectory();
         System.out.println("\nParticle trajectory (selected stations):");
         System.out.printf("  %-8s  %-12s  %-10s  %-10s  %-10s%n",
                 "x (mm)", "V_p (m/s)", "T_p (K)", "V lag", "T lag");
         System.out.println("  " + "-".repeat(54));
-        int step = Math.max(1, traj.size() / 6);
-        for (int i = 0; i < traj.size(); i += step) {
-            var ps = traj.get(i);
+        int step = Math.max(1, trajectory.size() / 6);
+        for (int i = 0; i < trajectory.size(); i += step) {
+            var ps = trajectory.get(i);
             System.out.printf("  %-8.2f  %-12.1f  %-10.0f  %-10.4f  %-10.4f%n",
                     ps.x() * 1000, ps.velocity(), ps.temperature(),
                     ps.velocityLag(), ps.thermalLag());

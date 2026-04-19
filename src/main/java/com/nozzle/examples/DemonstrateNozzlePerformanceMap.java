@@ -27,7 +27,7 @@ import com.nozzle.core.NozzlePerformanceMap;
 /** Demonstrates the 2D Isp performance map vs altitude and expansion ratio. */
 public class DemonstrateNozzlePerformanceMap {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- NOZZLE PERFORMANCE MAP (Isp vs altitude and expansion ratio) ---\n");
 
         NozzleDesignParameters params = NozzleDesignParameters.builder()
@@ -65,14 +65,14 @@ public class DemonstrateNozzlePerformanceMap {
         double[] checkAlts = {0.0, 10.0, 30.0, 60.0};
         double[] checkEps  = {5.0, 15.0, 40.0};
         System.out.println("\nIsp (s) at selected (altitude, ε) cells:");
-        System.out.print(String.format("  %-12s", "Alt (km)"));
-        for (double eps : checkEps) System.out.print(String.format("  ε=%-8.0f", eps));
+        System.out.printf("  %-12s", "Alt (km)");
+        for (double eps : checkEps) System.out.printf("  ε=%-8.0f", eps);
         System.out.println();
         System.out.println("  " + "-".repeat(12 + checkEps.length * 12));
         for (double alt : checkAlts) {
-            System.out.print(String.format("  %-12.1f", alt));
+            System.out.printf("  %-12.1f", alt);
             for (double eps : checkEps) {
-                System.out.print(String.format("  %-10.1f", map.isp(alt, eps)));
+                System.out.printf("  %-10.1f", map.isp(alt, eps));
             }
             System.out.println();
         }

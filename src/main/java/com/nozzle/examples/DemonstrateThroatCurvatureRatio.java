@@ -29,7 +29,7 @@ import com.nozzle.moc.RaoNozzle;
 /** Demonstrates the effect of downstream throat curvature ratio on MOC, Rao bell, and conical contours. */
 public class DemonstrateThroatCurvatureRatio {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- THROAT CURVATURE RATIO SWEEP ---\n");
 
         System.out.println("Downstream throat radius of curvature: r_cd = ratio × r_t");

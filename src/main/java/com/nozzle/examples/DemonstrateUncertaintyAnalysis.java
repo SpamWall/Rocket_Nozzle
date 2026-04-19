@@ -27,7 +27,7 @@ import com.nozzle.optimization.MonteCarloUncertainty;
 /** Demonstrates Monte Carlo uncertainty analysis. */
 public class DemonstrateUncertaintyAnalysis {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- MONTE CARLO UNCERTAINTY ANALYSIS ---\n");
 
         NozzleDesignParameters params = NozzleDesignParameters.builder()

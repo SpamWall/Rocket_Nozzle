@@ -31,7 +31,7 @@ import java.util.List;
 /** Demonstrates ablative liner char-rate model for solid rocket motor nozzles. */
 public class DemonstrateAblativeLiner {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- ABLATIVE LINER ANALYSIS (SRM NOZZLE) ---\n");
 
         NozzleDesignParameters params = NozzleDesignParameters.builder()

@@ -35,7 +35,7 @@ import java.nio.file.Path;
 /** Demonstrates a three-stage persistent workflow using NozzleSerializer. */
 public class DemonstrateSerialization {
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);
         System.out.println("\n--- JSON SERIALIZATION (PERSISTENT WORKFLOW) ---\n");

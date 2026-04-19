@@ -33,7 +33,7 @@ import java.nio.file.Path;
 /** Demonstrates geometry-complete (chamber face → exit) nozzle with DXF exports. */
 public class DemonstrateFullNozzleGeometry {
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);
         System.out.println("\n--- FULL NOZZLE GEOMETRY (CHAMBER FACE → EXIT) ---\n");

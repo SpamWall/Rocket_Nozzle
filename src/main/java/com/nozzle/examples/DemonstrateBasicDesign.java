@@ -32,7 +32,7 @@ import java.nio.file.Path;
 /** Demonstrates basic MOC nozzle design. */
 public class DemonstrateBasicDesign {
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);
         System.out.println("\n--- BASIC MOC NOZZLE DESIGN ---\n");

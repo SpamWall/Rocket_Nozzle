@@ -33,7 +33,7 @@ import java.nio.file.Path;
 /** Demonstrates full 3-D revolved mesh export in OpenFOAM, Gmsh, and Plot3D formats. */
 public class DemonstrateRevolvedMesh {
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);
         System.out.println("\n--- FULL 3-D REVOLVED MESH EXPORT ---\n");

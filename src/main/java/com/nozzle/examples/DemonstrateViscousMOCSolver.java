@@ -28,7 +28,7 @@ import com.nozzle.moc.ViscousMOCSolver;
 /** Demonstrates the ViscousMOCSolver boundary-layer displacement correction. */
 public class DemonstrateViscousMOCSolver {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- VISCOUS MOC SOLVER (BL DISPLACEMENT CORRECTION) ---\n");
 
         NozzleDesignParameters params = NozzleDesignParameters.builder()

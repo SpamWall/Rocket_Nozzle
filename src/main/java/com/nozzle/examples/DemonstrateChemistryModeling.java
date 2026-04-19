@@ -28,7 +28,7 @@ import java.util.List;
 /** Demonstrates frozen/equilibrium chemistry modeling and Isp comparison. */
 public class DemonstrateChemistryModeling {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- CHEMISTRY MODELING ---\n");
 
         ChemistryModel frozenModel = ChemistryModel.frozen(GasProperties.LOX_RP1_PRODUCTS);

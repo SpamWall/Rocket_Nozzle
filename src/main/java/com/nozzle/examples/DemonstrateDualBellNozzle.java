@@ -32,7 +32,7 @@ import java.nio.file.Path;
 /** Demonstrates the dual-bell altitude-compensating nozzle. */
 public class DemonstrateDualBellNozzle {
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);
         System.out.println("\n--- DUAL-BELL ALTITUDE-COMPENSATING NOZZLE ---\n");

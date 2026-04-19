@@ -28,7 +28,7 @@ import com.nozzle.moc.RaoNozzle;
 /** Demonstrates the Minimum-Length Nozzle (MLN) via Method of Characteristics. */
 public class DemonstrateMinimumLengthNozzle {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- MINIMUM-LENGTH NOZZLE (MLN) ---\n");
 
         NozzleDesignParameters params = NozzleDesignParameters.builder()

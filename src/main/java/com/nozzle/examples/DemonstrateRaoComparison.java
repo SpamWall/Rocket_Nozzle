@@ -28,7 +28,7 @@ import com.nozzle.moc.RaoNozzle;
 /** Demonstrates Rao bell nozzle comparison against MOC. */
 public class DemonstrateRaoComparison {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- RAO BELL NOZZLE COMPARISON ---\n");
 
         NozzleDesignParameters params = NozzleDesignParameters.builder()

@@ -29,7 +29,7 @@ import java.util.List;
 /** Demonstrates altitude-adaptive optimization. */
 public class DemonstrateOptimization {
 
-    public static void main(String[] args) {
+    public static void main(String[] ignoredArgs) {
         System.out.println("\n--- ALTITUDE-ADAPTIVE OPTIMIZATION ---\n");
 
         NozzleDesignParameters baseParams = NozzleDesignParameters.builder()
