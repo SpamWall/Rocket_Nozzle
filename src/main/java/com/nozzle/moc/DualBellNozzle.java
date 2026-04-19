@@ -22,7 +22,7 @@ package com.nozzle.moc;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -35,9 +35,9 @@ import java.util.List;
  * <p>A dual-bell nozzle consists of two Rao-style bell sections joined at a
  * concave re-inflection point called the <em>kink</em>:
  * <ul>
- *   <li><strong>Base bell</strong> — designed for low-altitude operation,
+ *   <li><strong>Base bell</strong> â€” designed for low-altitude operation,
  *       extending from the throat to the kink at {@code transitionAreaRatio}.</li>
- *   <li><strong>Extension</strong> — designed for high-altitude (vacuum)
+ *   <li><strong>Extension</strong> â€” designed for high-altitude (vacuum)
  *       operation, continuing from the kink to the full exit area ratio.</li>
  * </ul>
  *
@@ -58,18 +58,18 @@ import java.util.List;
  * <p>The ambient pressure at which the mode switches is estimated using the
  * Summerfield criterion:
  * <pre>
- *   p_transition ≈ 0.35 × p_kink
+ *   p_transition â‰ˆ 0.35 Ã— p_kink
  * </pre>
- * where {@code p_kink = Pc × (isentropic pressure ratio at M_kink)}.
+ * where {@code p_kink = Pc Ã— (isentropic pressure ratio at M_kink)}.
  *
  * <h2>Contour generation</h2>
  * <p>The contour is built from three segments, all anchored at x = 0 (throat):
  * <ol>
- *   <li>Circular throat arc (radius = throatCurvatureRatio × r_throat), same as
+ *   <li>Circular throat arc (radius = throatCurvatureRatio Ã— r_throat), same as
  *       {@link RaoNozzle}.</li>
- *   <li>Base-bell cubic Bézier from the arc endpoint to the kink at
+ *   <li>Base-bell cubic BÃ©zier from the arc endpoint to the kink at
  *       {@code (baseLength, transitionRadius)}.</li>
- *   <li>Extension cubic Bézier from the kink to the exit at
+ *   <li>Extension cubic BÃ©zier from the kink to the exit at
  *       {@code (totalLength, exitRadius)}.  The entry slope of the extension
  *       is {@code -tan(kinkAngle)}, creating the inward-turning re-inflection
  *       that locks the separation point.</li>
@@ -102,20 +102,20 @@ public class DualBellNozzle {
     private final double transitionAreaRatio;
     private final double baseLengthFraction;
     private final double extensionLengthFraction;
-    private final double kinkAngle;        // rad — inward wall angle at extension entry
+    private final double kinkAngle;        // rad â€” inward wall angle at extension entry
     private final int    numContourPoints;
 
     // ------------------------------------------------------------------
     // Derived geometry (set by generate())
     // ------------------------------------------------------------------
 
-    private double inflectionAngle;      // rad — throat arc exit / base bell start
-    private double baseExitAngle;        // rad — base bell exit at kink (θ_E1)
-    private double extensionExitAngle;   // rad — extension exit angle  (θ_E2)
+    private double inflectionAngle;      // rad â€” throat arc exit / base bell start
+    private double baseExitAngle;        // rad â€” base bell exit at kink (Î¸_E1)
+    private double extensionExitAngle;   // rad â€” extension exit angle  (Î¸_E2)
     private double baseLength;           // m
     private double totalLength;          // m
-    private double transitionRadius;     // m — wall radius at kink
-    private double transitionMach;       // — Mach number at kink
+    private double transitionRadius;     // m â€” wall radius at kink
+    private double transitionMach;       // â€” Mach number at kink
     private int    kinkIndex;            // index in contourPoints of the kink point
 
     private final List<Point2D> contourPoints = new ArrayList<>();
@@ -151,7 +151,7 @@ public class DualBellNozzle {
         /**
          * Isp gain from sea-level to high-altitude mode.
          *
-         * @return difference {@code highAltitudeIsp − seaLevelIsp} in seconds
+         * @return difference {@code highAltitudeIsp âˆ’ seaLevelIsp} in seconds
          */
         public double ispGain() { return highAltitudeIsp - seaLevelIsp; }
     }
@@ -165,7 +165,7 @@ public class DualBellNozzle {
      * geometric mean of 1 and the full exit area ratio (a common starting
      * point that distributes momentum thrust roughly equally between the two
      * sections), the length fraction from the design parameters, and a
-     * default kink angle of 3°.
+     * default kink angle of 3Â°.
      *
      * @param parameters Design parameters (defines exit Mach, Pc, Tc, throat
      *                   radius, and ambient pressure)
@@ -205,8 +205,8 @@ public class DualBellNozzle {
      * @param extensionLengthFraction Rao length fraction for the extension;
      *                                must be in {@code (0, 1]}
      * @param kinkAngle               Inward wall angle at the kink entry (rad);
-     *                                must be ≥ 0
-     * @param numContourPoints        Total discrete contour points (≥ 20)
+     *                                must be â‰¥ 0
+     * @param numContourPoints        Total discrete contour points (â‰¥ 20)
      */
     public DualBellNozzle(NozzleDesignParameters parameters,
                           double transitionAreaRatio,
@@ -265,7 +265,7 @@ public class DualBellNozzle {
         calculateExtensionAngles();
 
         // --- Nozzle lengths ---
-        // Each section uses its own 15° reference cone length.
+        // Each section uses its own 15Â° reference cone length.
         double refBase = (transitionRadius - rt) / Math.tan(Math.toRadians(15.0));
         double refExt  = (re - transitionRadius) / Math.tan(Math.toRadians(15.0));
         baseLength  = refBase * baseLengthFraction;
@@ -348,14 +348,14 @@ public class DualBellNozzle {
     public double getInflectionAngle()   { return inflectionAngle; }
 
     /**
-     * Base-bell exit angle at the kink θ_E1.
+     * Base-bell exit angle at the kink Î¸_E1.
      *
      * @return base-bell exit angle in radians
      */
     public double getBaseExitAngle()     { return baseExitAngle; }
 
     /**
-     * Extension exit angle θ_E2.
+     * Extension exit angle Î¸_E2.
      *
      * @return extension exit angle in radians
      */
@@ -377,7 +377,7 @@ public class DualBellNozzle {
 
     /**
      * Ambient pressure at which the flow reattaches through the full extension
-     * (Summerfield criterion: 0.35 × static pressure at the kink).
+     * (Summerfield criterion: 0.35 Ã— static pressure at the kink).
      *
      * @return transition ambient pressure in Pascals
      */
@@ -486,7 +486,7 @@ public class DualBellNozzle {
         }
     }
 
-    /** Cubic Bézier from the throat arc endpoint to the kink. */
+    /** Cubic BÃ©zier from the throat arc endpoint to the kink. */
     private void generateBaseBell(double rt, double rKink, double lBase) {
         double rcd = parameters.throatCurvatureRatio() * rt;
         double x0  = rcd * Math.sin(inflectionAngle);
@@ -497,7 +497,7 @@ public class DualBellNozzle {
     }
 
     /**
-     * Cubic Bézier from the kink to the full exit.  The entry slope is
+     * Cubic BÃ©zier from the kink to the full exit.  The entry slope is
      * {@code -tan(kinkAngle)}, producing the inward-turning re-inflection
      * that locks the sea-level separation point at the kink.
      */
@@ -509,7 +509,7 @@ public class DualBellNozzle {
     }
 
     /**
-     * Appends {@code n} cubic Bézier sample points (t = 1/n … 1) to
+     * Appends {@code n} cubic BÃ©zier sample points (t = 1/n â€¦ 1) to
      * {@code contourPoints}.  The start point (t = 0) is already present as
      * the last entry in the list.
      *
@@ -544,7 +544,7 @@ public class DualBellNozzle {
         double pc    = parameters.chamberPressure();
         double pa_sl = parameters.ambientPressure();
 
-        // Pre-computed momentum factor (depends only on γ)
+        // Pre-computed momentum factor (depends only on Î³)
         double term1 = 2.0 * gamma * gamma / gm1 * Math.pow(2.0 / gp1, gp1 / gm1);
 
         // Isentropic wall pressure at kink

@@ -22,7 +22,7 @@ package com.nozzle.export;
 
 import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.DualBellNozzle;
@@ -75,7 +75,7 @@ public class DXFExporter {
             EOF
             """;
     
-    /** Scale factor applied to all coordinates before writing (default: 1000 → metres to mm). */
+    /** Scale factor applied to all coordinates before writing (default: 1000 â†’ metres to mm). */
     private double scaleFactor = 1000.0;
 
     /**
@@ -83,7 +83,7 @@ public class DXFExporter {
      * The default value (1000) converts metres to millimetres, matching the
      * typical expectation of DXF-importing CAD tools.
      *
-     * @param scale Multiplicative scale factor (e.g. {@code 1000} for m → mm)
+     * @param scale Multiplicative scale factor (e.g. {@code 1000} for m â†’ mm)
      * @return This instance for method chaining
      */
     public DXFExporter setScaleFactor(double scale) {
@@ -106,7 +106,7 @@ public class DXFExporter {
             throw new IllegalArgumentException("Contour has no points");
         }
 
-        LOG.debug("Exporting DXF contour: {} points → {}", points.size(), filePath);
+        LOG.debug("Exporting DXF contour: {} points â†’ {}", points.size(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(DXF_HEADER);
             writePolyline(writer, points, "WALL");
@@ -114,7 +114,7 @@ public class DXFExporter {
                     new Point2D(points.getLast().x(), 0), "AXIS");
             writer.write(DXF_FOOTER);
         }
-        LOG.debug("DXF contour export complete → {}", filePath);
+        LOG.debug("DXF contour export complete â†’ {}", filePath);
     }
     
     /**
@@ -126,7 +126,7 @@ public class DXFExporter {
      * @throws IOException If the file cannot be written
      */
     public void exportCharacteristicNet(CharacteristicNet net, Path filePath) throws IOException {
-        LOG.debug("Exporting DXF characteristic net → {}", filePath);
+        LOG.debug("Exporting DXF characteristic net â†’ {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(DXF_HEADER);
             
@@ -140,7 +140,7 @@ public class DXFExporter {
 
             writer.write(DXF_FOOTER);
         }
-        LOG.debug("DXF characteristic net export complete → {}", filePath);
+        LOG.debug("DXF characteristic net export complete â†’ {}", filePath);
     }
 
     /**
@@ -160,7 +160,7 @@ public class DXFExporter {
             throw new IllegalArgumentException("Contour has no points");
         }
 
-        LOG.debug("Exporting DXF revolution profile: {} points → {}", points.size(), filePath);
+        LOG.debug("Exporting DXF revolution profile: {} points â†’ {}", points.size(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(DXF_HEADER);
             writePolyline(writer, points, "WALL");
@@ -250,21 +250,21 @@ public class DXFExporter {
     }
 
     /**
-     * Exports the complete nozzle wall profile — from the injector face through the
-     * convergent section, throat, and full divergent section to the exit — as a DXF
+     * Exports the complete nozzle wall profile â€” from the injector face through the
+     * convergent section, throat, and full divergent section to the exit â€” as a DXF
      * file.
      *
      * <p>Three DXF layers are written:
      * <ul>
-     *   <li>{@code WALL}   — polyline tracing the inner wall from chamber face to exit</li>
-     *   <li>{@code AXIS}   — centerline from the chamber face x to the exit x</li>
-     *   <li>{@code THROAT} — vertical line marking the throat plane at x = 0</li>
+     *   <li>{@code WALL}   â€” polyline tracing the inner wall from chamber face to exit</li>
+     *   <li>{@code AXIS}   â€” centerline from the chamber face x to the exit x</li>
+     *   <li>{@code THROAT} â€” vertical line marking the throat plane at x = 0</li>
      * </ul>
      *
      * <p>The {@code FullNozzleGeometry} must have been generated before calling this
      * method (see {@link FullNozzleGeometry#generate}).
      *
-     * @param fullGeometry Full nozzle geometry (chamber face → exit)
+     * @param fullGeometry Full nozzle geometry (chamber face â†’ exit)
      * @param filePath     Destination DXF file path
      * @throws IOException              If the file cannot be written
      * @throws IllegalArgumentException If the geometry has no wall points
@@ -274,14 +274,14 @@ public class DXFExporter {
         List<Point2D> points = fullGeometry.getWallPoints();
         if (points.isEmpty()) {
             throw new IllegalArgumentException(
-                    "FullNozzleGeometry has no wall points — call generate() first");
+                    "FullNozzleGeometry has no wall points â€” call generate() first");
         }
 
         double rt    = fullGeometry.getThroatRadius();
         double xMin  = points.getFirst().x();
         double xMax  = points.getLast().x();
 
-        LOG.debug("Exporting full-nozzle DXF: {} wall points, x=[{}, {}] → {}",
+        LOG.debug("Exporting full-nozzle DXF: {} wall points, x=[{}, {}] â†’ {}",
                 points.size(),
                 String.format("%.4f", xMin),
                 String.format("%.4f", xMax),
@@ -307,7 +307,7 @@ public class DXFExporter {
 
             writer.write(DXF_FOOTER);
         }
-        LOG.debug("Full-nozzle DXF export complete → {}", filePath);
+        LOG.debug("Full-nozzle DXF export complete â†’ {}", filePath);
     }
 
     /**
@@ -316,11 +316,11 @@ public class DXFExporter {
      *
      * <p>Five DXF entities are written:
      * <ul>
-     *   <li>{@code WALL}    — inner wall polyline from chamber face to exit</li>
-     *   <li>{@code AXIS}    — centerline from chamber face to exit, closing the bottom</li>
-     *   <li>{@code INLET}   — vertical inlet (chamber) face line from axis to wall</li>
-     *   <li>{@code OUTLET}  — vertical exit face line from wall to axis</li>
-     *   <li>{@code THROAT}  — vertical throat plane marker</li>
+     *   <li>{@code WALL}    â€” inner wall polyline from chamber face to exit</li>
+     *   <li>{@code AXIS}    â€” centerline from chamber face to exit, closing the bottom</li>
+     *   <li>{@code INLET}   â€” vertical inlet (chamber) face line from axis to wall</li>
+     *   <li>{@code OUTLET}  â€” vertical exit face line from wall to axis</li>
+     *   <li>{@code THROAT}  â€” vertical throat plane marker</li>
      * </ul>
      *
      * @param fullGeometry Full nozzle geometry (must be generated)
@@ -333,7 +333,7 @@ public class DXFExporter {
         List<Point2D> points = fullGeometry.getWallPoints();
         if (points.isEmpty()) {
             throw new IllegalArgumentException(
-                    "FullNozzleGeometry has no wall points — call generate() first");
+                    "FullNozzleGeometry has no wall points â€” call generate() first");
         }
 
         double rt     = fullGeometry.getThroatRadius();
@@ -342,7 +342,7 @@ public class DXFExporter {
         double rInlet = points.getFirst().y();
         double rExit  = points.getLast().y();
 
-        LOG.debug("Exporting full-nozzle revolution DXF: {} pts → {}", points.size(), filePath);
+        LOG.debug("Exporting full-nozzle revolution DXF: {} pts â†’ {}", points.size(), filePath);
 
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(DXF_HEADER);
@@ -364,16 +364,16 @@ public class DXFExporter {
 
             writer.write(DXF_FOOTER);
         }
-        LOG.debug("Full-nozzle revolution DXF export complete → {}", filePath);
+        LOG.debug("Full-nozzle revolution DXF export complete â†’ {}", filePath);
     }
 
     /**
      * Exports Aerospike geometry as a DXF file with three layers:
      * <ul>
-     *   <li>{@code SPIKE} — the full ideal spike contour polyline</li>
-     *   <li>{@code COWL} — a line from the inner throat radius to the outer throat
+     *   <li>{@code SPIKE} â€” the full ideal spike contour polyline</li>
+     *   <li>{@code COWL} â€” a line from the inner throat radius to the outer throat
      *       radius at x = 0, representing the annular throat face</li>
-     *   <li>{@code AXIS} — symmetry axis from x = 0 to the spike-tip x position</li>
+     *   <li>{@code AXIS} â€” symmetry axis from x = 0 to the spike-tip x position</li>
      * </ul>
      *
      * @param nozzle   Aerospike nozzle (must have been generated)
@@ -383,7 +383,7 @@ public class DXFExporter {
     public void exportAerospikeContour(AerospikeNozzle nozzle, Path filePath) throws IOException {
         // getFullSpikeContour() generates lazily, so the list is always non-empty after this call.
         List<Point2D> spike = nozzle.getFullSpikeContour();
-        LOG.debug("Exporting Aerospike DXF contour: {} spike points → {}", spike.size(), filePath);
+        LOG.debug("Exporting Aerospike DXF contour: {} spike points â†’ {}", spike.size(), filePath);
 
         double rt = nozzle.getParameters().throatRadius();
         double ri = rt * nozzle.getSpikeRadiusRatio();
@@ -410,9 +410,9 @@ public class DXFExporter {
      *
      * <p>Three DXF layers are written:
      * <ul>
-     *   <li>{@code WALL} — polyline tracing the full wall (base bell + extension)</li>
-     *   <li>{@code AXIS} — centerline from throat to exit</li>
-     *   <li>{@code KINK} — POINT marker at the inflection point and a vertical LINE
+     *   <li>{@code WALL} â€” polyline tracing the full wall (base bell + extension)</li>
+     *   <li>{@code AXIS} â€” centerline from throat to exit</li>
+     *   <li>{@code KINK} â€” POINT marker at the inflection point and a vertical LINE
      *       from the kink down to the axis, indicating the axial station where the
      *       extension bell begins</li>
      * </ul>
@@ -425,10 +425,10 @@ public class DXFExporter {
     public void exportDualBellContour(DualBellNozzle nozzle, Path filePath) throws IOException {
         List<Point2D> pts = nozzle.getContourPoints();
         if (pts.isEmpty()) {
-            throw new IllegalArgumentException("DualBellNozzle has no contour — call generate() first");
+            throw new IllegalArgumentException("DualBellNozzle has no contour â€” call generate() first");
         }
         Point2D kink = pts.get(nozzle.getKinkIndex());
-        LOG.debug("Exporting DXF dual-bell contour: {} points, kink at ({},{}) → {}",
+        LOG.debug("Exporting DXF dual-bell contour: {} points, kink at ({},{}) â†’ {}",
                 pts.size(), kink.x(), kink.y(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(DXF_HEADER);
@@ -439,7 +439,7 @@ public class DXFExporter {
             writeLine(writer, kink, new Point2D(kink.x(), 0), "KINK");
             writer.write(DXF_FOOTER);
         }
-        LOG.debug("DXF dual-bell contour export complete → {}", filePath);
+        LOG.debug("DXF dual-bell contour export complete â†’ {}", filePath);
     }
 
     /**
@@ -448,10 +448,10 @@ public class DXFExporter {
      *
      * <p>Layers written:
      * <ul>
-     *   <li>{@code WALL} — full wall polyline (base + extension)</li>
-     *   <li>{@code AXIS} — three LINE segments closing the profile (exit face, axis,
+     *   <li>{@code WALL} â€” full wall polyline (base + extension)</li>
+     *   <li>{@code AXIS} â€” three LINE segments closing the profile (exit face, axis,
      *       throat face) to form a closed sketch suitable for a CAD revolve operation</li>
-     *   <li>{@code KINK} — POINT marker and vertical LINE at the inflection station</li>
+     *   <li>{@code KINK} â€” POINT marker and vertical LINE at the inflection station</li>
      * </ul>
      *
      * @param nozzle   Dual-bell nozzle (must have been generated)
@@ -462,11 +462,11 @@ public class DXFExporter {
     public void exportRevolutionProfile(DualBellNozzle nozzle, Path filePath) throws IOException {
         List<Point2D> pts = nozzle.getContourPoints();
         if (pts.isEmpty()) {
-            throw new IllegalArgumentException("DualBellNozzle has no contour — call generate() first");
+            throw new IllegalArgumentException("DualBellNozzle has no contour â€” call generate() first");
         }
         Point2D kink    = pts.get(nozzle.getKinkIndex());
         Point2D exitTop = pts.getLast();
-        LOG.debug("Exporting DXF dual-bell revolution profile: {} points → {}", pts.size(), filePath);
+        LOG.debug("Exporting DXF dual-bell revolution profile: {} points â†’ {}", pts.size(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(DXF_HEADER);
             writePolyline(writer, pts, "WALL");
@@ -477,7 +477,7 @@ public class DXFExporter {
             writeLine(writer, kink, new Point2D(kink.x(), 0), "KINK");
             writer.write(DXF_FOOTER);
         }
-        LOG.debug("DXF dual-bell revolution profile export complete → {}", filePath);
+        LOG.debug("DXF dual-bell revolution profile export complete â†’ {}", filePath);
     }
 
     /**

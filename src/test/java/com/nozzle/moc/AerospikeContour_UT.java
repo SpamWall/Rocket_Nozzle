@@ -22,7 +22,7 @@ package com.nozzle.moc;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -189,7 +189,7 @@ class AerospikeContour_UT {
         @Timeout(value = 30, unit = TimeUnit.SECONDS)
         @DisplayName("Truncated contour is non-empty even when truncation fraction is very small")
         void truncatedContourNonEmptyForSmallFraction() {
-            // The first point is always at x=0 ≤ cutX ≥ 0, so truncated is never empty.
+            // The first point is always at x=0 â‰¤ cutX â‰¥ 0, so truncated is never empty.
             AerospikeNozzle nozzle = new AerospikeNozzle(params, 0.6, 0.01, 100).generate();
             assertThat(nozzle.getTruncatedSpikeContour()).isNotEmpty();
         }
@@ -245,7 +245,7 @@ class AerospikeContour_UT {
         }
 
         @Test
-        @DisplayName("getAnnularThroatArea() equals π(rt² − ri²)")
+        @DisplayName("getAnnularThroatArea() equals Ï€(rtÂ² âˆ’ riÂ²)")
         void annularThroatAreaFormula() {
             double rt = params.throatRadius();
             double ri = rt * 0.6;
@@ -255,7 +255,7 @@ class AerospikeContour_UT {
         }
 
         @Test
-        @DisplayName("getAnnularExitArea() equals annular throat area × design area ratio")
+        @DisplayName("getAnnularExitArea() equals annular throat area Ã— design area ratio")
         void annularExitAreaEqualsThroatTimesAreaRatio() {
             AerospikeContour contour = new AerospikeContour(params, 0.6, 0.8, 10);
             double expected = contour.getAnnularThroatArea() * params.exitAreaRatio();

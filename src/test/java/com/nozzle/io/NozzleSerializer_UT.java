@@ -23,7 +23,7 @@ package com.nozzle.io;
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.NozzleContour;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.CharacteristicNet;
 import com.nozzle.moc.CharacteristicPoint;
 import org.junit.jupiter.api.DisplayName;

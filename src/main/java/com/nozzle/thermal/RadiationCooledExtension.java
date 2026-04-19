@@ -23,7 +23,7 @@ package com.nozzle.thermal;
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.NozzleContour;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.CharacteristicPoint;
 
 import java.util.ArrayList;
@@ -32,18 +32,18 @@ import java.util.List;
 /**
  * Models the thermal equilibrium of a radiation-cooled nozzle extension.
  *
- * <p>Large nozzle extensions — like the niobium-alloy skirt on the RL-10 or the
- * rhenium/iridium extensions used on deep-space engines — are not actively cooled.
+ * <p>Large nozzle extensions â€” like the niobium-alloy skirt on the RL-10 or the
+ * rhenium/iridium extensions used on deep-space engines â€” are not actively cooled.
  * The wall temperature reaches a steady state when the incoming gas-side convective
  * heat flux equals the outgoing radiative flux to the environment:
  *
- * <pre>  h_gas · (T_aw − T_wall) = ε · σ · (T_wall⁴ − T_env⁴)</pre>
+ * <pre>  h_gas Â· (T_aw âˆ’ T_wall) = Îµ Â· Ïƒ Â· (T_wallâ´ âˆ’ T_envâ´)</pre>
  *
- * <p>This nonlinear equation is solved at each axial station by a Newton–Raphson
+ * <p>This nonlinear equation is solved at each axial station by a Newtonâ€“Raphson
  * iteration.  The Bartz convective coefficient {@code h_gas} is re-evaluated at
  * each Newton step using the Eckert reference-temperature method so that the
  * dependence of gas-property corrections on {@code T_wall} is captured.
- * Convergence is typically reached in 5–10 iterations to within 0.1 K.
+ * Convergence is typically reached in 5â€“10 iterations to within 0.1 K.
  *
  * <p>Usage:
  * <pre>{@code
@@ -58,12 +58,12 @@ import java.util.List;
  * }</pre>
  *
  * <p>Reference: Sutton, G.P. &amp; Biblarz, O., <em>Rocket Propulsion Elements</em>,
- * 9th ed., §8.3; Bartz, D.R., "A Simple Equation for Rapid Estimation of Rocket
+ * 9th ed., Â§8.3; Bartz, D.R., "A Simple Equation for Rapid Estimation of Rocket
  * Nozzle Convective Heat Transfer Coefficients", <em>Jet Propulsion</em>, 1957.
  */
 public class RadiationCooledExtension {
 
-    /** Stefan–Boltzmann constant [W·m⁻²·K⁻⁴]. */
+    /** Stefanâ€“Boltzmann constant [WÂ·mâ»Â²Â·Kâ»â´]. */
     private static final double STEFAN_BOLTZMANN = 5.67e-8;
 
     /**
@@ -86,14 +86,14 @@ public class RadiationCooledExtension {
 
     /**
      * Surrounding environment temperature [K].
-     * Use ≈ 3 K for deep-space vacuum; use 300 K for sea-level ground-test conditions.
+     * Use â‰ˆ 3 K for deep-space vacuum; use 300 K for sea-level ground-test conditions.
      */
     private double environmentTemperature = 3.0;
 
-    /** Maximum Newton–Raphson iterations per station before accepting the current value. */
+    /** Maximum Newtonâ€“Raphson iterations per station before accepting the current value. */
     private int maxNewtonIterations = 50;
 
-    /** Convergence threshold: iteration stops when |ΔT_wall| < tolerance [K]. */
+    /** Convergence threshold: iteration stops when |Î”T_wall| < tolerance [K]. */
     private double convergenceTolerance = 0.1;
 
     private final List<ExtensionPoint> profile = new ArrayList<>();
@@ -126,7 +126,7 @@ public class RadiationCooledExtension {
      * Sets the axial position at which the radiation-cooled section begins.
      * Contour points upstream of this position are excluded from the profile.
      *
-     * <p>Typically set to the axial position where regenerative cooling ends —
+     * <p>Typically set to the axial position where regenerative cooling ends â€”
      * i.e. the flange at the downstream end of the regeneratively cooled chamber.
      * The throat is at {@code x = 0}; the diverging section has {@code x > 0}.
      *
@@ -142,12 +142,12 @@ public class RadiationCooledExtension {
      * Sets the environment temperature used in the radiation balance.
      *
      * <ul>
-     *   <li>Deep-space vacuum: ≈ 3 K (cosmic microwave background)</li>
-     *   <li>Low-Earth orbit: ≈ 200–280 K (solar + albedo flux equivalent)</li>
-     *   <li>Sea-level ground test: ≈ 300 K</li>
+     *   <li>Deep-space vacuum: â‰ˆ 3 K (cosmic microwave background)</li>
+     *   <li>Low-Earth orbit: â‰ˆ 200â€“280 K (solar + albedo flux equivalent)</li>
+     *   <li>Sea-level ground test: â‰ˆ 300 K</li>
      * </ul>
      *
-     * @param temperature Environment temperature in K (must be ≥ 0)
+     * @param temperature Environment temperature in K (must be â‰¥ 0)
      * @return This instance
      * @throws IllegalArgumentException if {@code temperature} is negative
      */
@@ -161,8 +161,8 @@ public class RadiationCooledExtension {
     }
 
     /**
-     * Sets the Newton–Raphson convergence tolerance.
-     * Iteration stops when the wall-temperature correction {@code |ΔT_wall|} falls
+     * Sets the Newtonâ€“Raphson convergence tolerance.
+     * Iteration stops when the wall-temperature correction {@code |Î”T_wall|} falls
      * below this value.  The default of 0.1 K is sufficient for all engineering
      * applications; tighter values may be used for validation studies.
      *
@@ -180,7 +180,7 @@ public class RadiationCooledExtension {
     }
 
     /**
-     * Sets the maximum number of Newton–Raphson iterations per station.
+     * Sets the maximum number of Newtonâ€“Raphson iterations per station.
      * The iteration stops early when the temperature correction falls below
      * {@link #setConvergenceTolerance the convergence tolerance}.  The default
      * of 50 is sufficient for all engineering cases; smaller values may be used
@@ -202,16 +202,16 @@ public class RadiationCooledExtension {
     /**
      * Computes the equilibrium wall temperature profile along the extension.
      *
-     * <p>For each contour point at {@code x ≥ extensionStartX}:
+     * <p>For each contour point at {@code x â‰¥ extensionStartX}:
      * <ol>
      *   <li>Local gas temperature and Mach number are taken from the nearest
      *       point in {@code flowPoints} (linear nearest-neighbor search), or
      *       estimated from isentropic relations when the list is empty.</li>
      *   <li>The adiabatic wall (recovery) temperature is computed as
-     *       {@code T_aw = T_gas · (1 + r · (γ−1)/2 · M²)} with turbulent
+     *       {@code T_aw = T_gas Â· (1 + r Â· (Î³âˆ’1)/2 Â· MÂ²)} with turbulent
      *       recovery factor {@code r = Pr^(1/3)}.</li>
-     *   <li>Newton–Raphson iteration solves the equilibrium balance
-     *       {@code h_gas·(T_aw − T_wall) = ε·σ·(T_wall⁴ − T_env⁴)}.</li>
+     *   <li>Newtonâ€“Raphson iteration solves the equilibrium balance
+     *       {@code h_gasÂ·(T_aw âˆ’ T_wall) = ÎµÂ·ÏƒÂ·(T_wallâ´ âˆ’ T_envâ´)}.</li>
      *   <li>An {@link ExtensionPoint} is recorded with all thermal quantities
      *       and the temperature margin to the material limit.</li>
      * </ol>
@@ -238,8 +238,8 @@ public class RadiationCooledExtension {
             if (point.x() < extensionStartX) continue;
 
             // Local gas temperature and Mach from nearest MOC point (linear scan).
-            // The extension spans O(10–50) contour points and the flow-point list is
-            // O(100–500); O(n×m) is negligible compared to the Newton iterations.
+            // The extension spans O(10â€“50) contour points and the flow-point list is
+            // O(100â€“500); O(nÃ—m) is negligible compared to the Newton iterations.
             double T_gas;
             double mach;
             if (flowPoints != null && !flowPoints.isEmpty()) {
@@ -258,7 +258,7 @@ public class RadiationCooledExtension {
             // Adiabatic (recovery) wall temperature
             double T_aw = T_gas * (1.0 + recoveryFactor * (gamma - 1.0) / 2.0 * mach * mach);
 
-            // Solve equilibrium: h·(T_aw - T_wall) = ε·σ·(T_wall⁴ - T_env⁴)
+            // Solve equilibrium: hÂ·(T_aw - T_wall) = ÎµÂ·ÏƒÂ·(T_wallâ´ - T_envâ´)
             double T_wall = solveEquilibriumTemperature(point.x(), point.y(), T_gas, T_aw);
 
             // Final thermal quantities at converged T_wall
@@ -282,13 +282,13 @@ public class RadiationCooledExtension {
     // -----------------------------------------------------------------------
 
     /**
-     * Solves {@code h_gas·(T_aw − T_w) = ε·σ·(T_w⁴ − T_env⁴)} for {@code T_w}
-     * using Newton–Raphson iteration.
+     * Solves {@code h_gasÂ·(T_aw âˆ’ T_w) = ÎµÂ·ÏƒÂ·(T_wâ´ âˆ’ T_envâ´)} for {@code T_w}
+     * using Newtonâ€“Raphson iteration.
      *
      * <p>{@code h_gas} is re-evaluated at each step via the Bartz/Eckert method
      * so that the gas-property correction for high wall temperatures is captured.
      * The derivative used is the simplified form
-     * {@code f'(T_w) ≈ 4·ε·σ·T_w³ + h_gas}, which omits {@code ∂h/∂T_w} (a
+     * {@code f'(T_w) â‰ˆ 4Â·ÎµÂ·ÏƒÂ·T_wÂ³ + h_gas}, which omits {@code âˆ‚h/âˆ‚T_w} (a
      * second-order term) and is sufficient for convergence within a few steps.
      *
      * @param x     Axial position in m
@@ -328,14 +328,14 @@ public class RadiationCooledExtension {
      *
      * <p>This variant has no coolant-side resistance; {@code T_wall} is used
      * directly as the wall-temperature boundary condition for the reference
-     * temperature {@code T* = 0.5·(T_wall + T_gas) + 0.22·√Pr·(T_aw − T_gas)}.
+     * temperature {@code T* = 0.5Â·(T_wall + T_gas) + 0.22Â·âˆšPrÂ·(T_aw âˆ’ T_gas)}.
      *
      * @param x      Axial position in m
      * @param y      Local wall radius in m
      * @param T_gas  Local static gas temperature in K
      * @param T_aw   Adiabatic wall (recovery) temperature in K
      * @param T_wall Current wall temperature estimate in K
-     * @return Gas-side heat-transfer coefficient in W/(m²·K)
+     * @return Gas-side heat-transfer coefficient in W/(mÂ²Â·K)
      */
     private double computeBartzH(double x, double y, double T_gas, double T_aw, double T_wall) {
         GasProperties gas = parameters.gasProperties();
@@ -369,7 +369,7 @@ public class RadiationCooledExtension {
      *
      * <p>Uses {@link NozzleContour#getSlopeAt(double)} (which is itself a
      * central-difference first derivative) to avoid duplicating finite-difference
-     * logic.  The result is capped at {@code 10 × r_throat} so the Bartz
+     * logic.  The result is capped at {@code 10 Ã— r_throat} so the Bartz
      * curvature correction term remains bounded on near-straight wall sections.
      *
      * @param x Axial position in m
@@ -392,7 +392,7 @@ public class RadiationCooledExtension {
     /**
      * Returns the nearest flow point to {@code contourPoint} by Euclidean distance
      * in the (x, y) plane.  Linear scan is acceptable because the extension spans
-     * O(10–50) contour points and the flow-point list is O(100–500) entries.
+     * O(10â€“50) contour points and the flow-point list is O(100â€“500) entries.
      *
      * @param contourPoint Query point on the nozzle wall
      * @param flowPoints   Non-empty list of MOC flow-field points
@@ -424,7 +424,7 @@ public class RadiationCooledExtension {
      *
      * <p>Used only when no MOC flow-point list is provided.
      *
-     * @param areaRatio    {@code A / A_throat} (must be ≥ 1)
+     * @param areaRatio    {@code A / A_throat} (must be â‰¥ 1)
      * @param gamma        Specific heat ratio
      * @param maxIterations Maximum Newton iterations before returning the current estimate
      * @return Supersonic Mach number corresponding to {@code areaRatio}
@@ -440,7 +440,7 @@ public class RadiationCooledExtension {
             double t    = 1.0 + gm1 / 2.0 * M * M;
             double u_k  = Math.pow(2.0 / (gamma + 1.0) * t, 0.5 * exp);
             double f    = u_k / M - areaRatio;
-            // df/dM = u^k · ((γ+1)/(2t) − 1/M²)  [correct derivative of u^k/M]
+            // df/dM = u^k Â· ((Î³+1)/(2t) âˆ’ 1/MÂ²)  [correct derivative of u^k/M]
             double dfDM = u_k * ((gamma + 1.0) / (2.0 * t) - 1.0 / (M * M));
             double delta = -f / dfDM;
             M += delta;
@@ -479,7 +479,7 @@ public class RadiationCooledExtension {
     }
 
     /**
-     * Returns the minimum temperature margin ({@code T_limit − T_wall}) across
+     * Returns the minimum temperature margin ({@code T_limit âˆ’ T_wall}) across
      * all extension stations.  Negative values indicate an overtemperature condition.
      *
      * @return Minimum temperature margin in K; 0 if {@link #calculate} has not
@@ -538,12 +538,12 @@ public class RadiationCooledExtension {
      * @param recoveryTemperature Adiabatic wall (recovery) temperature in K;
      *                           {@code T_wall} converges toward this as
      *                           radiation efficiency decreases
-     * @param convectiveHeatFlux Gas-side convective heat flux in W/m²:
-     *                           {@code h_gas · (T_aw − T_wall)}
-     * @param radiativeHeatFlux  Outward radiative flux in W/m²:
-     *                           {@code ε · σ · (T_wall⁴ − T_env⁴)}
-     * @param heatTransferCoeff  Bartz gas-side heat-transfer coefficient in W/(m²·K)
-     * @param temperatureMargin  {@code T_limit − T_wall} in K; negative when the
+     * @param convectiveHeatFlux Gas-side convective heat flux in W/mÂ²:
+     *                           {@code h_gas Â· (T_aw âˆ’ T_wall)}
+     * @param radiativeHeatFlux  Outward radiative flux in W/mÂ²:
+     *                           {@code Îµ Â· Ïƒ Â· (T_wallâ´ âˆ’ T_envâ´)}
+     * @param heatTransferCoeff  Bartz gas-side heat-transfer coefficient in W/(mÂ²Â·K)
+     * @param temperatureMargin  {@code T_limit âˆ’ T_wall} in K; negative when the
      *                           equilibrium temperature exceeds the material limit
      * @param isOvertemperature  {@code true} when {@code T_wall > T_limit}
      */
@@ -559,11 +559,11 @@ public class RadiationCooledExtension {
             boolean isOvertemperature
     ) {
         /**
-         * Returns the heat-flux residual {@code q_conv − q_rad} [W/m²].
+         * Returns the heat-flux residual {@code q_conv âˆ’ q_rad} [W/mÂ²].
          * At exact convergence this is zero; the magnitude indicates the quality
-         * of the Newton–Raphson solution.
+         * of the Newtonâ€“Raphson solution.
          *
-         * @return Heat-flux balance residual in W/m²
+         * @return Heat-flux balance residual in W/mÂ²
          */
         public double heatFluxBalance() {
             return convectiveHeatFlux - radiativeHeatFlux;
@@ -589,11 +589,11 @@ public class RadiationCooledExtension {
      * temperature, as these conditions are typical in service.
      *
      * @param name               Human-readable material name
-     * @param emissivity         Hemispherical total emissivity {@code ε} (0–1)
+     * @param emissivity         Hemispherical total emissivity {@code Îµ} (0â€“1)
      * @param temperatureLimit   Maximum allowable continuous-use wall temperature
      *                           in K; used to compute {@link ExtensionPoint#temperatureMargin()}
-     * @param density            Material density in kg/m³; used for mass budgeting
-     * @param thermalConductivity Thermal conductivity in W/(m·K) at operating temperature
+     * @param density            Material density in kg/mÂ³; used for mass budgeting
+     * @param thermalConductivity Thermal conductivity in W/(mÂ·K) at operating temperature
      */
     public record ExtensionMaterial(
             String name,
@@ -603,27 +603,27 @@ public class RadiationCooledExtension {
             double thermalConductivity
     ) {
         /**
-         * Niobium C-103 alloy (Nb–10Hf–1Ti) — the standard material for
+         * Niobium C-103 alloy (Nbâ€“10Hfâ€“1Ti) â€” the standard material for
          * radiation-cooled nozzle extensions on high-performance hydrolox engines
          * such as the RL-10, Vinci, and HM7B.  Offers excellent formability and
-         * weldability; coated with disilicide ({@code NbSi₂}) to prevent rapid
-         * oxidation above ≈ 700 K.  The disilicide coating raises emissivity to
-         * ≈ 0.8 and is included in the temperature limit.
+         * weldability; coated with disilicide ({@code NbSiâ‚‚}) to prevent rapid
+         * oxidation above â‰ˆ 700 K.  The disilicide coating raises emissivity to
+         * â‰ˆ 0.8 and is included in the temperature limit.
          *
-         * <p>Typical service temperature on the RL-10A-4: 1 250–1 450 K.
+         * <p>Typical service temperature on the RL-10A-4: 1 250â€“1 450 K.
          */
         public static final ExtensionMaterial NIOBIUM_C103 = new ExtensionMaterial(
-                "Niobium C-103 (NbSi₂ coated)",
-                0.80,    // ε — disilicide-coated surface at operating temperature
+                "Niobium C-103 (NbSiâ‚‚ coated)",
+                0.80,    // Îµ â€” disilicide-coated surface at operating temperature
                 1450.0,  // T_limit [K]
-                8860.0,  // ρ [kg/m³]
-                55.0     // k [W/(m·K)]
+                8860.0,  // Ï [kg/mÂ³]
+                55.0     // k [W/(mÂ·K)]
         );
 
         /**
-         * Rhenium with iridium coating (Re/Ir) — used for thruster chambers and
+         * Rhenium with iridium coating (Re/Ir) â€” used for thruster chambers and
          * high-performance extensions requiring continuous-use temperatures above
-         * the niobium alloy limit.  The iridium coating ({@code ≈ 50 µm}) provides
+         * the niobium alloy limit.  The iridium coating ({@code â‰ˆ 50 Âµm}) provides
          * oxidation resistance and raises emissivity.  Used on the Deep Space 1
          * and Cassini AACS thrusters, and in development for upper-stage engines.
          *
@@ -632,43 +632,43 @@ public class RadiationCooledExtension {
          */
         public static final ExtensionMaterial RHENIUM_IRIDIUM = new ExtensionMaterial(
                 "Rhenium / Iridium coating",
-                0.85,    // ε — iridium surface at operating temperature
+                0.85,    // Îµ â€” iridium surface at operating temperature
                 2200.0,  // T_limit [K]
-                19300.0, // ρ [kg/m³] — Re dominated
-                48.0     // k [W/(m·K)]
+                19300.0, // Ï [kg/mÂ³] â€” Re dominated
+                48.0     // k [W/(mÂ·K)]
         );
 
         /**
-         * Titanium 6Al-4V alloy — suitable for nozzle extensions on low-heat-flux
+         * Titanium 6Al-4V alloy â€” suitable for nozzle extensions on low-heat-flux
          * upper stages (e.g. apogee kick motors) where the gas-side heat flux in the
          * supersonic extension is modest.  Low density makes it attractive for mass-
          * constrained spacecraft propulsion.  Maximum temperature is set by the rapid
-         * drop in yield strength above ≈ 750 K; short-duration excursions to 850 K
+         * drop in yield strength above â‰ˆ 750 K; short-duration excursions to 850 K
          * are survivable but should be avoided in the design margin.
          */
         public static final ExtensionMaterial TITANIUM_6AL_4V = new ExtensionMaterial(
                 "Titanium 6Al-4V",
-                0.60,   // ε — anodized/oxidized surface
+                0.60,   // Îµ â€” anodized/oxidized surface
                 800.0,  // T_limit [K]
-                4430.0, // ρ [kg/m³]
-                6.7     // k [W/(m·K)]
+                4430.0, // Ï [kg/mÂ³]
+                6.7     // k [W/(mÂ·K)]
         );
 
         /**
-         * Carbon–carbon (C/C) composite — used for very-high-temperature extensions
+         * Carbonâ€“carbon (C/C) composite â€” used for very-high-temperature extensions
          * in oxidizer-lean or inert-exhaust environments (e.g. hydrazine / MMH
          * engines, solid-rocket motor exit cones in space).  High emissivity and
          * very low density are the key advantages; however, C/C oxidises rapidly
          * in oxygen-rich exhaust and requires an anti-oxidation coating
-         * ({@code SiC} or {@code ZrB₂}) for oxidizing propellant combinations.
+         * ({@code SiC} or {@code ZrBâ‚‚}) for oxidizing propellant combinations.
          * The temperature limit stated here is for coated C/C.
          */
         public static final ExtensionMaterial CARBON_CARBON = new ExtensionMaterial(
                 "Carbon-Carbon Composite (coated)",
-                0.85,   // ε — C/C surface at operating temperature
+                0.85,   // Îµ â€” C/C surface at operating temperature
                 1800.0, // T_limit [K]
-                1900.0, // ρ [kg/m³]
-                50.0    // k [W/(m·K)]
+                1900.0, // Ï [kg/mÂ³]
+                50.0    // k [W/(mÂ·K)]
         );
     }
 }

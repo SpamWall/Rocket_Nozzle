@@ -24,7 +24,7 @@ import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.CharacteristicPoint;
 
 import java.util.ArrayList;
@@ -48,18 +48,18 @@ public class HeatTransferModel {
     private WallThermalPoint peakFluxPoint = null;
     
     // Material properties
-    private double wallThermalConductivity = 20.0; // W/(m·K) - typical for Inconel
+    private double wallThermalConductivity = 20.0; // W/(mÂ·K) - typical for Inconel
     private double wallThickness = 0.003; // m
     private double coolantTemperature = 300.0; // K
-    private double coolantHeatTransferCoeff = 5000.0; // W/(m²·K)
+    private double coolantHeatTransferCoeff = 5000.0; // W/(mÂ²Â·K)
     
     // Optional position-varying coolant channel (overrides coolantHeatTransferCoeff when set)
     private CoolantChannel coolantChannel = null;
 
     // Radiation properties
     private double wallEmissivity = 0.8;
-    /** Stefan–Boltzmann constant (5.67 × 10⁻⁸ W·m⁻²·K⁻⁴). */
-    private static final double STEFAN_BOLTZMANN = 5.67e-8; // W/(m²·K⁴)
+    /** Stefanâ€“Boltzmann constant (5.67 Ã— 10â»â¸ WÂ·mâ»Â²Â·Kâ»â´). */
+    private static final double STEFAN_BOLTZMANN = 5.67e-8; // W/(mÂ²Â·Kâ´)
     
     /**
      * Creates a heat transfer model.
@@ -76,7 +76,7 @@ public class HeatTransferModel {
     /**
      * Sets wall material properties.
      *
-     * @param conductivity Thermal conductivity in W/(m·K)
+     * @param conductivity Thermal conductivity in W/(mÂ·K)
      * @param thickness    Wall thickness in m
      * @return This instance
      */
@@ -90,7 +90,7 @@ public class HeatTransferModel {
      * Sets coolant properties.
      *
      * @param temperature   Coolant temperature in K
-     * @param heatTransCoeff Heat transfer coefficient in W/(m²·K)
+     * @param heatTransCoeff Heat transfer coefficient in W/(mÂ²Â·K)
      * @return This instance
      */
     public HeatTransferModel setCoolantProperties(double temperature, double heatTransCoeff) {
@@ -128,7 +128,7 @@ public class HeatTransferModel {
      *
      * <p>When {@code flowPoints} is non-empty a {@link KdTree} is built once in
      * O(n log n) and each contour-point lookup runs in O(log n), replacing the
-     * previous O(n×m) linear scan.
+     * previous O(nÃ—m) linear scan.
      *
      * @param flowPoints Flow field points for local conditions
      * @return This instance
@@ -192,7 +192,7 @@ public class HeatTransferModel {
             }
         }
 
-        LOG.debug("Heat transfer complete: {} points, peak at x={} m, max q={} W/m²",
+        LOG.debug("Heat transfer complete: {} points, peak at x={} m, max q={} W/mÂ²",
                 wallThermalProfile.size(),
                 peakFluxPoint != null ? peakFluxPoint.x() : Double.NaN,
                 getMaxHeatFlux());
@@ -289,8 +289,8 @@ public class HeatTransferModel {
      * @param r        Local wall radius (m)
      * @param temp     Local static gas temperature (K)
      * @param T_aw     Adiabatic wall (recovery) temperature (K)
-     * @param hCoolant Coolant-side heat transfer coefficient W/(m²·K)
-     * @return Gas-side heat transfer coefficient in W/(m²·K)
+     * @param hCoolant Coolant-side heat transfer coefficient W/(mÂ²Â·K)
+     * @return Gas-side heat transfer coefficient in W/(mÂ²Â·K)
      */
     private double calculateBartzHeatTransfer(double x, double r, double temp, double T_aw,
                                                double hCoolant) {
@@ -308,7 +308,7 @@ public class HeatTransferModel {
         double Dt = 2.0 * rt;
         double A = Math.PI * r * r;
 
-        // Mass flux at throat: G* = ṁ/A_t = P_c / c*
+        // Mass flux at throat: G* = á¹/A_t = P_c / c*
         double G_Star = parameters.chamberPressure() / parameters.characteristicVelocity();
 
         // Local wall radius of curvature for the (D_t/r_c)^0.1 correction.
@@ -316,7 +316,7 @@ public class HeatTransferModel {
         double r_c = localRadiusOfCurvature(x, wallPts);
 
         // Iterative convergence: T* depends on T_w, T_w depends on h, h depends on T*
-        // Typically converges within 2–3 iterations
+        // Typically converges within 2â€“3 iterations
         double T_w = 0.9 * T_aw;  // initial estimate (typical cooled-wall ratio)
         double h = 0.0;
         for (int i = 0; i < 3; i++) {
@@ -340,14 +340,14 @@ public class HeatTransferModel {
     /**
      * Estimates the local wall radius of curvature at axial position {@code x}.
      *
-     * <p>In the downstream throat arc zone ({@code x ∈ [0, r_cd]}) the parametric
-     * radius {@code r_cd = throatCurvatureRatio × r_t} is returned directly, avoiding
+     * <p>In the downstream throat arc zone ({@code x âˆˆ [0, r_cd]}) the parametric
+     * radius {@code r_cd = throatCurvatureRatio Ã— r_t} is returned directly, avoiding
      * noisy finite differences over the tightly curved arc.  In the upstream arc zone
-     * ({@code x ∈ [−r_cu, 0)}) the parametric radius {@code r_cu = upstreamCurvatureRatio × r_t}
+     * ({@code x âˆˆ [âˆ’r_cu, 0)}) the parametric radius {@code r_cu = upstreamCurvatureRatio Ã— r_t}
      * is returned.  Outside both arc zones the curvature is estimated from non-uniform
      * second-order finite differences on {@code pts}.
      *
-     * <p>The result is capped at {@code 10 × r_t} so the Bartz correction term
+     * <p>The result is capped at {@code 10 Ã— r_t} so the Bartz correction term
      * remains bounded on near-straight wall sections.
      *
      * @param x   Axial position in metres
@@ -360,7 +360,7 @@ public class HeatTransferModel {
         double rcu = parameters.upstreamCurvatureRatio() * rt;  // upstream arc radius
 
         // In the throat arc zones use the parametric design radius directly.
-        // The downstream arc occupies x ∈ [0, r_cd]; the upstream arc x ∈ [-r_cu, 0).
+        // The downstream arc occupies x âˆˆ [0, r_cd]; the upstream arc x âˆˆ [-r_cu, 0).
         if (x >= 0.0 && x <= rcd) return rcd;
         if (x < 0.0  && x >= -rcu) return rcu;
 
@@ -401,16 +401,16 @@ public class HeatTransferModel {
     
     /**
      * Calculates the steady-state gas-side wall temperature using a three-element
-     * thermal-resistance network: gas film → wall conduction → coolant film.
+     * thermal-resistance network: gas film â†’ wall conduction â†’ coolant film.
      *
-     * <p>The heat flux is {@code q = (T_aw − T_coolant) / R_total} and the
-     * gas-side wall temperature is {@code T_w = T_aw − q / h_gas}.
+     * <p>The heat flux is {@code q = (T_aw âˆ’ T_coolant) / R_total} and the
+     * gas-side wall temperature is {@code T_w = T_aw âˆ’ q / h_gas}.
      * The result is clamped between {@code T_coolant + 50 K} and
-     * {@code T_aw − 100 K} to remain physically plausible.
+     * {@code T_aw âˆ’ 100 K} to remain physically plausible.
      *
      * @param recoveryTemp Adiabatic wall (recovery) temperature in K
-     * @param hGas         Gas-side heat-transfer coefficient in W/(m²·K)
-     * @param hCoolant     Coolant-side heat-transfer coefficient in W/(m²·K)
+     * @param hGas         Gas-side heat-transfer coefficient in W/(mÂ²Â·K)
+     * @param hCoolant     Coolant-side heat-transfer coefficient in W/(mÂ²Â·K)
      * @return Gas-side wall temperature in K
      */
     private double calculateWallTemperature(double recoveryTemp, double hGas, double hCoolant) {
@@ -455,7 +455,7 @@ public class HeatTransferModel {
     /**
      * Gets the maximum heat flux.
      *
-     * @return Maximum heat flux in W/m²
+     * @return Maximum heat flux in W/mÂ²
      */
     public double getMaxHeatFlux() {
         return wallThermalProfile.stream()
@@ -473,7 +473,7 @@ public class HeatTransferModel {
      * curvature correction {@code (D_t/r_c)^0.1} uses the parametric throat-arc
      * radii {@code r_cd} and {@code r_cu}, the returned position correctly reflects
      * how upstream wall curvature shifts the peak downstream of the throat plane for
-     * standard Rao values ({@code r_cd=0.382·r_t, r_cu=1.5·r_t}).
+     * standard Rao values ({@code r_cd=0.382Â·r_t, r_cu=1.5Â·r_t}).
      *
      * @return Peak heat-flux point, or {@code null} before any calculation
      */
@@ -497,13 +497,13 @@ public class HeatTransferModel {
      * <p>This method resolves the heat-flux peak location accurately because it
      * covers the convergent section (x &lt; 0) as well as the divergent section.
      * The curvature correction in the Bartz equation uses the parametric
-     * {@code r_cu = upstreamCurvatureRatio × r_t} for the upstream arc zone and
-     * {@code r_cd = throatCurvatureRatio × r_t} for the downstream arc zone, so the
+     * {@code r_cu = upstreamCurvatureRatio Ã— r_t} for the upstream arc zone and
+     * {@code r_cd = throatCurvatureRatio Ã— r_t} for the downstream arc zone, so the
      * peak position shifts correctly when either ratio is changed.
      *
      * <p>For wall points in the convergent section (x &lt; 0) the local Mach number is
      * estimated from the isentropic area-Mach relation using a Newton solver.  For
-     * wall points in the divergent section (x ≥ 0) the nearest MOC
+     * wall points in the divergent section (x â‰¥ 0) the nearest MOC
      * {@link CharacteristicPoint} is looked up via a {@link KdTree}.
      *
      * <p>Replaces any profile computed by a previous call to
@@ -521,7 +521,7 @@ public class HeatTransferModel {
 
         List<Point2D> wallPoints = fullGeometry.getWallPoints();
         if (wallPoints.isEmpty()) {
-            LOG.warn("calculateFullProfile: FullNozzleGeometry has no wall points — call generate() first");
+            LOG.warn("calculateFullProfile: FullNozzleGeometry has no wall points â€” call generate() first");
             return this;
         }
 
@@ -546,7 +546,7 @@ public class HeatTransferModel {
 
             if (x < 0.0) {
                 // Convergent section: isentropic subsonic relations
-                double areaRatio = (r / rt) * (r / rt);   // A/A* = (r/r_t)²
+                double areaRatio = (r / rt) * (r / rt);   // A/A* = (r/r_t)Â²
                 mach = machFromAreaRatioSubsonic(areaRatio, gamma);
                 double stagFactor = 1.0 + (gamma - 1.0) / 2.0 * mach * mach;
                 gasTemp = parameters.chamberTemperature() / stagFactor;
@@ -581,7 +581,7 @@ public class HeatTransferModel {
             }
         }
 
-        LOG.debug("Full-profile heat transfer complete: {} points, peak at x={} m, max q={} W/m²",
+        LOG.debug("Full-profile heat transfer complete: {} points, peak at x={} m, max q={} W/mÂ²",
                 wallThermalProfile.size(),
                 peakFluxPoint != null ? peakFluxPoint.x() : Double.NaN,
                 getMaxHeatFlux());
@@ -594,10 +594,10 @@ public class HeatTransferModel {
      *
      * <p>The area-Mach relation is:
      * <pre>
-     *   A/A* = (1/M) × [(2/(γ+1)) × (1 + (γ−1)/2 × M²)]^((γ+1)/(2(γ−1)))
+     *   A/A* = (1/M) Ã— [(2/(Î³+1)) Ã— (1 + (Î³âˆ’1)/2 Ã— MÂ²)]^((Î³+1)/(2(Î³âˆ’1)))
      * </pre>
      *
-     * @param areaRatio A/A* (must be ≥ 1; values &lt; 1 are clamped to 1)
+     * @param areaRatio A/A* (must be â‰¥ 1; values &lt; 1 are clamped to 1)
      * @param gamma     Ratio of specific heats
      * @return Subsonic Mach number in (0, 1]
      */
@@ -610,7 +610,7 @@ public class HeatTransferModel {
             double bracket = coeff * (1.0 + (gamma - 1.0) / 2.0 * M * M);
             double Bg  = Math.pow(bracket, exp);
             double f   = Bg / M - areaRatio;
-            // df/dM = exp*(γ−1)*coeff * bracket^(exp−1) − bracket^exp / M²
+            // df/dM = exp*(Î³âˆ’1)*coeff * bracket^(expâˆ’1) âˆ’ bracket^exp / MÂ²
             double dfdM = exp * (gamma - 1.0) * coeff * Math.pow(bracket, exp - 1.0)
                           - Bg / (M * M);
             double dM = -f / dfdM;
@@ -654,17 +654,17 @@ public class HeatTransferModel {
      * @param y                   Radial position (wall radius) in metres
      * @param wallTemperature     Gas-side wall temperature in K, computed by the
      *                            three-resistance network (gas film + wall + coolant)
-     * @param totalHeatFlux       Net heat flux into the wall in W/m²:
-     *                            {@code q_conv − q_rad}; positive values represent
+     * @param totalHeatFlux       Net heat flux into the wall in W/mÂ²:
+     *                            {@code q_conv âˆ’ q_rad}; positive values represent
      *                            net heating of the wall
-     * @param convectiveHeatFlux  Gas-side convective heat flux in W/m²:
-     *                            {@code h_gas × (T_aw − T_wall)}
+     * @param convectiveHeatFlux  Gas-side convective heat flux in W/mÂ²:
+     *                            {@code h_gas Ã— (T_aw âˆ’ T_wall)}
      * @param radiativeHeatFlux   Radiative heat loss from the outer wall surface in
-     *                            W/m²: {@code ε · σ · T_wall⁴}
-     * @param heatTransferCoeff   Gas-side heat-transfer coefficient h in W/(m²·K)
+     *                            W/mÂ²: {@code Îµ Â· Ïƒ Â· T_wallâ´}
+     * @param heatTransferCoeff   Gas-side heat-transfer coefficient h in W/(mÂ²Â·K)
      *                            as computed by the Bartz correlation
      * @param recoveryTemperature Adiabatic wall (recovery) temperature in K:
-     *                            {@code T_gas × (1 + r·(γ−1)/2 · M²)}, where
+     *                            {@code T_gas Ã— (1 + rÂ·(Î³âˆ’1)/2 Â· MÂ²)}, where
      *                            {@code r = Pr^(1/3)} for turbulent flow
      */
     public record WallThermalPoint(
@@ -680,7 +680,7 @@ public class HeatTransferModel {
         @SuppressWarnings("NullableProblems")
         @Override
         public String toString() {
-            return String.format("ThermalPoint[x=%.4f, Tw=%.1f K, q=%.2e W/m²]",
+            return String.format("ThermalPoint[x=%.4f, Tw=%.1f K, q=%.2e W/mÂ²]",
                     x, wallTemperature, totalHeatFlux);
         }
     }

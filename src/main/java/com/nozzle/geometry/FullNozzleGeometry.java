@@ -21,6 +21,7 @@
 package com.nozzle.geometry;
 
 import com.nozzle.core.NozzleDesignParameters;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.CharacteristicNet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -22,7 +22,7 @@ package com.nozzle.moc;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 
 import java.util.List;
 
@@ -40,24 +40,24 @@ import java.util.List;
  *
  * <h2>Geometry</h2>
  * <pre>
- *   Axis ─────────────────────────────────────────▶  x
- *          |←── rt ──→|
- *   r=rt   ○ ─ Cowl lip (outer throat edge)
- *          │ ←annular throat→ │
- *   r=ri   ● ─ Spike tip (inner throat edge)     ●─ spike tip end
- *                              ╲                 ╱
- *                               ╲  spike contour ╱
- *                                ╲             ╱
- *                                 ─────────────
+ *   Axis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¶  x
+ *          |â†â”€â”€ rt â”€â”€â†’|
+ *   r=rt   â—‹ â”€ Cowl lip (outer throat edge)
+ *          â”‚ â†annular throatâ†’ â”‚
+ *   r=ri   â— â”€ Spike tip (inner throat edge)     â—â”€ spike tip end
+ *                              â•²                 â•±
+ *                               â•²  spike contour â•±
+ *                                â•²             â•±
+ *                                 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  * </pre>
  * <ul>
  *   <li>Annular throat: outer radius {@code rt}, inner (spike-tip) radius
- *       {@code ri = rt × spikeRadiusRatio}.</li>
+ *       {@code ri = rt Ã— spikeRadiusRatio}.</li>
  *   <li>The spike contour is computed by {@link AerospikeContour} using the MOC
  *       kernel-flow algorithm so that the exit flow is perfectly axial at the
  *       design condition.</li>
  *   <li>In practice the spike is truncated to
- *       {@code truncationFraction × fullSpikeLength} to save weight; the truncated
+ *       {@code truncationFraction Ã— fullSpikeLength} to save weight; the truncated
  *       base face is exposed to the base-pressure recirculation region.</li>
  * </ul>
  */
@@ -101,7 +101,7 @@ public class AerospikeNozzle {
      * @param truncationFraction Fraction of the full ideal spike length to retain for the
      *                           physical spike; must be in (0, 1]
      * @param numSpikePoints     Number of discrete points for spike contour resolution;
-     *                           must be ≥ 2
+     *                           must be â‰¥ 2
      * @throws IllegalArgumentException if any geometric parameter is out of range
      */
     public AerospikeNozzle(NozzleDesignParameters parameters,
@@ -140,7 +140,7 @@ public class AerospikeNozzle {
     }
 
     // -------------------------------------------------------------------------
-    // Geometry — delegated to AerospikeContour
+    // Geometry â€” delegated to AerospikeContour
     // -------------------------------------------------------------------------
 
     /**
@@ -153,8 +153,8 @@ public class AerospikeNozzle {
     public List<Point2D> getFullSpikeContour()    { return contour.getFullSpikeContour(); }
 
     /**
-     * Returns the truncated spike contour — only the portion of the full spike up to
-     * {@code truncationFraction × fullSpikeLength}.
+     * Returns the truncated spike contour â€” only the portion of the full spike up to
+     * {@code truncationFraction Ã— fullSpikeLength}.
      *
      * @return List of {@link Point2D} for the truncated spike, never empty after generation
      */
@@ -170,7 +170,7 @@ public class AerospikeNozzle {
     /**
      * Returns the axial length of the truncated spike.
      *
-     * @return Truncated spike length = {@code truncationFraction × fullSpikeLength} in metres
+     * @return Truncated spike length = {@code truncationFraction Ã— fullSpikeLength} in metres
      */
     public double getTruncatedLength()             { return contour.getTruncatedLength(); }
 
@@ -178,9 +178,9 @@ public class AerospikeNozzle {
      * Returns the annular throat flow area.
      *
      * <p>The annular throat is bounded by the outer cowl lip at radius {@code rt} and the
-     * spike surface at radius {@code ri = rt × spikeRadiusRatio}.
+     * spike surface at radius {@code ri = rt Ã— spikeRadiusRatio}.
      *
-     * @return Annular throat area in m²; {@code π(rt² − ri²)}
+     * @return Annular throat area in mÂ²; {@code Ï€(rtÂ² âˆ’ riÂ²)}
      */
     public double getAnnularThroatArea()           { return contour.getAnnularThroatArea(); }
 
@@ -188,10 +188,10 @@ public class AerospikeNozzle {
      * Returns the annular exit area of the full ideal aerospike.
      *
      * <p>The exit area is computed from mass-flow conservation:
-     * {@code Ae = At × (Ae/At)} where {@code Ae/At} is the isentropic area ratio at
+     * {@code Ae = At Ã— (Ae/At)} where {@code Ae/At} is the isentropic area ratio at
      * the design exit Mach number.
      *
-     * @return Design exit area in m²
+     * @return Design exit area in mÂ²
      */
     public double getAnnularExitArea()             { return contour.getAnnularExitArea(); }
 
@@ -219,16 +219,16 @@ public class AerospikeNozzle {
      *       boundary is compressed inward; the flow adapts to area ratio
      *       {@code A(M_pa)/At} with no separation or shock losses.  The thrust is
      *       purely momentum (pe = pa exactly, no pressure term).</li>
-     *   <li><b>Under-expanded (high altitude, {@code M_pa ≥ M_exit})</b>: the spike tip
+     *   <li><b>Under-expanded (high altitude, {@code M_pa â‰¥ M_exit})</b>: the spike tip
      *       is the design exit; flow continues to expand freely beyond the tip.
      *       The thrust equals the design momentum thrust plus a positive pressure term
-     *       {@code (pe_design − pa) · Ae/At / pc}.</li>
+     *       {@code (pe_design âˆ’ pa) Â· Ae/At / pc}.</li>
      * </ul>
      *
      * <p>For the truncated spike an additional base-thrust term is added:
-     * {@code Cf_base = (pb − pa) × A_base / (pc × At)} where the base pressure
+     * {@code Cf_base = (pb âˆ’ pa) Ã— A_base / (pc Ã— At)} where the base pressure
      * {@code pb = 0} (conservative: the base face is in a vacuum relative to the
-     * recirculation) — this is the worst case; in practice base recirculation raises
+     * recirculation) â€” this is the worst case; in practice base recirculation raises
      * {@code pb} toward {@code pa}, recovering most of the area.
      *
      * @param ambientPressure Ambient (freestream) static pressure in Pa; must be positive
@@ -246,7 +246,7 @@ public class AerospikeNozzle {
 
         double cf;
         if (mPa <= mExit) {
-            // Over-compressed: aerospike adapts to mPa — momentum thrust only, no pressure term.
+            // Over-compressed: aerospike adapts to mPa â€” momentum thrust only, no pressure term.
             cf = momentumThrustCoefficient(gas, mPa);
         } else {
             // Under-expanded: design Mach used; positive pressure-recovery term.
@@ -258,8 +258,8 @@ public class AerospikeNozzle {
 
         // Base-thrust correction for truncated spike.
         // Conservative: base pressure = ambientPressure (no recirculation bonus).
-        // Net base-thrust term = 0 (pb − pa = 0), so this term is elided here.
-        // Non-conservative designs may add: (pb - pa) * pi*r_tip² / (pc * At)
+        // Net base-thrust term = 0 (pb âˆ’ pa = 0), so this term is elided here.
+        // Non-conservative designs may add: (pb - pa) * pi*r_tipÂ² / (pc * At)
 
         return Math.max(0.0, cf);
     }
@@ -364,18 +364,18 @@ public class AerospikeNozzle {
      * fraction of chamber pressure, i.e. solves {@code pe/pc = p_ratio} for {@code M}.
      *
      * <p>From the isentropic relation:
-     * {@code p/p0 = (1 + (γ−1)/2 · M²)^(−γ/(γ−1))}
+     * {@code p/p0 = (1 + (Î³âˆ’1)/2 Â· MÂ²)^(âˆ’Î³/(Î³âˆ’1))}
      *
-     * @param gas    Gas properties (used for γ)
+     * @param gas    Gas properties (used for Î³)
      * @param pRatio {@code pa / pc}; must be in (0, 1)
      * @return Supersonic Mach number corresponding to this pressure ratio; clamped to
-     *         the range [1, ∞) — returns 1.0 if the pressure ratio implies sonic or
+     *         the range [1, âˆž) â€” returns 1.0 if the pressure ratio implies sonic or
      *         subsonic conditions
      */
     private static double machFromChamberPressureRatio(GasProperties gas, double pRatio) {
         double gm1     = gas.gamma() - 1.0;
-        double exponent = -gm1 / gas.gamma();  // -(γ-1)/γ
-        double bracket  = Math.pow(pRatio, exponent) - 1.0; // (p0/p)^((γ-1)/γ) - 1
+        double exponent = -gm1 / gas.gamma();  // -(Î³-1)/Î³
+        double bracket  = Math.pow(pRatio, exponent) - 1.0; // (p0/p)^((Î³-1)/Î³) - 1
         if (bracket <= 0.0) {
             return 1.0;  // subsonic or sonic: pRatio >= throat critical pressure ratio
         }
@@ -386,7 +386,7 @@ public class AerospikeNozzle {
      * Computes the momentum contribution to the thrust coefficient for a given exit Mach.
      *
      * <p>Uses the standard isentropic thrust-coefficient formula:
-     * {@code Cf_mom = sqrt( 2γ²/(γ−1) · (2/(γ+1))^((γ+1)/(γ−1)) · (1 − (pe/pc)^((γ−1)/γ)) )}
+     * {@code Cf_mom = sqrt( 2Î³Â²/(Î³âˆ’1) Â· (2/(Î³+1))^((Î³+1)/(Î³âˆ’1)) Â· (1 âˆ’ (pe/pc)^((Î³âˆ’1)/Î³)) )}
      *
      * @param gas  Gas properties
      * @param mach Exit Mach number

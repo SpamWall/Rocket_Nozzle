@@ -22,7 +22,7 @@ package com.nozzle.thermal;
 
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.NozzleContour;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,11 +37,11 @@ import java.util.List;
  *
  * <p>At each axial station the model computes:
  * <ul>
- *   <li>Local surface temperature — taken from the supplied heat-transfer
+ *   <li>Local surface temperature â€” taken from the supplied heat-transfer
  *       profile (gas-side wall temperature), or estimated as 30 % of the
  *       chamber stagnation temperature when no profile is provided</li>
  *   <li>Instantaneous char rate [m/s] from the Arrhenius expression
- *       {@code ṙ = A · exp(−Ea / (R · T_surface))}</li>
+ *       {@code á¹™ = A Â· exp(âˆ’Ea / (R Â· T_surface))}</li>
  *   <li>Cumulative recession depth [m] integrated over the specified burn
  *       time using a uniform time step</li>
  *   <li>Remaining liner thickness [m] clamped to zero at perforation, and a
@@ -55,12 +55,12 @@ import java.util.List;
  * appropriate for margin estimation.
  *
  * <p>Reference: Sutton, G.P. &amp; Biblarz, O., <em>Rocket Propulsion
- * Elements</em>, 9th ed., §12.5; Tewari, A., <em>Atmospheric and Space
- * Flight Dynamics</em>, Birkhäuser 2007, Appendix C.
+ * Elements</em>, 9th ed., Â§12.5; Tewari, A., <em>Atmospheric and Space
+ * Flight Dynamics</em>, BirkhÃ¤user 2007, Appendix C.
  */
 public class AblativeNozzleModel {
 
-    /** Universal gas constant in J/(mol·K). */
+    /** Universal gas constant in J/(molÂ·K). */
     private static final double R_UNIVERSAL = 8.314462;
 
     /**
@@ -80,7 +80,7 @@ public class AblativeNozzleModel {
 
     /**
      * Mechanical (particle-impingement) erosion factor {@code k_e} [m/s].
-     * The erosion supplement {@code ṙ_mech = k_e · (P_c / P_ref)^0.8} is
+     * The erosion supplement {@code á¹™_mech = k_e Â· (P_c / P_ref)^0.8} is
      * added to the Arrhenius rate at every station.  The default value of 0
      * disables mechanical erosion, preserving the pure-Arrhenius behavior.
      */
@@ -137,7 +137,7 @@ public class AblativeNozzleModel {
      * Sets the number of uniform time steps for the recession integration.
      * More steps give higher accuracy at the cost of additional computation.
      *
-     * @param steps Number of time steps (must be ≥ 1)
+     * @param steps Number of time steps (must be â‰¥ 1)
      * @return This instance
      */
     public AblativeNozzleModel setTimeSteps(int steps) {
@@ -148,29 +148,29 @@ public class AblativeNozzleModel {
     /**
      * Sets the mechanical (particle-impingement) erosion factor {@code k_e}.
      *
-     * <p>In solid-rocket motors the exhaust is laden with alumina (Al₂O₃)
+     * <p>In solid-rocket motors the exhaust is laden with alumina (Alâ‚‚Oâ‚ƒ)
      * particles that mechanically erode the char layer in addition to the
      * thermal pyrolysis captured by the Arrhenius expression.  The erosion
      * supplement is modeled as:
      *
-     * <pre>  ṙ_mech = k_e · (P_c / P_ref)^0.8</pre>
+     * <pre>  á¹™_mech = k_e Â· (P_c / P_ref)^0.8</pre>
      *
      * where {@code P_ref = 1 MPa} and the {@code 0.8} exponent mirrors the
      * Bartz pressure scaling for convective heat flux.  The total surface
      * recession rate at each station is therefore:
      *
-     * <pre>  ṙ_total = A · exp(−Ea / (R · T_surface)) + k_e · (P_c / P_ref)^0.8</pre>
+     * <pre>  á¹™_total = A Â· exp(âˆ’Ea / (R Â· T_surface)) + k_e Â· (P_c / P_ref)^0.8</pre>
      *
      * <p>Typical values for alumina-loaded SRM propellants:
      * <ul>
-     *   <li>Carbon-phenolic throat: {@code k_e ≈ 0.5–2 × 10⁻⁵} m/s</li>
-     *   <li>Silica-phenolic extension: {@code k_e ≈ 1–4 × 10⁻⁵} m/s</li>
+     *   <li>Carbon-phenolic throat: {@code k_e â‰ˆ 0.5â€“2 Ã— 10â»âµ} m/s</li>
+     *   <li>Silica-phenolic extension: {@code k_e â‰ˆ 1â€“4 Ã— 10â»âµ} m/s</li>
      * </ul>
      *
      * <p>Set to 0 (default) to disable mechanical erosion and use the pure
      * Arrhenius model.
      *
-     * @param factor Erosion factor in m/s (must be ≥ 0)
+     * @param factor Erosion factor in m/s (must be â‰¥ 0)
      * @return This instance
      * @throws IllegalArgumentException if {@code factor} is negative
      */
@@ -189,7 +189,7 @@ public class AblativeNozzleModel {
      * <p>The gas-side wall temperature at each axial station is taken from the
      * nearest point in {@code heatProfile}.  When {@code heatProfile} is
      * {@code null} or empty a fallback surface temperature of
-     * {@code 0.3 × T_chamber} is used instead.
+     * {@code 0.3 Ã— T_chamber} is used instead.
      *
      * @param heatProfile Wall thermal profile from {@link HeatTransferModel};
      *                    may be {@code null}
@@ -252,7 +252,7 @@ public class AblativeNozzleModel {
      * steady-state wall temperature from the heat-transfer model).  The char
      * depth is clamped to {@code initialLinerThickness} to represent complete
      * liner consumption; the remaining thickness is computed exactly as
-     * {@code initialLinerThickness − charDepth}.
+     * {@code initialLinerThickness âˆ’ charDepth}.
      *
      * @param x         Axial position in m
      * @param y         Radial position in m
@@ -263,12 +263,12 @@ public class AblativeNozzleModel {
         double dt = burnTime / timeSteps;
         double charDepth = 0.0;
 
-        // Arrhenius pyrolysis term — constant because T_surface is held fixed.
+        // Arrhenius pyrolysis term â€” constant because T_surface is held fixed.
         double totalCharRate = getTotalCharRate(T_surface);
 
         // Both rate terms are constant for this station (T_surface is held fixed,
         // erosionFactor and Pc are global constants).  The Euler loop is retained
-        // rather than collapsed to the closed form min(thickness, rate·burnTime)
+        // rather than collapsed to the closed form min(thickness, rateÂ·burnTime)
         // so that future callers can override integrateRecession() and introduce
         // temperature-history feedback (e.g. insulating char-layer growth) without
         // restructuring the loop.
@@ -288,12 +288,12 @@ public class AblativeNozzleModel {
      * combining the Arrhenius pyrolysis rate with the mechanical erosion supplement.
      *
      * <p>The total rate is:
-     * <pre>  ṙ_total = A · exp(−Ea / (R · T_surface)) + k_e · (P_c / P_ref)^0.8</pre>
+     * <pre>  á¹™_total = A Â· exp(âˆ’Ea / (R Â· T_surface)) + k_e Â· (P_c / P_ref)^0.8</pre>
      *
      * <p>The first term is the Arrhenius (thermal pyrolysis) contribution, where
      * {@code A} and {@code Ea} are the pre-exponential factor and activation energy
      * of the current {@link AblativeMaterial}, and {@code R} is the universal gas
-     * constant (8.314462 J/(mol·K)).
+     * constant (8.314462 J/(molÂ·K)).
      *
      * <p>The second term is the mechanical erosion supplement from particle
      * impingement (see {@link #setErosionFactor(double)}).  It scales as
@@ -316,7 +316,7 @@ public class AblativeNozzleModel {
         double arrheniusRate = material.preExponentialFactor()
                 * Math.exp(-material.activationEnergy() / (R_UNIVERSAL * T_surface));
 
-        // Mechanical erosion supplement from particle impingement (§ setErosionFactor).
+        // Mechanical erosion supplement from particle impingement (Â§ setErosionFactor).
         // Scales as (P_c / P_ref)^0.8, consistent with Bartz heat-flux pressure exponent.
         double mechanicalRate = erosionFactor
                 * Math.pow(parameters.chamberPressure() / P_REF, 0.8);
@@ -367,7 +367,7 @@ public class AblativeNozzleModel {
 
     /**
      * Returns {@code true} if the liner has been completely consumed
-     * ({@code recessDepth ≥ initialLinerThickness}) at any axial station.
+     * ({@code recessDepth â‰¥ initialLinerThickness}) at any axial station.
      *
      * @return {@code true} if any station is perforated
      */
@@ -376,17 +376,17 @@ public class AblativeNozzleModel {
     }
 
     /**
-     * Returns the ablated mass per unit annular area [kg/m²] at each axial
+     * Returns the ablated mass per unit annular area [kg/mÂ²] at each axial
      * station, in the same order as {@link #getProfile()}.
      *
      * <p>The ablated mass per unit area at station {@code i} is:
-     * <pre>  Δm_i = ρ_material · recessDepth_i</pre>
+     * <pre>  Î”m_i = Ï_material Â· recessDepth_i</pre>
      *
      * <p>This quantity is useful for mass-budget analysis: multiply by the
-     * local annular area {@code 2π r Δx} to obtain the absolute mass loss at
+     * local annular area {@code 2Ï€ r Î”x} to obtain the absolute mass loss at
      * each station.
      *
-     * @return List of ablated mass per unit area [kg/m²]; empty before
+     * @return List of ablated mass per unit area [kg/mÂ²]; empty before
      *         {@link #calculate} is called
      */
     public List<Double> getAblatedMassPerStation() {
@@ -401,9 +401,9 @@ public class AblativeNozzleModel {
      * contour using the trapezoidal rule on the annular surface area.
      *
      * <p>Each adjacent pair of axial stations defines an annular frustum of
-     * width {@code Δx} and mean radius {@code (r_i + r_{i+1}) / 2}.  The
+     * width {@code Î”x} and mean radius {@code (r_i + r_{i+1}) / 2}.  The
      * ablated mass of that frustum is:
-     * <pre>  Δm = ρ · (recession_i + recession_{i+1}) / 2 · 2π · r_mean · |Δx|</pre>
+     * <pre>  Î”m = Ï Â· (recession_i + recession_{i+1}) / 2 Â· 2Ï€ Â· r_mean Â· |Î”x|</pre>
      *
      * @return Total ablated mass in kg; 0 if fewer than two stations are
      *         available or {@link #calculate} has not been called
@@ -443,7 +443,7 @@ public class AblativeNozzleModel {
      * @param recessDepth        Cumulative recession depth in m (clamped to
      *                           {@code initialThickness} at perforation)
      * @param remainingThickness Remaining virgin liner thickness in m;
-     *                           {@code initialThickness − recessDepth}; ≥ 0
+     *                           {@code initialThickness âˆ’ recessDepth}; â‰¥ 0
      * @param initialThickness   Initial liner thickness in m as set on the model
      * @param isPerforated       {@code true} when {@code recessDepth} reached
      *                           {@code initialThickness}
@@ -482,18 +482,18 @@ public class AblativeNozzleModel {
      * thermal conductivities for the char and virgin-material layers.
      *
      * <p>All built-in presets are calibrated to representative values from
-     * open literature (Sutton &amp; Biblarz, §12.5) to produce char rates in
-     * the range 0.01–5 mm/s at gas-side wall temperatures of 500–1 500 K.
+     * open literature (Sutton &amp; Biblarz, Â§12.5) to produce char rates in
+     * the range 0.01â€“5 mm/s at gas-side wall temperatures of 500â€“1 500 K.
      *
      * @param name                      Human-readable material name
-     * @param preExponentialFactor      {@code A} [m/s] in {@code ṙ = A·exp(−Ea/(R·T))}
+     * @param preExponentialFactor      {@code A} [m/s] in {@code á¹™ = AÂ·exp(âˆ’Ea/(RÂ·T))}
      * @param activationEnergy          {@code Ea} [J/mol]; higher values give a
      *                                  steeper Arrhenius temperature sensitivity
      * @param charThermalConductivity   Thermal conductivity of the char layer
-     *                                  {@code k_char} [W/(m·K)]
+     *                                  {@code k_char} [W/(mÂ·K)]
      * @param virginThermalConductivity Thermal conductivity of the uncharred
-     *                                  material {@code k_virgin} [W/(m·K)]
-     * @param density                   Material density [kg/m³]
+     *                                  material {@code k_virgin} [W/(mÂ·K)]
+     * @param density                   Material density [kg/mÂ³]
      */
     public record AblativeMaterial(
             String name,
@@ -508,7 +508,7 @@ public class AblativeNozzleModel {
          * Returns the instantaneous Arrhenius char rate [m/s] at the given
          * surface temperature, without any mechanical erosion supplement.
          *
-         * <pre>  ṙ(T) = A · exp(−Ea / (R · T))</pre>
+         * <pre>  á¹™(T) = A Â· exp(âˆ’Ea / (R Â· T))</pre>
          *
          * <p>This convenience method is useful for generating material char-rate
          * curves and for sensitivity studies without constructing a full model.
@@ -522,75 +522,75 @@ public class AblativeNozzleModel {
         }
 
         /**
-         * Carbon-phenolic — the preferred high-performance ablative for
+         * Carbon-phenolic â€” the preferred high-performance ablative for
          * solid-rocket motor nozzles and re-entry vehicles.  High activation
          * energy gives low char rates at moderate temperatures; the dense char
          * layer provides excellent structural strength and insulation.
          *
-         * <p>Char rate ≈ 0.22 mm/s at 1 000 K; ≈ 0.89 mm/s at 1 200 K.
+         * <p>Char rate â‰ˆ 0.22 mm/s at 1 000 K; â‰ˆ 0.89 mm/s at 1 200 K.
          */
         public static final AblativeMaterial CARBON_PHENOLIC = new AblativeMaterial(
                 "Carbon-Phenolic",
                 1.0,       // A  [m/s]
                 7.0e4,     // Ea [J/mol]
-                1.0,       // k_char   [W/(m·K)]
-                0.4,       // k_virgin [W/(m·K)]
-                1600.0     // ρ  [kg/m³]
+                1.0,       // k_char   [W/(mÂ·K)]
+                0.4,       // k_virgin [W/(mÂ·K)]
+                1600.0     // Ï  [kg/mÂ³]
         );
 
         /**
-         * Silica-phenolic — lower density than carbon-phenolic; used where
+         * Silica-phenolic â€” lower density than carbon-phenolic; used where
          * weight budget is tight and heat loads are moderate (e.g. upper-stage
          * SRM nozzle extensions).
          *
-         * <p>Char rate ≈ 0.30 mm/s at 1 000 K; slightly less than carbon-phenolic.
+         * <p>Char rate â‰ˆ 0.30 mm/s at 1 000 K; slightly less than carbon-phenolic.
          */
         public static final AblativeMaterial SILICA_PHENOLIC = new AblativeMaterial(
                 "Silica-Phenolic",
                 0.8,       // A  [m/s]
                 6.5e4,     // Ea [J/mol]
-                0.6,       // k_char   [W/(m·K)]
-                0.35,      // k_virgin [W/(m·K)]
-                1400.0     // ρ  [kg/m³]
+                0.6,       // k_char   [W/(mÂ·K)]
+                0.35,      // k_virgin [W/(mÂ·K)]
+                1400.0     // Ï  [kg/mÂ³]
         );
 
         /**
-         * EPDM rubber — lower cost, lower activation energy; suitable for
+         * EPDM rubber â€” lower cost, lower activation energy; suitable for
          * moderate heat-flux nozzle extensions and motor cases.  Chars quickly
          * at relatively low surface temperatures.
          *
-         * <p>Char rate ≈ 2.2 mm/s at 1 000 K.
+         * <p>Char rate â‰ˆ 2.2 mm/s at 1 000 K.
          */
         public static final AblativeMaterial EPDM = new AblativeMaterial(
                 "EPDM",
                 0.5,       // A  [m/s]
                 4.5e4,     // Ea [J/mol]
-                0.4,       // k_char   [W/(m·K)]
-                0.25,      // k_virgin [W/(m·K)]
-                1150.0     // ρ  [kg/m³]
+                0.4,       // k_char   [W/(mÂ·K)]
+                0.25,      // k_virgin [W/(mÂ·K)]
+                1150.0     // Ï  [kg/mÂ³]
         );
 
         /**
-         * Graphite — used for high-temperature throat inserts in SRMs.
+         * Graphite â€” used for high-temperature throat inserts in SRMs.
          * Very low pre-exponential factor gives negligible char rate at the
          * wall temperatures reached with active or ablative insulation; failure
          * mode is mechanical erosion rather than pyrolysis.
          *
-         * <p>Char rate ≈ 0.0007 mm/s at 1 000 K.
+         * <p>Char rate â‰ˆ 0.0007 mm/s at 1 000 K.
          */
         public static final AblativeMaterial GRAPHITE = new AblativeMaterial(
                 "Graphite",
                 1.0e-3,    // A  [m/s]
                 6.0e4,     // Ea [J/mol]
-                120.0,     // k_char   [W/(m·K)]
-                60.0,      // k_virgin [W/(m·K)]
-                1800.0     // ρ  [kg/m³]
+                120.0,     // k_char   [W/(mÂ·K)]
+                60.0,      // k_virgin [W/(mÂ·K)]
+                1800.0     // Ï  [kg/mÂ³]
         );
 
         /**
-         * Carbon–carbon (C/C) composite — the preferred material for
+         * Carbonâ€“carbon (C/C) composite â€” the preferred material for
          * high-performance SRM nozzle throat inserts and exit-cone liners
-         * operating above ≈ 2 500 K.  The woven carbon–carbon structure
+         * operating above â‰ˆ 2 500 K.  The woven carbonâ€“carbon structure
          * oxidizes extremely slowly via the Arrhenius mechanism; the dominant
          * failure mode is sublimation and particle-impingement erosion rather
          * than classic pyrolysis.
@@ -601,7 +601,7 @@ public class AblativeNozzleModel {
          * the alumina-particle erosion that governs C/C throat recession in
          * aluminised SRM propellants.
          *
-         * <p>Char rate ≈ 2.0 × 10⁻⁵ mm/s at 2 500 K (Arrhenius only);
+         * <p>Char rate â‰ˆ 2.0 Ã— 10â»âµ mm/s at 2 500 K (Arrhenius only);
          * mechanical erosion typically dominates.
          *
          * <p>References: Kuo &amp; Acharya, <em>Fundamentals of Solid-Propellant
@@ -610,11 +610,11 @@ public class AblativeNozzleModel {
          */
         public static final AblativeMaterial CARBON_CARBON = new AblativeMaterial(
                 "Carbon-Carbon Composite",
-                5.0e-5,    // A  [m/s] — very low, sublimation-limited
-                1.1e5,     // Ea [J/mol] — high barrier; C oxidation kinetics
-                50.0,      // k_char   [W/(m·K)] — C/C retains high k even charred
-                40.0,      // k_virgin [W/(m·K)]
-                1900.0     // ρ  [kg/m³]
+                5.0e-5,    // A  [m/s] â€” very low, sublimation-limited
+                1.1e5,     // Ea [J/mol] â€” high barrier; C oxidation kinetics
+                50.0,      // k_char   [W/(mÂ·K)] â€” C/C retains high k even charred
+                40.0,      // k_virgin [W/(mÂ·K)]
+                1900.0     // Ï  [kg/mÂ³]
         );
     }
 }

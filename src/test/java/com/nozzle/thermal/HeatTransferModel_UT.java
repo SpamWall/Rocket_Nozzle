@@ -23,7 +23,7 @@ package com.nozzle.thermal;
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.NozzleContour;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.CharacteristicPoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -231,7 +231,7 @@ class HeatTransferModel_UT {
             HeatTransferModel model = new HeatTransferModel(params, contour)
                     .calculate(List.of());
 
-            // Recovery temperature = static temp * (1 + r*(γ-1)/2*M²) > static temp
+            // Recovery temperature = static temp * (1 + r*(Î³-1)/2*MÂ²) > static temp
             // The fallback static temp is 0.8 * Tc; recovery temp should be above that
             double fallbackStaticTemp = params.chamberTemperature() * 0.8;
             for (HeatTransferModel.WallThermalPoint point : model.getWallThermalProfile()) {
@@ -266,7 +266,7 @@ class HeatTransferModel_UT {
         @Test
         @DisplayName("calculate() auto-generates contour when none was pre-built (line 108 TRUE)")
         void calculateAutoGeneratesContourWhenEmpty() {
-            // Pass a contour that has NOT been generate()'d → isEmpty() TRUE
+            // Pass a contour that has NOT been generate()'d â†’ isEmpty() TRUE
             NozzleContour emptyContour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
             HeatTransferModel model = new HeatTransferModel(params, emptyContour)
                     .calculate(List.of());
@@ -288,7 +288,7 @@ class HeatTransferModel_UT {
         @Test
         @DisplayName("calculate(null) covers null flowPoints branch (line 167 a=true)")
         void calculateWithNullFlowPointsCoversNullBranch() {
-            // flowPoints == null → short-circuits to null, nearestFlow falls back to defaults
+            // flowPoints == null â†’ short-circuits to null, nearestFlow falls back to defaults
             HeatTransferModel model = new HeatTransferModel(params, contour)
                     .calculate(null);
 
@@ -298,8 +298,8 @@ class HeatTransferModel_UT {
         @Test
         @DisplayName("calculate with non-empty flowPoints covers nearest-flow branches (lines 167,174,178,123,125)")
         void calculateWithNonEmptyFlowPointsCoversNearestFlowBranches() {
-            // flowPoints != null and non-empty → all findNearestFlowPoint branches hit
-            // nearestFlow != null → TRUE branches on lines 123+125 covered
+            // flowPoints != null and non-empty â†’ all findNearestFlowPoint branches hit
+            // nearestFlow != null â†’ TRUE branches on lines 123+125 covered
             List<CharacteristicPoint> flowPoints = List.of(
                     flowPoint(0.01, 0.06, 1.5, 2500),
                     flowPoint(0.03, 0.08, 2.0, 2000),
@@ -323,7 +323,7 @@ class HeatTransferModel_UT {
         @Test
         @DisplayName("Non-empty channel profile uses channel h_coolant (line 131 a=true, b=true)")
         void calculateWithCalculatedChannelUsesChannelCoeff() {
-            // CoolantChannel.calculate() fills channelProfile → !isEmpty() TRUE
+            // CoolantChannel.calculate() fills channelProfile â†’ !isEmpty() TRUE
             CoolantChannel channel = new CoolantChannel(contour)
                     .setCoolant(CoolantChannel.CoolantProperties.RP1, 2.0, 300.0, 8e6)
                     .calculate();
@@ -338,7 +338,7 @@ class HeatTransferModel_UT {
         @Test
         @DisplayName("Empty channel profile falls back to fixed h_coolant (line 131 a=true, b=false)")
         void calculateWithUncalculatedChannelUsesDefaultCoeff() {
-            // CoolantChannel not calculate()'d → channelProfile empty → !isEmpty() FALSE
+            // CoolantChannel not calculate()'d â†’ channelProfile empty â†’ !isEmpty() FALSE
             CoolantChannel channel = new CoolantChannel(contour);  // no calculate() call
 
             HeatTransferModel model = new HeatTransferModel(params, contour)
@@ -356,7 +356,7 @@ class HeatTransferModel_UT {
         @Test
         @DisplayName("Fewer than 3 contour points returns throatRadius early (line 255 TRUE)")
         void fewContourPointsReturnThroatRadiusEarly() {
-            // generate(2) → 2 points → pts.size() < 3 → early return in localRadiusOfCurvature
+            // generate(2) â†’ 2 points â†’ pts.size() < 3 â†’ early return in localRadiusOfCurvature
             NozzleContour tinyContour = new NozzleContour(NozzleContour.ContourType.RAO_BELL, params);
             tinyContour.generate(2);
 
@@ -368,9 +368,9 @@ class HeatTransferModel_UT {
         }
 
         @Test
-        @DisplayName("Straight conical wall gives d2ydx2 ≈ 0, triggering cap branch (line 286 TRUE)")
+        @DisplayName("Straight conical wall gives d2ydx2 â‰ˆ 0, triggering cap branch (line 286 TRUE)")
         void conicalContourTriggersNearStraightWallCap() {
-            // Conical wall: y = const + x*tan(θ) → perfectly straight → d2ydx2 = 0 → line 286 TRUE
+            // Conical wall: y = const + x*tan(Î¸) â†’ perfectly straight â†’ d2ydx2 = 0 â†’ line 286 TRUE
             NozzleContour conical = new NozzleContour(NozzleContour.ContourType.CONICAL, params);
             conical.generate(50);
 
@@ -383,14 +383,14 @@ class HeatTransferModel_UT {
         @Test
         @DisplayName("First two points share x triggers h1 < 1e-12 branch (line 277 a=TRUE)")
         void identicalFirstXCoordinatesTriggersH1Branch() throws Exception {
-            // pts[0].x == pts[1].x → h1 = 0 < 1e-12 → short-circuit TRUE (a=true branch)
+            // pts[0].x == pts[1].x â†’ h1 = 0 < 1e-12 â†’ short-circuit TRUE (a=true branch)
             NozzleContour injected = new NozzleContour(NozzleContour.ContourType.CONICAL, params);
             Field cpField = NozzleContour.class.getDeclaredField("contourPoints");
             cpField.setAccessible(true);
             @SuppressWarnings("unchecked")
             List<Point2D> pts = (List<Point2D>) cpField.get(injected);
             pts.add(new Point2D(0.010, 0.060));
-            pts.add(new Point2D(0.010, 0.061));  // same x → h1 = 0 < 1e-12
+            pts.add(new Point2D(0.010, 0.061));  // same x â†’ h1 = 0 < 1e-12
             pts.add(new Point2D(0.020, 0.070));
 
             HeatTransferModel model = new HeatTransferModel(params, injected)
@@ -402,7 +402,7 @@ class HeatTransferModel_UT {
         @Test
         @DisplayName("Last two points share x triggers h2 < 1e-12 branch (line 277 a=false,b=TRUE)")
         void identicalLastXCoordinatesTriggersH2Branch() throws Exception {
-            // pts[1].x == pts[2].x → h1 normal, h2 = 0 < 1e-12 → TRUE via second operand (b=true branch)
+            // pts[1].x == pts[2].x â†’ h1 normal, h2 = 0 < 1e-12 â†’ TRUE via second operand (b=true branch)
             NozzleContour injected = new NozzleContour(NozzleContour.ContourType.CONICAL, params);
             Field cpField = NozzleContour.class.getDeclaredField("contourPoints");
             cpField.setAccessible(true);
@@ -410,7 +410,7 @@ class HeatTransferModel_UT {
             List<Point2D> pts = (List<Point2D>) cpField.get(injected);
             pts.add(new Point2D(0.010, 0.060));
             pts.add(new Point2D(0.020, 0.070));
-            pts.add(new Point2D(0.020, 0.071));  // same x as pts[1] → h2 = 0 < 1e-12
+            pts.add(new Point2D(0.020, 0.071));  // same x as pts[1] â†’ h2 = 0 < 1e-12
 
             HeatTransferModel model = new HeatTransferModel(params, injected)
                     .calculate(List.of());
@@ -431,7 +431,7 @@ class HeatTransferModel_UT {
             HeatTransferModel model = new HeatTransferModel(params, contour)
                     .calculate(List.of());
 
-            contour.generate(5);  // shrink contour — thermal profile still has 50 entries
+            contour.generate(5);  // shrink contour â€” thermal profile still has 50 entries
 
             double heat = model.getTotalHeatLoad();
             assertThat(heat).isNotNaN();

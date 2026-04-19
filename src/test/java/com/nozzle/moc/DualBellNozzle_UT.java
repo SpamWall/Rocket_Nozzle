@@ -22,7 +22,7 @@ package com.nozzle.moc;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -39,13 +39,13 @@ import static org.assertj.core.api.Assertions.*;
  * and the key physics requirement that high-altitude Isp exceeds sea-level Isp.
  * Expected numeric ranges are derived from published dual-bell literature
  * (Hagemann et al., AIAA-96-2958; Immich &amp; Caporicci, AIAA-96-3008) and
- * are intentionally wide to accommodate the parabolic Bézier approximation.
+ * are intentionally wide to accommodate the parabolic BÃ©zier approximation.
  *
- * <p>Section 7 adds a constant-γ analytical verification that cross-checks the
+ * <p>Section 7 adds a constant-Î³ analytical verification that cross-checks the
  * thrust-coefficient formula against a hand-computable isentropic result.  The
- * geometry mirrors the DLR subscale nozzle characterized by Génin &amp; Stark
- * (<em>Shock Waves</em> 19, 265–270, 2009): R_th = 9 mm, ε_b = 3.9, ε_e ≈ 7.1,
- * kink angle = 15°, cold-flow N₂ (γ = 1.4).
+ * geometry mirrors the DLR subscale nozzle characterized by GÃ©nin &amp; Stark
+ * (<em>Shock Waves</em> 19, 265â€“270, 2009): R_th = 9 mm, Îµ_b = 3.9, Îµ_e â‰ˆ 7.1,
+ * kink angle = 15Â°, cold-flow Nâ‚‚ (Î³ = 1.4).
  *
  * <h2>Shared design conditions</h2>
  * <pre>
@@ -239,7 +239,7 @@ class DualBellNozzle_UT {
         @Test
         @DisplayName("Wall radius decreases briefly after the kink (inward re-inflection)")
         void radiusDecreasesPastKink() {
-            // Use an explicit kink angle of 5° to make the dip clearly detectable.
+            // Use an explicit kink angle of 5Â° to make the dip clearly detectable.
             DualBellNozzle nozzle = new DualBellNozzle(
                     params, 4.0, 0.8, 0.8, Math.toRadians(5.0), 200).generate();
             List<Point2D> pts = nozzle.getContourPoints();
@@ -303,14 +303,14 @@ class DualBellNozzle_UT {
         }
 
         @Test
-        @DisplayName("Sea-level Isp is in a physically plausible range (100–500 s)")
+        @DisplayName("Sea-level Isp is in a physically plausible range (100â€“500 s)")
         void seaLevelIspPlausible() {
             DualBellNozzle nozzle = new DualBellNozzle(params, 4.0).generate();
             assertThat(nozzle.getSeaLevelIsp()).isBetween(100.0, 500.0);
         }
 
         @Test
-        @DisplayName("High-altitude Isp is in a physically plausible range (100–600 s)")
+        @DisplayName("High-altitude Isp is in a physically plausible range (100â€“600 s)")
         void highAltIspPlausible() {
             DualBellNozzle nozzle = new DualBellNozzle(params, 4.0).generate();
             assertThat(nozzle.getHighAltitudeIsp()).isBetween(100.0, 600.0);
@@ -344,7 +344,7 @@ class DualBellNozzle_UT {
      * The dual-bell altitude-compensation benefit is most visible at high exit
      * Mach (large area ratio) where a single full Rao bell is badly over-expanded
      * at sea level.  At Me = 5 the LOX/RP-1 area ratio is ~76 and the full Rao
-     * bell has Isp ≈ 136 s at sea level; the dual-bell avoids this by separating
+     * bell has Isp â‰ˆ 136 s at sea level; the dual-bell avoids this by separating
      * at the kink (AR = 4) and achieves far better sea-level performance.
      */
     @Nested
@@ -404,7 +404,7 @@ class DualBellNozzle_UT {
     }
 
     // =========================================================================
-    //  7. calculateBaseAngles — branch coverage for lf ∈ [0.6, 0.8) and lf < 0.6
+    //  7. calculateBaseAngles â€” branch coverage for lf âˆˆ [0.6, 0.8) and lf < 0.6
     // =========================================================================
 
     /**
@@ -412,16 +412,16 @@ class DualBellNozzle_UT {
      * getInflectionAngle() and getBaseExitAngle().  The method has three
      * branches keyed on baseLengthFraction (lf):
      * <ul>
-     *   <li>lf ≥ 0.8  — inflection = 21 + 3(M−2)°,  exit = 8 − 0.5·ln(AR)</li>
-     *   <li>lf ≥ 0.6  — inflection = 25 + 4(M−2)°,  exit = 11 − 0.7·ln(AR)</li>
-     *   <li>default   — inflection = 30 + 5(M−2)°,  exit = 14 − 0.9·ln(AR)</li>
+     *   <li>lf â‰¥ 0.8  â€” inflection = 21 + 3(Mâˆ’2)Â°,  exit = 8 âˆ’ 0.5Â·ln(AR)</li>
+     *   <li>lf â‰¥ 0.6  â€” inflection = 25 + 4(Mâˆ’2)Â°,  exit = 11 âˆ’ 0.7Â·ln(AR)</li>
+     *   <li>default   â€” inflection = 30 + 5(Mâˆ’2)Â°,  exit = 14 âˆ’ 0.9Â·ln(AR)</li>
      * </ul>
-     * Both outputs are clamped: inflectionAngle ∈ [15°, 45°],
-     * baseExitAngle ≥ 1°.  The existing tests only exercise the lf ≥ 0.8
+     * Both outputs are clamped: inflectionAngle âˆˆ [15Â°, 45Â°],
+     * baseExitAngle â‰¥ 1Â°.  The existing tests only exercise the lf â‰¥ 0.8
      * branch; this class covers the remaining two.
      */
     @Nested
-    @DisplayName("calculateBaseAngles — lf ∈ [0.6, 0.8) and lf < 0.6 branches")
+    @DisplayName("calculateBaseAngles â€” lf âˆˆ [0.6, 0.8) and lf < 0.6 branches")
     class CalculateBaseAnglesTests {
 
         /** transitionAreaRatio used across all branch tests. */
@@ -439,10 +439,10 @@ class DualBellNozzle_UT {
                     params, AR, baseLf, 0.8, Math.toRadians(3.0), 200).generate();
         }
 
-        // ---- lf ∈ [0.6, 0.8) branch ----------------------------------------
+        // ---- lf âˆˆ [0.6, 0.8) branch ----------------------------------------
 
         @Test
-        @DisplayName("lf=0.7: inflectionAngle matches 25 + 4*(M−2)° formula")
+        @DisplayName("lf=0.7: inflectionAngle matches 25 + 4*(Mâˆ’2)Â° formula")
         void lf07InflectionAngleMatchesFormula() {
             DualBellNozzle nozzle = buildWith(0.7);
             double mach     = transitionMach();
@@ -453,7 +453,7 @@ class DualBellNozzle_UT {
         }
 
         @Test
-        @DisplayName("lf=0.7: baseExitAngle matches 11 − 0.7·ln(AR) formula")
+        @DisplayName("lf=0.7: baseExitAngle matches 11 âˆ’ 0.7Â·ln(AR) formula")
         void lf07BaseExitAngleMatchesFormula() {
             DualBellNozzle nozzle = buildWith(0.7);
             double expected = Math.max(
@@ -463,7 +463,7 @@ class DualBellNozzle_UT {
         }
 
         @Test
-        @DisplayName("lf=0.7: inflectionAngle is larger than lf=0.8 value (shorter bell → steeper initial angle)")
+        @DisplayName("lf=0.7: inflectionAngle is larger than lf=0.8 value (shorter bell â†’ steeper initial angle)")
         void lf07InflectionLargerThanLf08() {
             assertThat(buildWith(0.7).getInflectionAngle())
                     .isGreaterThan(buildWith(0.8).getInflectionAngle());
@@ -487,7 +487,7 @@ class DualBellNozzle_UT {
         // ---- lf < 0.6 (default) branch -------------------------------------
 
         @Test
-        @DisplayName("lf=0.4: inflectionAngle matches 30 + 5*(M−2)° formula")
+        @DisplayName("lf=0.4: inflectionAngle matches 30 + 5*(Mâˆ’2)Â° formula")
         void lf04InflectionAngleMatchesFormula() {
             DualBellNozzle nozzle = buildWith(0.4);
             double mach     = transitionMach();
@@ -498,7 +498,7 @@ class DualBellNozzle_UT {
         }
 
         @Test
-        @DisplayName("lf=0.4: baseExitAngle matches 14 − 0.9·ln(AR) formula")
+        @DisplayName("lf=0.4: baseExitAngle matches 14 âˆ’ 0.9Â·ln(AR) formula")
         void lf04BaseExitAngleMatchesFormula() {
             DualBellNozzle nozzle = buildWith(0.4);
             double expected = Math.max(
@@ -553,7 +553,7 @@ class DualBellNozzle_UT {
     }
 
     // =========================================================================
-    //  8. calculateExtensionAngles — branch coverage for lf ∈ [0.6, 0.8) and lf < 0.6
+    //  8. calculateExtensionAngles â€” branch coverage for lf âˆˆ [0.6, 0.8) and lf < 0.6
     // =========================================================================
 
     /**
@@ -561,15 +561,15 @@ class DualBellNozzle_UT {
      * getExtensionExitAngle().  It mirrors calculateBaseAngles() but uses
      * extensionLengthFraction and exitAreaRatio:
      * <ul>
-     *   <li>lf ≥ 0.8  — exit =  8 − 0.5·ln(exitAR)</li>
-     *   <li>lf ≥ 0.6  — exit = 11 − 0.7·ln(exitAR)</li>
-     *   <li>default   — exit = 14 − 0.9·ln(exitAR)</li>
+     *   <li>lf â‰¥ 0.8  â€” exit =  8 âˆ’ 0.5Â·ln(exitAR)</li>
+     *   <li>lf â‰¥ 0.6  â€” exit = 11 âˆ’ 0.7Â·ln(exitAR)</li>
+     *   <li>default   â€” exit = 14 âˆ’ 0.9Â·ln(exitAR)</li>
      * </ul>
-     * extensionExitAngle is clamped to ≥ 1°.  All existing tests pass
+     * extensionExitAngle is clamped to â‰¥ 1Â°.  All existing tests pass
      * extensionLengthFraction = 0.8 and therefore only exercise the first branch.
      */
     @Nested
-    @DisplayName("calculateExtensionAngles — lf ∈ [0.6, 0.8) and lf < 0.6 branches")
+    @DisplayName("calculateExtensionAngles â€” lf âˆˆ [0.6, 0.8) and lf < 0.6 branches")
     class CalculateExtensionAnglesTests {
 
         private static final double AR_TRANS = 4.0;
@@ -584,10 +584,10 @@ class DualBellNozzle_UT {
             return Math.max(Math.toRadians(constant - coefficient * ln), Math.toRadians(1.0));
         }
 
-        // ---- lf ∈ [0.6, 0.8) branch ----------------------------------------
+        // ---- lf âˆˆ [0.6, 0.8) branch ----------------------------------------
 
         @Test
-        @DisplayName("lf=0.7: extensionExitAngle matches 11 − 0.7·ln(exitAR) formula")
+        @DisplayName("lf=0.7: extensionExitAngle matches 11 âˆ’ 0.7Â·ln(exitAR) formula")
         void lf07MatchesFormula() {
             assertThat(buildWith(0.7).getExtensionExitAngle())
                     .isCloseTo(expectedAngle(0.7, 11.0), within(1e-9));
@@ -611,7 +611,7 @@ class DualBellNozzle_UT {
         // ---- lf < 0.6 (default) branch -------------------------------------
 
         @Test
-        @DisplayName("lf=0.4: extensionExitAngle matches 14 − 0.9·ln(exitAR) formula")
+        @DisplayName("lf=0.4: extensionExitAngle matches 14 âˆ’ 0.9Â·ln(exitAR) formula")
         void lf04MatchesFormula() {
             assertThat(buildWith(0.4).getExtensionExitAngle())
                     .isCloseTo(expectedAngle(0.9, 14.0), within(1e-9));
@@ -646,27 +646,27 @@ class DualBellNozzle_UT {
     }
 
     // =========================================================================
-    //  9. Constant-γ analytical verification (formerly section 7)
-    //     Geometry: DLR subscale nozzle (Génin & Stark, Shock Waves 2009)
-    //       R_th = 9 mm  |  ε_b = 3.9  |  ε_e ≈ 7.1  |  kink 15°  |  γ = 1.4
+    //  9. Constant-Î³ analytical verification (formerly section 7)
+    //     Geometry: DLR subscale nozzle (GÃ©nin & Stark, Shock Waves 2009)
+    //       R_th = 9 mm  |  Îµ_b = 3.9  |  Îµ_e â‰ˆ 7.1  |  kink 15Â°  |  Î³ = 1.4
     //
     //  Cross-checks DualBellNozzle.computePerformance() against a hand-derived
-    //  isentropic Cf formula using only γ and the area-ratio Mach numbers.
+    //  isentropic Cf formula using only Î³ and the area-ratio Mach numbers.
     //  The formula is evaluated independently in static helper methods below
     //  and compared against the model output to within 0.5 %.
     // =========================================================================
 
     @Nested
-    @DisplayName("Constant-γ Cf analytical verification (DLR subscale geometry, γ=1.4)")
+    @DisplayName("Constant-Î³ Cf analytical verification (DLR subscale geometry, Î³=1.4)")
     class ConstantGammaCfVerification {
 
         // --- DLR subscale geometry ------------------------------------------
-        // Génin & Stark, Shock Waves 19, 265–270 (2009), Table 1
-        //   R_th = 9 mm,  ε_b = 3.9,  ε_e ≈ 7.1  (M_exit ≈ 3.5504 for γ=1.4)
-        //   kink angle α = 15°,  cold-flow N₂  (γ = 1.4)
+        // GÃ©nin & Stark, Shock Waves 19, 265â€“270 (2009), Table 1
+        //   R_th = 9 mm,  Îµ_b = 3.9,  Îµ_e â‰ˆ 7.1  (M_exit â‰ˆ 3.5504 for Î³=1.4)
+        //   kink angle Î± = 15Â°,  cold-flow Nâ‚‚  (Î³ = 1.4)
         // --------------------------------------------------------------------
         private static final double EPS_B  = 3.9;      // base area ratio (kink)
-        private static final double M_EXIT = 3.5504;   // gives ε_e ≈ 7.104 for γ=1.4
+        private static final double M_EXIT = 3.5504;   // gives Îµ_e â‰ˆ 7.104 for Î³=1.4
         private static final double PC     = 1_000_000.0; // 1 MPa (Cf is pc-independent)
         private static final double PA     =    10_000.0; // 0.1 atm ambient
 
@@ -691,25 +691,25 @@ class DualBellNozzle_UT {
                     0.8, 0.8, Math.toRadians(15.0), 200).generate();
         }
 
-        // --- Independent formula helpers (γ = 1.4 only) ---------------------
+        // --- Independent formula helpers (Î³ = 1.4 only) ---------------------
 
         /**
-         * Isentropic total-to-static pressure ratio p/p₀ for γ = 1.4:
-         * {@code p/p₀ = (1 + 0.2 M²)^(−3.5)}.
+         * Isentropic total-to-static pressure ratio p/pâ‚€ for Î³ = 1.4:
+         * {@code p/pâ‚€ = (1 + 0.2 MÂ²)^(âˆ’3.5)}.
          */
         private static double pressureRatio14(double mach) {
             return Math.pow(1.0 + 0.2 * mach * mach, -3.5);
         }
 
         /**
-         * Rocket momentum Cf term (before divergence factor) for γ = 1.4:
-         * {@code cfMom = sqrt(term1 × (1 − (p/p₀)^(2/7)))}
-         * where {@code term1 = 2γ²/(γ−1) × (2/(γ+1))^((γ+1)/(γ−1)) = 9.8 × (5/6)^6}.
+         * Rocket momentum Cf term (before divergence factor) for Î³ = 1.4:
+         * {@code cfMom = sqrt(term1 Ã— (1 âˆ’ (p/pâ‚€)^(2/7)))}
+         * where {@code term1 = 2Î³Â²/(Î³âˆ’1) Ã— (2/(Î³+1))^((Î³+1)/(Î³âˆ’1)) = 9.8 Ã— (5/6)^6}.
          */
         private static double cfMomentum14(double pRatio) {
-            // For γ = 1.4:
-            //   2γ²/(γ−1) = 2×1.96/0.4 = 9.8
-            //   (2/(γ+1))^((γ+1)/(γ−1)) = (2/2.4)^6 = (5/6)^6
+            // For Î³ = 1.4:
+            //   2Î³Â²/(Î³âˆ’1) = 2Ã—1.96/0.4 = 9.8
+            //   (2/(Î³+1))^((Î³+1)/(Î³âˆ’1)) = (2/2.4)^6 = (5/6)^6
             final double TERM1 = 9.8 * Math.pow(5.0 / 6.0, 6.0);
             return Math.sqrt(TERM1 * (1.0 - Math.pow(pRatio, 2.0 / 7.0)));
         }
@@ -717,14 +717,14 @@ class DualBellNozzle_UT {
         // --- Tests ----------------------------------------------------------
 
         @Test
-        @DisplayName("Transition Mach matches machFromAreaRatio(ε_b) for γ=1.4")
+        @DisplayName("Transition Mach matches machFromAreaRatio(Îµ_b) for Î³=1.4")
         void transitionMachMatchesIsentropic() {
             double expected = GasProperties.NITROGEN.machFromAreaRatio(EPS_B);
             assertThat(nozzle.getTransitionMach()).isCloseTo(expected, within(1e-6));
         }
 
         @Test
-        @DisplayName("Sea-level Cf matches constant-γ isentropic formula (< 0.5 %)")
+        @DisplayName("Sea-level Cf matches constant-Î³ isentropic formula (< 0.5 %)")
         void seaLevelCfMatchesFormula() {
             double mKink   = nozzle.getTransitionMach();
             double pKink   = pressureRatio14(mKink);
@@ -739,7 +739,7 @@ class DualBellNozzle_UT {
         }
 
         @Test
-        @DisplayName("High-altitude Cf matches constant-γ isentropic formula (< 0.5 %)")
+        @DisplayName("High-altitude Cf matches constant-Î³ isentropic formula (< 0.5 %)")
         void highAltCfMatchesFormula() {
             double mExit  = M_EXIT;
             double pExit  = pressureRatio14(mExit);

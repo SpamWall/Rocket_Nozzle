@@ -21,7 +21,7 @@
 package com.nozzle.thermal;
 
 import com.nozzle.geometry.NozzleContour;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,15 +53,15 @@ public class CoolantChannel {
     private int    numberOfChannels  = 100;
     private double channelWidth      = 0.003;   // m
     private double channelHeight     = 0.005;   // m
-    private double hotWallThickness  = 0.001;   // m — inner liner only
-    private double wallConductivity  = 20.0;    // W/(m·K) — Inconel default
+    private double hotWallThickness  = 0.001;   // m â€” inner liner only
+    private double wallConductivity  = 20.0;    // W/(mÂ·K) â€” Inconel default
 
     // Coolant inlet conditions
     private CoolantProperties coolantType    = CoolantProperties.RP1;
     private double            massFlowRate   = 1.0;    // kg/s (total, all channels)
     private double            inletTemperature = 300.0; // K
     private double            inletPressure    = 8e6;   // Pa
-    private boolean           counterflow      = true;  // exit → throat
+    private boolean           counterflow      = true;  // exit â†’ throat
 
     private final NozzleContour contour;
     private final List<ChannelPoint>     channelProfile = new ArrayList<>();
@@ -84,13 +84,13 @@ public class CoolantChannel {
         /** Water (testing / steam-cooled concepts) */
         WATER( 998,  4182, 1.00e-3, 0.598,  373.15, 2_257_000,  18.015);
 
-        /** Density in kg/m³ */
+        /** Density in kg/mÂ³ */
         public final double density;
-        /** Specific heat at constant pressure in J/(kg·K) */
+        /** Specific heat at constant pressure in J/(kgÂ·K) */
         public final double specificHeat;
-        /** Dynamic viscosity in Pa·s */
+        /** Dynamic viscosity in PaÂ·s */
         public final double viscosity;
-        /** Thermal conductivity in W/(m·K) */
+        /** Thermal conductivity in W/(mÂ·K) */
         public final double conductivity;
         /** Normal boiling point (saturation temperature at 101 325 Pa) in K */
         public final double tSatAtm;
@@ -112,7 +112,7 @@ public class CoolantChannel {
         }
 
         /**
-         * Computes the Prandtl number: {@code Pr = μ · Cp / k}.
+         * Computes the Prandtl number: {@code Pr = Î¼ Â· Cp / k}.
          *
          * @return Prandtl number (dimensionless)
          */
@@ -128,7 +128,7 @@ public class CoolantChannel {
          * @return Saturation temperature in K
          */
         public double saturationTemperature(double pressure) {
-            double R       = 8314.46 / molecularWeight;   // J/(kg·K)
+            double R       = 8314.46 / molecularWeight;   // J/(kgÂ·K)
             double lnRatio = Math.log(pressure / 101_325.0);
             return tSatAtm / (1.0 - (R * tSatAtm / hVaporization) * lnRatio);
         }
@@ -148,11 +148,11 @@ public class CoolantChannel {
      * @param velocity               Bulk flow velocity (m/s)
      * @param reynoldsNumber         Channel Reynolds number
      * @param nusseltNumber          Nusselt number from correlation
-     * @param heatTransferCoeff      Coolant-side heat transfer coefficient W/(m²·K)
+     * @param heatTransferCoeff      Coolant-side heat transfer coefficient W/(mÂ²Â·K)
      * @param pressureDropCumulative Cumulative pressure loss from inlet (Pa)
      * @param coldWallTemperature    Coolant-side wall surface temperature (K)
      * @param saturationTemperature  Saturation temperature at local pressure (K)
-     * @param boilingMargin          T_sat − T_wall_cold (K); positive = subcooled
+     * @param boilingMargin          T_sat âˆ’ T_wall_cold (K); positive = subcooled
      */
     public record ChannelPoint(
             double x,
@@ -215,7 +215,7 @@ public class CoolantChannel {
     /**
      * Sets the wall material thermal conductivity used for cold-wall temperature estimation.
      *
-     * @param conductivity W/(m·K)
+     * @param conductivity W/(mÂ·K)
      * @return This instance
      */
     public CoolantChannel setWallConductivity(double conductivity) {
@@ -244,7 +244,7 @@ public class CoolantChannel {
     /**
      * Sets the coolant flow direction.
      *
-     * @param counterflow {@code true} = exit → throat (standard counter-current regenerative cooling)
+     * @param counterflow {@code true} = exit â†’ throat (standard counter-current regenerative cooling)
      * @return This instance
      */
     public CoolantChannel setCounterflow(boolean counterflow) {
@@ -273,7 +273,7 @@ public class CoolantChannel {
      *
      * <p>The channel is marched from the coolant inlet to outlet. For counter-flow
      * (the default), the inlet is at the nozzle exit. The returned profile is
-     * always in axial order (throat → exit) for consistency with other models.
+     * always in axial order (throat â†’ exit) for consistency with other models.
      *
      * @param thermalProfile Wall thermal points from
      *                       {@link HeatTransferModel#getWallThermalProfile()};
@@ -289,7 +289,7 @@ public class CoolantChannel {
             contourPoints = contour.getContourPoints();
         }
 
-        // Hydraulic geometry — constant for rectangular channels
+        // Hydraulic geometry â€” constant for rectangular channels
         double D_h    = 2.0 * channelWidth * channelHeight / (channelWidth + channelHeight);
         double A_flow = numberOfChannels * channelWidth * channelHeight;
 
@@ -348,7 +348,7 @@ public class CoolantChannel {
             ));
         }
 
-        // Restore axial order (throat → exit) regardless of flow direction
+        // Restore axial order (throat â†’ exit) regardless of flow direction
         if (counterflow) Collections.reverse(channelProfile);
 
         return this;
@@ -359,8 +359,8 @@ public class CoolantChannel {
     // -------------------------------------------------------------------------
 
     /**
-     * Nusselt number using Gnielinski (1976) for turbulent flow (Re ≥ 4 000),
-     * the constant-wall-temperature laminar value (3.66) for Re ≤ 2 300,
+     * Nusselt number using Gnielinski (1976) for turbulent flow (Re â‰¥ 4 000),
+     * the constant-wall-temperature laminar value (3.66) for Re â‰¤ 2 300,
      * and linear interpolation through the transition regime.
      */
     private double nusseltNumber(double Re, double Pr) {
@@ -375,7 +375,7 @@ public class CoolantChannel {
 
     /**
      * Gnielinski (1976) correlation.
-     * Valid for 3 000 &lt; Re &lt; 5×10⁶ and 0.5 &lt; Pr &lt; 2 000.
+     * Valid for 3 000 &lt; Re &lt; 5Ã—10â¶ and 0.5 &lt; Pr &lt; 2 000.
      */
     private double gnielinskiNusselt(double Re, double Pr) {
         double f = darcyFrictionFactor(Re);
@@ -385,7 +385,7 @@ public class CoolantChannel {
 
     /**
      * Petukhov (1970) smooth-pipe Darcy friction factor.
-     * Falls back to the laminar value (64/Re) for Re ≤ 2 300.
+     * Falls back to the laminar value (64/Re) for Re â‰¤ 2 300.
      */
     private double darcyFrictionFactor(double Re) {
         if (Re <= 2300) return 64.0 / Re;
@@ -414,7 +414,7 @@ public class CoolantChannel {
     // -------------------------------------------------------------------------
 
     /**
-     * Returns the channel profile in axial order (throat → exit).
+     * Returns the channel profile in axial order (throat â†’ exit).
      *
      * @return Unmodifiable list of channel points
      */
@@ -425,10 +425,10 @@ public class CoolantChannel {
     /**
      * Returns the coolant-side heat transfer coefficient at axial position x
      * by nearest-neighbor lookup in the computed profile.
-     * Falls back to 5 000 W/(m²·K) if the channel has not been calculated.
+     * Falls back to 5 000 W/(mÂ²Â·K) if the channel has not been calculated.
      *
      * @param x Axial position (m)
-     * @return h_coolant in W/(m²·K)
+     * @return h_coolant in W/(mÂ²Â·K)
      */
     public double getHeatTransferCoeffAt(double x) {
         if (channelProfile.isEmpty()) return 5000.0;
@@ -499,7 +499,7 @@ public class CoolantChannel {
     /**
      * Returns the total coolant flow area across all channels.
      *
-     * @return A_flow in m²
+     * @return A_flow in mÂ²
      */
     public double totalFlowArea() {
         return numberOfChannels * channelWidth * channelHeight;

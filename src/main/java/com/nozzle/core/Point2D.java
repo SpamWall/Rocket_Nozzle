@@ -18,7 +18,7 @@
  *  commercial purposes outside the restrictions imposed by this copyright.
  */
 
-package com.nozzle.geometry;
+package com.nozzle.core;
 
 /**
  * Immutable 2D point representation.
@@ -27,12 +27,12 @@ package com.nozzle.geometry;
  * @param y Y coordinate
  */
 public record Point2D(double x, double y) {
-    
+
     /**
      * Origin point (0, 0).
      */
     public static final Point2D ORIGIN = new Point2D(0, 0);
-    
+
     /**
      * Creates a point from polar coordinates.
      *
@@ -43,7 +43,7 @@ public record Point2D(double x, double y) {
     public static Point2D fromPolar(double r, double theta) {
         return new Point2D(r * Math.cos(theta), r * Math.sin(theta));
     }
-    
+
     /**
      * Calculates distance to another point.
      *
@@ -55,7 +55,7 @@ public record Point2D(double x, double y) {
         double dy = y - other.y;
         return Math.sqrt(dx * dx + dy * dy);
     }
-    
+
     /**
      * Calculates the magnitude (distance from origin).
      *
@@ -64,7 +64,7 @@ public record Point2D(double x, double y) {
     public double magnitude() {
         return Math.sqrt(x * x + y * y);
     }
-    
+
     /**
      * Calculates the angle from origin.
      *
@@ -73,7 +73,7 @@ public record Point2D(double x, double y) {
     public double angle() {
         return Math.atan2(y, x);
     }
-    
+
     /**
      * Adds another point.
      *
@@ -83,7 +83,7 @@ public record Point2D(double x, double y) {
     public Point2D add(Point2D other) {
         return new Point2D(x + other.x, y + other.y);
     }
-    
+
     /**
      * Subtracts another point.
      *
@@ -93,7 +93,7 @@ public record Point2D(double x, double y) {
     public Point2D subtract(Point2D other) {
         return new Point2D(x - other.x, y - other.y);
     }
-    
+
     /**
      * Scales the point by a factor.
      *
@@ -103,7 +103,7 @@ public record Point2D(double x, double y) {
     public Point2D scale(double factor) {
         return new Point2D(x * factor, y * factor);
     }
-    
+
     /**
      * Rotates the point around origin.
      *
@@ -115,7 +115,7 @@ public record Point2D(double x, double y) {
         double sin = Math.sin(angle);
         return new Point2D(x * cos - y * sin, x * sin + y * cos);
     }
-    
+
     /**
      * Returns unit vector from origin to this point.
      *
@@ -128,7 +128,7 @@ public record Point2D(double x, double y) {
         }
         return new Point2D(x / mag, y / mag);
     }
-    
+
     /**
      * Calculates dot product with another point.
      *
@@ -138,7 +138,7 @@ public record Point2D(double x, double y) {
     public double dot(Point2D other) {
         return x * other.x + y * other.y;
     }
-    
+
     /**
      * Calculates cross product (z-component).
      *
@@ -148,7 +148,7 @@ public record Point2D(double x, double y) {
     public double cross(Point2D other) {
         return x * other.y - y * other.x;
     }
-    
+
     /**
      * Linearly interpolates between this and another point.
      *
@@ -162,7 +162,7 @@ public record Point2D(double x, double y) {
                 y + t * (other.y - y)
         );
     }
-    
+
     /**
      * Calculates midpoint between this and another point.
      *
@@ -172,7 +172,7 @@ public record Point2D(double x, double y) {
     public Point2D midpoint(Point2D other) {
         return linearInterpolate(other, 0.5);
     }
-    
+
     /**
      * Reflects point across the x-axis.
      *
@@ -181,7 +181,7 @@ public record Point2D(double x, double y) {
     public Point2D reflectX() {
         return new Point2D(x, -y);
     }
-    
+
     /**
      * Reflects point across the y-axis.
      *
@@ -190,7 +190,7 @@ public record Point2D(double x, double y) {
     public Point2D reflectY() {
         return new Point2D(-x, y);
     }
-    
+
     @SuppressWarnings("NullableProblems")
     @Override
     public String toString() {

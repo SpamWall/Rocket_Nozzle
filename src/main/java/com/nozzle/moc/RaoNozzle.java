@@ -22,7 +22,7 @@ package com.nozzle.moc;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -139,7 +139,7 @@ public class RaoNozzle {
      * @param rt Throat radius
      */
     private void generateThroatRegion(double rt) {
-        // Throat downstream radius of curvature (r_cd = ratio × r_t)
+        // Throat downstream radius of curvature (r_cd = ratio Ã— r_t)
         double rcd = parameters.throatCurvatureRatio() * rt;
 
         // Generate downstream arc (divergent section start) beginning at the throat
@@ -175,7 +175,7 @@ public class RaoNozzle {
         // y = a*x^2 + b*x + c
         // With boundary conditions at start and end points
         
-        // Use cubic Bézier curve for smoother transition
+        // Use cubic BÃ©zier curve for smoother transition
         // Control points for cubic Bezier
         double dx = xEnd - x0;
         double cx1 = x0 + dx / 3.0;
@@ -183,7 +183,7 @@ public class RaoNozzle {
         double cx2 = xEnd - dx / 3.0;
         double cy2 = yEnd - (dx / 3.0) * slopeEnd;
         
-        // Generate bell contour points using Bézier curve
+        // Generate bell contour points using BÃ©zier curve
         int numBellPoints = numContourPoints - contourPoints.size();
         for (int i = 1; i <= numBellPoints; i++) {
             double t = (double) i / numBellPoints;
@@ -391,7 +391,7 @@ public class RaoNozzle {
      *
      * @param mocNet MOC characteristic net whose wall-point sequence defines the
      *               exit flow angle used for the divergence factor
-     *               {@code λ = (1 + cos θ_exit) / 2}
+     *               {@code Î» = (1 + cos Î¸_exit) / 2}
      * @return Corrected thrust coefficient; returns the ideal value if
      *         {@code mocNet} has no wall points
      */
@@ -443,7 +443,7 @@ public class RaoNozzle {
          * Returns the absolute difference in thrust coefficients between the
          * Rao and MOC nozzle designs.
          *
-         * @return {@code |Cf_Rao − Cf_MOC|}
+         * @return {@code |Cf_Rao âˆ’ Cf_MOC|}
          */
         public double thrustCoefficientDifference() {
             return Math.abs(raoThrustCoefficient - mocThrustCoefficient);
@@ -453,7 +453,7 @@ public class RaoNozzle {
         @Override
         public String toString() {
             return String.format(
-                    "NozzleComparison[maxΔr=%.4f mm, avgΔr=%.4f mm, maxΔθ=%.2f°, " +
+                    "NozzleComparison[maxÎ”r=%.4f mm, avgÎ”r=%.4f mm, maxÎ”Î¸=%.2fÂ°, " +
                     "Cf_Rao=%.4f, Cf_MOC=%.4f, L_Rao=%.4f m, L_MOC=%.4f m]",
                     maxRadiusDifference * 1000, avgRadiusDifference * 1000,
                     Math.toDegrees(maxAngleDifference),

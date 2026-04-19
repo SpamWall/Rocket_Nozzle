@@ -21,6 +21,7 @@
 package com.nozzle.geometry;
 
 import com.nozzle.core.NozzleDesignParameters;
+import com.nozzle.core.Point2D;
 
 import java.util.ArrayList;
 import java.util.Collections;

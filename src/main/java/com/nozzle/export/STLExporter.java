@@ -22,7 +22,7 @@ package com.nozzle.export;
 
 import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.DualBellNozzle;
 
@@ -51,9 +51,9 @@ public class STLExporter {
     /** Creates an {@code STLExporter} with default settings (72 segments, binary format, metre-to-mm scale). */
     public STLExporter() {}
 
-    /** Number of circumferential segments used when revolving the 2D profile (default: 72 = 5° steps). */
+    /** Number of circumferential segments used when revolving the 2D profile (default: 72 = 5Â° steps). */
     private int circumferentialSegments = 72;
-    /** Scale factor applied to all coordinates before writing (default: 1000 → metres to mm). */
+    /** Scale factor applied to all coordinates before writing (default: 1000 â†’ metres to mm). */
     private double scaleFactor = 1000.0;
     /** When {@code true} (default), write binary STL; when {@code false}, write ASCII STL. */
     private boolean binaryFormat = true;
@@ -63,7 +63,7 @@ public class STLExporter {
      * profile to produce the 3D mesh.  Higher values give a smoother surface
      * at the cost of larger file size.
      *
-     * @param segments Number of angular divisions (e.g. 72 for 5° steps)
+     * @param segments Number of angular divisions (e.g. 72 for 5Â° steps)
      * @return This instance for method chaining
      */
     public STLExporter setCircumferentialSegments(int segments) {
@@ -108,7 +108,7 @@ public class STLExporter {
             throw new IllegalArgumentException("Contour needs at least 2 points");
         }
 
-        LOG.debug("Exporting STL mesh: {} profile points, {} segments, {} → {}",
+        LOG.debug("Exporting STL mesh: {} profile points, {} segments, {} â†’ {}",
                 points.size(), circumferentialSegments, binaryFormat ? "binary" : "ASCII", filePath);
         List<Triangle> triangles = generateTriangles(points);
 
@@ -117,7 +117,7 @@ public class STLExporter {
         } else {
             exportAsciiSTL(triangles, filePath);
         }
-        LOG.debug("STL export complete: {} triangles → {}", triangles.size(), filePath);
+        LOG.debug("STL export complete: {} triangles â†’ {}", triangles.size(), filePath);
     }
     
     /**
@@ -136,12 +136,12 @@ public class STLExporter {
         List<Point2D> points = fullGeometry.getWallPoints();
         if (points.isEmpty()) {
             throw new IllegalStateException(
-                    "FullNozzleGeometry has no wall points — call generate() first");
+                    "FullNozzleGeometry has no wall points â€” call generate() first");
         }
         if (points.size() < 2) {
             throw new IllegalArgumentException("Full nozzle wall needs at least 2 points");
         }
-        LOG.debug("Exporting geometry-complete STL mesh: {} wall points, {} segments, {} → {}",
+        LOG.debug("Exporting geometry-complete STL mesh: {} wall points, {} segments, {} â†’ {}",
                 points.size(), circumferentialSegments, binaryFormat ? "binary" : "ASCII", filePath);
         List<Triangle> triangles = generateTriangles(points);
         if (binaryFormat) {
@@ -149,15 +149,15 @@ public class STLExporter {
         } else {
             exportAsciiSTL(triangles, filePath);
         }
-        LOG.debug("Geometry-complete STL export complete: {} triangles → {}", triangles.size(), filePath);
+        LOG.debug("Geometry-complete STL export complete: {} triangles â†’ {}", triangles.size(), filePath);
     }
 
     /**
      * Generates the full triangle list by revolving the 2D profile around the
      * x-axis.  Each axial segment of the profile contributes
-     * {@code 2 × circumferentialSegments} triangles.  Annular end caps are added
+     * {@code 2 Ã— circumferentialSegments} triangles.  Annular end caps are added
      * at the inlet and outlet if the profile does not close on the axis
-     * (radius &gt; 1 µm).
+     * (radius &gt; 1 Âµm).
      *
      * @param profile Ordered list of 2D profile points (at least 2 required)
      * @return List of {@link Triangle}s with inward-facing unit normals
@@ -208,12 +208,12 @@ public class STLExporter {
     
     /**
      * Adds an annular fan of triangles that caps the open end of the revolved
-     * mesh at the given profile point.  The normal points in the −x direction
+     * mesh at the given profile point.  The normal points in the âˆ’x direction
      * for the inlet cap and in the +x direction for the outlet cap.
      *
      * @param triangles Accumulator list to which the cap triangles are appended
      * @param point     Profile point at the cap location (only x and y are used)
-     * @param isStart   {@code true} to generate an inlet (−x normal) cap;
+     * @param isStart   {@code true} to generate an inlet (âˆ’x normal) cap;
      *                  {@code false} for an outlet (+x normal) cap
      */
     private void addEndCap(List<Triangle> triangles, Point2D point, boolean isStart) {
@@ -255,8 +255,8 @@ public class STLExporter {
     /**
      * Calculates the unit outward-normal vector for the triangle formed by
      * {@code v1}, {@code v2}, {@code v3} using the cross product
-     * {@code (v2 − v1) × (v3 − v1)}.
-     * Returns a zero vector if the triangle is degenerate (edge length &lt; 10⁻¹⁰).
+     * {@code (v2 âˆ’ v1) Ã— (v3 âˆ’ v1)}.
+     * Returns a zero vector if the triangle is degenerate (edge length &lt; 10â»Â¹â°).
      *
      * @param v1 First vertex
      * @param v2 Second vertex
@@ -356,7 +356,7 @@ public class STLExporter {
     /**
      * Writes the triangle list to an ASCII STL file using the standard
      * {@code solid / facet normal / outer loop / vertex / endloop / endfacet / endsolid}
-     * syntax.  ASCII STL is human-readable but roughly 5–10× larger than binary.
+     * syntax.  ASCII STL is human-readable but roughly 5â€“10Ã— larger than binary.
      *
      * @param triangles Ordered list of triangles to write
      * @param filePath  Destination file path
@@ -390,7 +390,7 @@ public class STLExporter {
      * <p>The truncated spike contour is revolved around the x-axis using the same
      * algorithm as {@link #exportMesh(NozzleContour, Path)}.  Because the spike tip
      * may not lie on the axis, an end cap is added automatically by
-     * {@link #generateTriangles} if the tip radius exceeds 1 µm.
+     * {@link #generateTriangles} if the tip radius exceeds 1 Âµm.
      *
      * @param nozzle   Aerospike nozzle (must have been generated)
      * @param filePath Destination STL file path
@@ -399,14 +399,14 @@ public class STLExporter {
     public void exportAerospikeMesh(AerospikeNozzle nozzle, Path filePath) throws IOException {
         // getTruncatedSpikeContour() generates lazily and always returns >= 2 points.
         List<Point2D> spike = nozzle.getTruncatedSpikeContour();
-        LOG.debug("Exporting Aerospike STL mesh: {} spike points → {}", spike.size(), filePath);
+        LOG.debug("Exporting Aerospike STL mesh: {} spike points â†’ {}", spike.size(), filePath);
         List<Triangle> triangles = generateTriangles(spike);
         if (binaryFormat) {
             exportBinarySTL(triangles, filePath);
         } else {
             exportAsciiSTL(triangles, filePath);
         }
-        LOG.debug("Aerospike STL export complete: {} triangles → {}", triangles.size(), filePath);
+        LOG.debug("Aerospike STL export complete: {} triangles â†’ {}", triangles.size(), filePath);
     }
 
     /**
@@ -421,21 +421,21 @@ public class STLExporter {
     public void exportMesh(DualBellNozzle nozzle, Path filePath) throws IOException {
         List<Point2D> pts = nozzle.getContourPoints();
         if (pts.size() < 2) {
-            throw new IllegalArgumentException("DualBellNozzle has no contour — call generate() first");
+            throw new IllegalArgumentException("DualBellNozzle has no contour â€” call generate() first");
         }
-        LOG.debug("Exporting dual-bell nozzle STL mesh: {} points, {} segments → {}",
+        LOG.debug("Exporting dual-bell nozzle STL mesh: {} points, {} segments â†’ {}",
                 pts.size(), circumferentialSegments, filePath);
         List<Triangle> triangles = generateTriangles(pts);
         if (binaryFormat) exportBinarySTL(triangles, filePath);
         else exportAsciiSTL(triangles, filePath);
-        LOG.debug("Dual-bell nozzle STL export complete: {} triangles → {}", triangles.size(), filePath);
+        LOG.debug("Dual-bell nozzle STL export complete: {} triangles â†’ {}", triangles.size(), filePath);
     }
 
     /**
      * Returns the estimated total triangle count for a revolution mesh with the
      * given number of profile points.  Includes the lateral wall triangles and
      * both end-cap fans:
-     * {@code 2 × (profilePoints − 1) × segments + 2 × segments}.
+     * {@code 2 Ã— (profilePoints âˆ’ 1) Ã— segments + 2 Ã— segments}.
      *
      * @param profilePoints Number of 2D profile points
      * @return Estimated triangle count

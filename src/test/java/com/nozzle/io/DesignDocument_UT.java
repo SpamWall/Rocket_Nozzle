@@ -22,7 +22,7 @@ package com.nozzle.io;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.CharacteristicPoint;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -39,8 +39,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  *
  * <p>{@code DesignDocument} is a record whose compiler-generated accessors,
  * {@code equals}, {@code hashCode}, and {@code toString} are validated here
- * independently of the serializer.  The single handwritten method —
- * {@link DesignDocument#parametersOnly} — is tested for correct field
+ * independently of the serializer.  The single handwritten method â€”
+ * {@link DesignDocument#parametersOnly} â€” is tested for correct field
  * assignment and for generating a parseable ISO-8601 timestamp.
  *
  * <p>Serialization round-trip behavior is covered by

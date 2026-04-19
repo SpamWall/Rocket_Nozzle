@@ -22,6 +22,7 @@ package com.nozzle.geometry;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.CharacteristicNet;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

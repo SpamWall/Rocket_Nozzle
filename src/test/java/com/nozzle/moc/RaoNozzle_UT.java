@@ -22,7 +22,7 @@ package com.nozzle.moc;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -254,7 +254,7 @@ class RaoNozzle_UT {
         @Test
         @DisplayName("lengthFraction below 0.6 uses the else branch for both angle correlations")
         void veryShortLengthFractionUsesElseBranch() {
-            // lengthFraction=0.5 < 0.6 → hits the else branch in both if-else chains
+            // lengthFraction=0.5 < 0.6 â†’ hits the else branch in both if-else chains
             // inside calculateAngles (inflectionAngle and exitAngle)
             RaoNozzle veryShort = new RaoNozzle(params, 0.5, 100).generate();
             assertThat(Math.toDegrees(veryShort.getInflectionAngle())).isBetween(15.0, 45.0);
@@ -300,7 +300,7 @@ class RaoNozzle_UT {
             // x < prev.x() on first iteration (first-condition-false branch)
             raoNozzle.getAngleAt(-0.1);
 
-            // x >= prev.x() true && x <= curr.x() false → falls through to return exitAngle
+            // x >= prev.x() true && x <= curr.x() false â†’ falls through to return exitAngle
             double angle = raoNozzle.getAngleAt(raoNozzle.getActualLength() * 10);
             assertThat(angle).isEqualTo(raoNozzle.getExitAngle());
         }
@@ -313,8 +313,8 @@ class RaoNozzle_UT {
         @Test
         @DisplayName("compareTo with ungenerated net covers empty-contour and empty-wall branches")
         void compareToWithEmptyNetCoversAllEmptyBranches() {
-            // raoNozzle not yet generated → covers contourPoints.isEmpty()=true in compareTo
-            // Ungenerated CharacteristicNet → empty wall points →
+            // raoNozzle not yet generated â†’ covers contourPoints.isEmpty()=true in compareTo
+            // Ungenerated CharacteristicNet â†’ empty wall points â†’
             //   covers mocWall.isEmpty() ? 0 ternary and
             //   calculateMOCThrustCoefficient wallPoints.isEmpty()=true
             CharacteristicNet emptyNet = new CharacteristicNet(params);
@@ -456,11 +456,11 @@ class RaoNozzle_UT {
         }
 
         @Test
-        @DisplayName("toString() contains maxΔr in mm")
+        @DisplayName("toString() contains maxÎ”r in mm")
         void containsMaxDeltaR() {
-            // maxRadiusDifference = 0.001 m → 1.0000 mm
+            // maxRadiusDifference = 0.001 m â†’ 1.0000 mm
             assertThat(comparison.toString())
-                    .contains("maxΔr=")
+                    .contains("maxÎ”r=")
                     .contains("1.0000 mm");
         }
 

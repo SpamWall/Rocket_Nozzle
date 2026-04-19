@@ -22,7 +22,7 @@ package com.nozzle.moc;
 
 import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -34,14 +34,14 @@ import java.util.List;
  *
  * <p>The spike contour is the inner streamline of the centered Prandtl-Meyer
  * expansion fan that originates at the cowl lip {@code (0, rt)}.  At each
- * angular step {@code δ_i} (0 → ν(M_exit)) the next contour point is found
+ * angular step {@code Î´_i} (0 â†’ Î½(M_exit)) the next contour point is found
  * at the intersection of:
  * <ol>
- *   <li>The C⁻ characteristic from the lip at turning angle {@code δ_i}:
- *       {@code r = rt − x · tan(δ_i + μ_i)}.</li>
+ *   <li>The Câ» characteristic from the lip at turning angle {@code Î´_i}:
+ *       {@code r = rt âˆ’ x Â· tan(Î´_i + Î¼_i)}.</li>
  *   <li>The streamline from the previous contour point with average flow angle
- *       {@code ½(δ_{i-1} + δ_i)}:
- *       {@code r = r_{i-1} − (x − x_{i-1}) · tan(δ_avg)}.</li>
+ *       {@code Â½(Î´_{i-1} + Î´_i)}:
+ *       {@code r = r_{i-1} âˆ’ (x âˆ’ x_{i-1}) Â· tan(Î´_avg)}.</li>
  * </ol>
  * The initial condition is {@code (x=0, r=ri)}: the spike surface starts at the
  * inner edge of the annular throat.
@@ -55,7 +55,7 @@ class AerospikeContour {
     private final NozzleDesignParameters parameters;
     /** ri / rt  (inner throat radius / outer throat radius). */
     private final double spikeRadiusRatio;
-    /** Fraction of the full ideal spike length used for the physical spike (0 < f ≤ 1). */
+    /** Fraction of the full ideal spike length used for the physical spike (0 < f â‰¤ 1). */
     private final double truncationFraction;
     /** Number of discrete points on the spike contour. */
     private final int numSpikePoints;
@@ -74,7 +74,7 @@ class AerospikeContour {
      * @param parameters         Nozzle design parameters
      * @param spikeRadiusRatio   {@code ri / rt}; caller guarantees (0, 1)
      * @param truncationFraction Fraction of full spike length to retain; caller guarantees (0, 1]
-     * @param numSpikePoints     Contour resolution; caller guarantees ≥ 2
+     * @param numSpikePoints     Contour resolution; caller guarantees â‰¥ 2
      */
     AerospikeContour(NozzleDesignParameters parameters,
                      double spikeRadiusRatio,
@@ -97,7 +97,7 @@ class AerospikeContour {
      * <p>The algorithm traces the inner streamline of the centered Prandtl-Meyer
      * expansion fan at the cowl lip.  At each of the {@code numSpikePoints} angular
      * steps the next spike-contour point is found at the intersection of the current
-     * C⁻ characteristic from the lip and the streamline from the previous spike point.
+     * Câ» characteristic from the lip and the streamline from the previous spike point.
      *
      * @return This instance, for method chaining
      */
@@ -110,7 +110,7 @@ class AerospikeContour {
         double nu_exit = gas.prandtlMeyerFunction(parameters.exitMach());
 
         // Initial spike point: inner edge of the annular throat.
-        // At δ = 0: flow is axial (M = 1 at sonic throat), spike starts at (0, ri).
+        // At Î´ = 0: flow is axial (M = 1 at sonic throat), spike starts at (0, ri).
         double xPrev     = 0.0;
         double rPrev     = ri;
         double deltaPrev = 0.0;
@@ -121,23 +121,23 @@ class AerospikeContour {
             double mach_i  = gas.machFromPrandtlMeyer(delta_i);
             double mu_i    = gas.machAngle(mach_i);
 
-            // C⁻ characteristic from lip (0, rt) at turning angle δ_i:
-            //   r = rt − x · tan(δ_i + μ_i)
+            // Câ» characteristic from lip (0, rt) at turning angle Î´_i:
+            //   r = rt âˆ’ x Â· tan(Î´_i + Î¼_i)
             double slopeChar = Math.tan(delta_i + mu_i);
 
             // Streamline from previous spike point with average flow angle:
-            //   r = rPrev − (x − xPrev) · tan(δ_avg)
+            //   r = rPrev âˆ’ (x âˆ’ xPrev) Â· tan(Î´_avg)
             double deltaAvg    = (deltaPrev + delta_i) / 2.0;
             double slopeStream = Math.tan(deltaAvg);
 
-            // denom = slopeChar − slopeStream is always >> 0 for a valid Prandtl-Meyer
-            // expansion: near the throat slopeChar → ∞ while slopeStream → 0, and across
+            // denom = slopeChar âˆ’ slopeStream is always >> 0 for a valid Prandtl-Meyer
+            // expansion: near the throat slopeChar â†’ âˆž while slopeStream â†’ 0, and across
             // the full fan they remain distinct.  No guard needed.
             double denom = slopeChar - slopeStream;
 
             // Intersection: characteristic meets streamline
-            //   rt − x_i · slopeChar = rPrev − (x_i − xPrev) · slopeStream
-            //   x_i · (slopeChar − slopeStream) = rt − rPrev − xPrev · slopeStream
+            //   rt âˆ’ x_i Â· slopeChar = rPrev âˆ’ (x_i âˆ’ xPrev) Â· slopeStream
+            //   x_i Â· (slopeChar âˆ’ slopeStream) = rt âˆ’ rPrev âˆ’ xPrev Â· slopeStream
             double x_i = (rt - rPrev - xPrev * slopeStream) / denom;
             double r_i = rt - x_i * slopeChar;
 
@@ -179,11 +179,11 @@ class AerospikeContour {
     }
 
     /**
-     * Returns the truncated spike contour — only the portion of the full spike up to
-     * {@code truncationFraction × fullSpikeLength}.
+     * Returns the truncated spike contour â€” only the portion of the full spike up to
+     * {@code truncationFraction Ã— fullSpikeLength}.
      *
      * <p>The first contour point is always at {@code x = 0}, and
-     * {@code cutX = fullSpikeLength × truncationFraction ≥ 0}, so the returned
+     * {@code cutX = fullSpikeLength Ã— truncationFraction â‰¥ 0}, so the returned
      * list is never empty.
      *
      * @return List of {@link Point2D} for the truncated spike, never empty after generation
@@ -220,7 +220,7 @@ class AerospikeContour {
     /**
      * Returns the axial length of the truncated spike.
      *
-     * @return Truncated spike length = {@code truncationFraction × fullSpikeLength} in metres
+     * @return Truncated spike length = {@code truncationFraction Ã— fullSpikeLength} in metres
      */
     double getTruncatedLength() {
         return getFullSpikeLength() * truncationFraction;
@@ -230,9 +230,9 @@ class AerospikeContour {
      * Returns the annular throat flow area.
      *
      * <p>The annular throat is bounded by the outer cowl lip at radius {@code rt} and the
-     * spike surface at radius {@code ri = rt × spikeRadiusRatio}.
+     * spike surface at radius {@code ri = rt Ã— spikeRadiusRatio}.
      *
-     * @return Annular throat area in m²; {@code π(rt² − ri²)}
+     * @return Annular throat area in mÂ²; {@code Ï€(rtÂ² âˆ’ riÂ²)}
      */
     double getAnnularThroatArea() {
         double rt = parameters.throatRadius();
@@ -244,10 +244,10 @@ class AerospikeContour {
      * Returns the annular exit area of the full ideal Aerospike.
      *
      * <p>The exit area is computed from mass-flow conservation:
-     * {@code Ae = At × (Ae/At)} where {@code Ae/At} is the isentropic area ratio at
+     * {@code Ae = At Ã— (Ae/At)} where {@code Ae/At} is the isentropic area ratio at
      * the design exit Mach number.
      *
-     * @return Design exit area in m²
+     * @return Design exit area in mÂ²
      */
     double getAnnularExitArea() {
         return getAnnularThroatArea() * parameters.exitAreaRatio();

@@ -24,7 +24,7 @@ import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.CharacteristicPoint;
 
 import java.util.ArrayList;
@@ -89,9 +89,9 @@ public class BoundaryLayerCorrection {
      * supplements the geometric Cd correction from sonic-line curvature:
      *
      * <pre>
-     *   r_eff_throat = r_t − δ*(x=0)
-     *   Cd_BL        = (r_eff_throat / r_t)²
-     *   Cd_total     = Cd_geometric × Cd_BL
+     *   r_eff_throat = r_t âˆ’ Î´*(x=0)
+     *   Cd_BL        = (r_eff_throat / r_t)Â²
+     *   Cd_total     = Cd_geometric Ã— Cd_BL
      * </pre>
      *
      * @param fullGeometry Full nozzle geometry (must have been generated)
@@ -156,11 +156,11 @@ public class BoundaryLayerCorrection {
     }
 
     /**
-     * Returns the displacement thickness δ* at the throat (x ≈ 0), computed by
+     * Returns the displacement thickness Î´* at the throat (x â‰ˆ 0), computed by
      * {@link #calculateFromInjectorFace}.  Used to correct the effective throat
      * area for boundary-layer displacement.
      *
-     * @return δ* at throat in metres; 0 if no profile has been calculated
+     * @return Î´* at throat in metres; 0 if no profile has been calculated
      */
     public double getThroatDisplacementThickness() {
         if (blProfile.isEmpty()) return 0.0;
@@ -183,10 +183,10 @@ public class BoundaryLayerCorrection {
      * Returns the boundary-layer discharge-coefficient correction factor.
      *
      * <pre>
-     *   Cd_BL = (1 − δ*(x=0) / r_t)²
+     *   Cd_BL = (1 âˆ’ Î´*(x=0) / r_t)Â²
      * </pre>
      *
-     * @return Cd_BL ∈ (0, 1]; 1.0 if no throat BL data is available
+     * @return Cd_BL âˆˆ (0, 1]; 1.0 if no throat BL data is available
      */
     public double getBoundaryLayerCdCorrection() {
         double deltaStar = getThroatDisplacementThickness();
@@ -201,12 +201,12 @@ public class BoundaryLayerCorrection {
      * sonic-line curvature correction and the boundary-layer correction:
      *
      * <pre>
-     *   Cd_total = Cd_geometric × Cd_BL
+     *   Cd_total = Cd_geometric Ã— Cd_BL
      * </pre>
      *
      * <p>Only meaningful after {@link #calculateFromInjectorFace} has been called.
      *
-     * @return Combined Cd ∈ (0, 1]
+     * @return Combined Cd âˆˆ (0, 1]
      */
     public double getCombinedCd() {
         return parameters.dischargeCoefficient() * getBoundaryLayerCdCorrection();
@@ -219,7 +219,7 @@ public class BoundaryLayerCorrection {
      * @param geom Full nozzle geometry
      * @param x    Axial position in metres
      * @param y    Radial wall position in metres
-     * @return Estimated Mach number ≥ 0
+     * @return Estimated Mach number â‰¥ 0
      */
     private double estimateMachFromFullGeometry(FullNozzleGeometry geom,
                                                 double x, double y) {
@@ -298,16 +298,16 @@ public class BoundaryLayerCorrection {
      * MOC flow-field point is available nearby.
      *
      * <ul>
-     *   <li><b>Divergent section (x ≥ 0):</b> linear interpolation from
+     *   <li><b>Divergent section (x â‰¥ 0):</b> linear interpolation from
      *       Mach 1 at the throat to the design exit Mach.</li>
      *   <li><b>Convergent section (x &lt; 0):</b> subsonic Mach from the
-     *       isentropic area–velocity relation using the local wall radius
+     *       isentropic areaâ€“velocity relation using the local wall radius
      *       interpolated from the contour spline.  Solved by bisection on
-     *       A/A*(M) in M ∈ [0.001, 1].</li>
+     *       A/A*(M) in M âˆˆ [0.001, 1].</li>
      * </ul>
      *
      * @param x Axial position in metres
-     * @return Estimated local Mach number ≥ 0
+     * @return Estimated local Mach number â‰¥ 0
      */
     private double estimateMach(double x) {
         if (x < 0) {
@@ -327,7 +327,7 @@ public class BoundaryLayerCorrection {
     /**
      * Returns the subsonic isentropic Mach number at the given axial position
      * in the convergent section, derived from the local wall radius via bisection
-     * on the isentropic area–Mach relation A/A*(M).
+     * on the isentropic areaâ€“Mach relation A/A*(M).
      *
      * @param x Axial position (must be &lt; 0)
      * @return Subsonic Mach number in (0, 1]

@@ -22,7 +22,7 @@ package com.nozzle.export;
 
 import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.DualBellNozzle;
 
@@ -49,7 +49,7 @@ public class STEPExporter {
     /** Creates a {@code STEPExporter} with default settings (metres-to-mm scale, generic author). */
     public STEPExporter() {}
 
-    /** Scale factor applied to all coordinates (default: 1000 → metres to mm, as required by AUTOMOTIVE_DESIGN). */
+    /** Scale factor applied to all coordinates (default: 1000 â†’ metres to mm, as required by AUTOMOTIVE_DESIGN). */
     private double scaleFactor = 1000.0;
     /** Author name written into the FILE_NAME STEP header entity. */
     private String authorName = "Supersonic Nozzle MOC";
@@ -103,13 +103,13 @@ public class STEPExporter {
             throw new IllegalArgumentException("Contour has no points");
         }
 
-        LOG.debug("Exporting STEP revolved solid: {} profile points → {}", points.size(), filePath);
+        LOG.debug("Exporting STEP revolved solid: {} profile points â†’ {}", points.size(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writeHeader(writer);
             writeData(writer, points);
             writeFooter(writer);
         }
-        LOG.debug("STEP export complete → {}", filePath);
+        LOG.debug("STEP export complete â†’ {}", filePath);
     }
 
     /**
@@ -128,16 +128,16 @@ public class STEPExporter {
         List<Point2D> points = fullGeometry.getWallPoints();
         if (points.isEmpty()) {
             throw new IllegalStateException(
-                    "FullNozzleGeometry has no wall points — call generate() first");
+                    "FullNozzleGeometry has no wall points â€” call generate() first");
         }
-        LOG.debug("Exporting geometry-complete STEP revolved solid: {} wall points → {}",
+        LOG.debug("Exporting geometry-complete STEP revolved solid: {} wall points â†’ {}",
                 points.size(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writeHeader(writer);
             writeData(writer, points);
             writeFooter(writer);
         }
-        LOG.debug("Geometry-complete STEP export complete → {}", filePath);
+        LOG.debug("Geometry-complete STEP export complete â†’ {}", filePath);
     }
     
     /**
@@ -292,7 +292,7 @@ public class STEPExporter {
     /**
      * Exports the Aerospike truncated spike contour as a revolved STEP solid.
      *
-     * <p>The spike contour (inner wall of the annular flow path) is revolved 360°
+     * <p>The spike contour (inner wall of the annular flow path) is revolved 360Â°
      * around the x-axis using the same SURFACE_OF_REVOLUTION encoding as
      * {@link #exportRevolvedSolid(NozzleContour, Path)}.
      *
@@ -304,13 +304,13 @@ public class STEPExporter {
             throws IOException {
         // getTruncatedSpikeContour() generates lazily, so the list is always non-empty after this call.
         List<Point2D> spike = nozzle.getTruncatedSpikeContour();
-        LOG.debug("Exporting Aerospike STEP solid: {} spike points → {}", spike.size(), filePath);
+        LOG.debug("Exporting Aerospike STEP solid: {} spike points â†’ {}", spike.size(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writeHeader(writer);
             writeData(writer, spike);
             writeFooter(writer);
         }
-        LOG.debug("Aerospike STEP export complete → {}", filePath);
+        LOG.debug("Aerospike STEP export complete â†’ {}", filePath);
     }
 
     /**
@@ -325,7 +325,7 @@ public class STEPExporter {
     public void exportRevolvedSolid(DualBellNozzle nozzle, Path filePath) throws IOException {
         List<Point2D> pts = nozzle.getContourPoints();
         if (pts.size() < 2) {
-            throw new IllegalArgumentException("DualBellNozzle has no contour — call generate() first");
+            throw new IllegalArgumentException("DualBellNozzle has no contour â€” call generate() first");
         }
         exportRevolvedSolid(NozzleContour.fromPoints(nozzle.getParameters(), pts), filePath);
     }
@@ -343,7 +343,7 @@ public class STEPExporter {
             throw new IllegalArgumentException("Contour has no points");
         }
 
-        LOG.debug("Exporting STEP profile curve: {} points → {}", points.size(), filePath);
+        LOG.debug("Exporting STEP profile curve: {} points â†’ {}", points.size(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writeHeader(writer);
             
@@ -388,7 +388,7 @@ public class STEPExporter {
     public void exportProfileCurve(DualBellNozzle nozzle, Path filePath) throws IOException {
         List<Point2D> pts = nozzle.getContourPoints();
         if (pts.size() < 2) {
-            throw new IllegalArgumentException("DualBellNozzle has no contour — call generate() first");
+            throw new IllegalArgumentException("DualBellNozzle has no contour â€” call generate() first");
         }
         exportProfileCurve(NozzleContour.fromPoints(nozzle.getParameters(), pts), filePath);
     }

@@ -21,7 +21,7 @@
 package com.nozzle.io;
 
 import com.nozzle.core.NozzleDesignParameters;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.CharacteristicPoint;
 
 import java.time.Instant;
@@ -39,7 +39,7 @@ import java.util.List;
  * schema; {@link #createdAt} records the ISO-8601 UTC timestamp of the save operation.
  * Both are informational and are not validated on load.
  *
- * <p>Any of the computed lists may be empty — for example, a document that captures
+ * <p>Any of the computed lists may be empty â€” for example, a document that captures
  * only the design parameters (before any computation) has empty {@code wallPoints},
  * {@code netPoints}, and {@code contourPoints}.
  *

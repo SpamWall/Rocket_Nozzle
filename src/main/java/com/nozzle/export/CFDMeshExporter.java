@@ -22,7 +22,7 @@ package com.nozzle.export;
 
 import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 
 import org.slf4j.Logger;
@@ -50,7 +50,7 @@ public class CFDMeshExporter {
      * Supported CFD mesh output formats.
      */
     public enum Format {
-        /** OpenFOAM {@code blockMeshDict} with a 5° axisymmetric wedge topology. */
+        /** OpenFOAM {@code blockMeshDict} with a 5Â° axisymmetric wedge topology. */
         OPENFOAM_BLOCKMESH,
         /** Gmsh {@code .geo} script with transfinite surface mesh instructions. */
         GMSH_GEO,
@@ -71,7 +71,7 @@ public class CFDMeshExporter {
     /** Cell-size expansion ratio from wall to interior (default: 1.2). */
     private double expansionRatio = 1.2;
     /**
-     * First cell height y₁ in metres for y⁺-controlled grading.
+     * First cell height yâ‚ in metres for yâº-controlled grading.
      * When positive, overrides {@link #expansionRatio} in all export methods.
      * Zero means disabled (use {@link #expansionRatio} directly).
      */
@@ -113,16 +113,16 @@ public class CFDMeshExporter {
     }
 
     /**
-     * Sets the first cell height y₁ (metres) for y⁺-controlled radial grading,
+     * Sets the first cell height yâ‚ (metres) for yâº-controlled radial grading,
      * overriding the fixed {@link #setExpansionRatio(double) expansionRatio}.
      * The domain height H used is the exit radius for bell nozzles and the
-     * annular gap (r_cowl − r_spike_root) for Aerospike nozzles.
+     * annular gap (r_cowl âˆ’ r_spike_root) for Aerospike nozzles.
      * The grading derived per format is:
      * <ul>
-     *   <li><b>OpenFOAM blockMesh</b>: expansion ratio g = H / y₁</li>
-     *   <li><b>Gmsh transfinite progression</b>: r = (H / y₁)<sup>1/N</sup>,
+     *   <li><b>OpenFOAM blockMesh</b>: expansion ratio g = H / yâ‚</li>
+     *   <li><b>Gmsh transfinite progression</b>: r = (H / yâ‚)<sup>1/N</sup>,
      *       where N = {@link #setRadialCells(int) radialCells}</li>
-     *   <li><b>Plot3D power-law exponent</b>: p = ln(H / y₁) / ln(N)</li>
+     *   <li><b>Plot3D power-law exponent</b>: p = ln(H / yâ‚) / ln(N)</li>
      * </ul>
      *
      * @param t First cell height in metres (must be positive)
@@ -137,12 +137,12 @@ public class CFDMeshExporter {
     }
     
     // -------------------------------------------------------------------------
-    // y⁺-grading helpers
+    // yâº-grading helpers
     // -------------------------------------------------------------------------
 
     /**
      * Returns the OpenFOAM blockMesh expansion ratio for a given domain height.
-     * When {@link #firstLayerThickness} is set: g = H / y₁ (strong-grading approximation
+     * When {@link #firstLayerThickness} is set: g = H / yâ‚ (strong-grading approximation
      * where the last-to-first cell ratio equals the domain-to-first-cell ratio).
      * Falls back to {@link #expansionRatio} otherwise.
      */
@@ -153,7 +153,7 @@ public class CFDMeshExporter {
 
     /**
      * Returns the Gmsh {@code Using Progression} cell-to-cell ratio r for a given
-     * domain height.  r = (H / y₁)<sup>1/N</sup> where N = {@link #radialCells}.
+     * domain height.  r = (H / yâ‚)<sup>1/N</sup> where N = {@link #radialCells}.
      * Falls back to {@link #expansionRatio} otherwise.
      */
     private double gmshProgression(double domainHeight) {
@@ -164,8 +164,8 @@ public class CFDMeshExporter {
 
     /**
      * Returns the Plot3D power-law stretching exponent p for a given domain height.
-     * The exponent satisfies y₁ = H · (1/N)<sup>p</sup>, giving
-     * p = ln(H / y₁) / ln(N) where N = {@link #radialCells}.
+     * The exponent satisfies yâ‚ = H Â· (1/N)<sup>p</sup>, giving
+     * p = ln(H / yâ‚) / ln(N) where N = {@link #radialCells}.
      * Falls back to {@link #expansionRatio} otherwise.
      */
     private double plot3dExponent(double domainHeight) {
@@ -183,7 +183,7 @@ public class CFDMeshExporter {
      * @throws IOException If the file cannot be written
      */
     public void export(NozzleContour contour, Path filePath, Format format) throws IOException {
-        LOG.debug("Exporting CFD mesh: format={} axial={} radial={} → {}",
+        LOG.debug("Exporting CFD mesh: format={} axial={} radial={} â†’ {}",
                 format, axialCells, radialCells, filePath);
         switch (format) {
             case OPENFOAM_BLOCKMESH -> exportOpenFOAM(contour, filePath);
@@ -191,7 +191,7 @@ public class CFDMeshExporter {
             case PLOT3D -> exportPlot3D(contour, filePath);
             case CGNS -> exportCGNS(contour, filePath);
         }
-        LOG.debug("CFD mesh export complete → {}", filePath);
+        LOG.debug("CFD mesh export complete â†’ {}", filePath);
     }
 
     /**
@@ -212,9 +212,9 @@ public class CFDMeshExporter {
         List<Point2D> pts = fullGeometry.getWallPoints();
         if (pts.isEmpty()) {
             throw new IllegalStateException(
-                    "FullNozzleGeometry has no wall points — call generate() first");
+                    "FullNozzleGeometry has no wall points â€” call generate() first");
         }
-        LOG.debug("Exporting geometry-complete CFD mesh: format={} {} wall points → {}",
+        LOG.debug("Exporting geometry-complete CFD mesh: format={} {} wall points â†’ {}",
                 format, pts.size(), filePath);
         NozzleContour contour = NozzleContour.fromPoints(fullGeometry.getParameters(), pts);
         switch (format) {
@@ -223,11 +223,11 @@ public class CFDMeshExporter {
             case PLOT3D            -> exportPlot3D(contour, filePath);
             case CGNS              -> exportCGNS(contour, filePath);
         }
-        LOG.debug("Geometry-complete CFD mesh export complete → {}", filePath);
+        LOG.debug("Geometry-complete CFD mesh export complete â†’ {}", filePath);
     }
 
     /**
-     * Exports an OpenFOAM {@code blockMeshDict} for an axisymmetric 5° wedge mesh.
+     * Exports an OpenFOAM {@code blockMeshDict} for an axisymmetric 5Â° wedge mesh.
      * The mesh uses a single hex block with a spline edge along the wall profile
      * and six boundary patches: {@code inlet}, {@code outlet}, {@code wall},
      * {@code axis}, {@code wedge0}, and {@code wedge1}.
@@ -450,7 +450,7 @@ public class CFDMeshExporter {
      * The grid is generated by linearly mapping each axial station from the axis
      * to the wall with a power-law radial stretching controlled by
      * {@link #expansionRatio} or, when {@link #firstLayerThickness} is set, by a
-     * y⁺-derived exponent.  Coordinates are written in Fortran row-major order
+     * yâº-derived exponent.  Coordinates are written in Fortran row-major order
      * (j-loop outer, i-loop inner, 5 values per line).
      *
      * @param contour  Nozzle contour used to evaluate the wall radius at each axial station
@@ -479,7 +479,7 @@ public class CFDMeshExporter {
 
             for (int j = 0; j < nj; j++) {
                 double eta = (double) j / (nj - 1);
-                // Apply wall-clustering power-law stretch: η' = 1 − (1−η)^p
+                // Apply wall-clustering power-law stretch: Î·' = 1 âˆ’ (1âˆ’Î·)^p
                 eta = 1.0 - Math.pow(1.0 - eta, p);
 
                 x[i][j] = xi;
@@ -547,10 +547,10 @@ public class CFDMeshExporter {
      * contour profile and the outer boundary is held at the cowl-lip radius
      * {@code rt} (throat outer radius).  This gives:
      * <ul>
-     *   <li>Inlet patch — annular face at x = 0, r ∈ [ri, rt]</li>
-     *   <li>Outlet patch — annular face at x = L_spike, r ∈ [r_spike_tip, rt]</li>
-     *   <li>Inner-wall patch — the spike surface</li>
-     *   <li>Outer-wall patch — constant r = rt (freestream or cowl)</li>
+     *   <li>Inlet patch â€” annular face at x = 0, r âˆˆ [ri, rt]</li>
+     *   <li>Outlet patch â€” annular face at x = L_spike, r âˆˆ [r_spike_tip, rt]</li>
+     *   <li>Inner-wall patch â€” the spike surface</li>
+     *   <li>Outer-wall patch â€” constant r = rt (freestream or cowl)</li>
      * </ul>
      *
      * @param nozzle   Aerospike nozzle (must have been generated)
@@ -560,19 +560,19 @@ public class CFDMeshExporter {
      */
     public void exportAerospike(AerospikeNozzle nozzle, Path filePath, Format format)
             throws IOException {
-        LOG.debug("Exporting Aerospike CFD mesh: format={} axial={} radial={} → {}",
+        LOG.debug("Exporting Aerospike CFD mesh: format={} axial={} radial={} â†’ {}",
                 format, axialCells, radialCells, filePath);
         switch (format) {
             case OPENFOAM_BLOCKMESH -> exportAerospikeOpenFOAM(nozzle, filePath);
             case GMSH_GEO -> exportAerospikeGmsh(nozzle, filePath);
             case PLOT3D, CGNS -> exportAerospikePlot3D(nozzle, filePath);
         }
-        LOG.debug("Aerospike CFD mesh export complete → {}", filePath);
+        LOG.debug("Aerospike CFD mesh export complete â†’ {}", filePath);
     }
 
     /**
      * Exports an OpenFOAM {@code blockMeshDict} for the Aerospike annular flow domain.
-     * Uses a 5° axisymmetric wedge topology with the inner wall following the spike
+     * Uses a 5Â° axisymmetric wedge topology with the inner wall following the spike
      * contour and the outer wall at constant radius {@code rt}.
      *
      * @param nozzle   Aerospike nozzle (must have been generated)
@@ -652,7 +652,7 @@ public class CFDMeshExporter {
         }
     }
 
-    /** Writes a pair of wedge vertices (±z) for OpenFOAM blockMeshDict. */
+    /** Writes a pair of wedge vertices (Â±z) for OpenFOAM blockMeshDict. */
     private static void writeWedgeVertex(BufferedWriter writer, int id,
                                           double r, double wedge, double x) throws IOException {
         double y = r * Math.cos(wedge);
@@ -815,7 +815,7 @@ public class CFDMeshExporter {
         if (x <= spike.getFirst().x()) return spike.getFirst().y();
         // Walk segments left-to-right; return as soon as x is within the segment.
         // When x >= spike.getLast().x() the loop exhausts and falls through to the
-        // final return — equivalent to the former early-return guard, but reachable
+        // final return â€” equivalent to the former early-return guard, but reachable
         // by the final grid station at xi = L in exportAerospikePlot3D.
         for (int i = 0; i < spike.size() - 1; i++) {
             Point2D a = spike.get(i);

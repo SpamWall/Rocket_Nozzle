@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 import com.nozzle.moc.AltitudePerformance;
 import com.nozzle.moc.CharacteristicNet;
@@ -48,14 +48,14 @@ import java.util.List;
  *
  * <p>Available export methods:
  * <ul>
- *   <li>{@link #exportCharacteristicNet} — full MOC net with flow-field data</li>
- *   <li>{@link #exportWallContour} — MOC wall points</li>
- *   <li>{@link #exportContour} — design contour with local wall angle</li>
- *   <li>{@link #exportThermalProfile} — wall temperatures and heat fluxes</li>
- *   <li>{@link #exportBoundaryLayerProfile} — boundary-layer thicknesses and skin friction</li>
- *   <li>{@link #exportDesignParameters} — scalar design parameters</li>
- *   <li>{@link #exportStressProfile} — thermal stress and fatigue data</li>
- *   <li>{@link #exportCompleteReport} — convenience wrapper for all of the above</li>
+ *   <li>{@link #exportCharacteristicNet} â€” full MOC net with flow-field data</li>
+ *   <li>{@link #exportWallContour} â€” MOC wall points</li>
+ *   <li>{@link #exportContour} â€” design contour with local wall angle</li>
+ *   <li>{@link #exportThermalProfile} â€” wall temperatures and heat fluxes</li>
+ *   <li>{@link #exportBoundaryLayerProfile} â€” boundary-layer thicknesses and skin friction</li>
+ *   <li>{@link #exportDesignParameters} â€” scalar design parameters</li>
+ *   <li>{@link #exportStressProfile} â€” thermal stress and fatigue data</li>
+ *   <li>{@link #exportCompleteReport} â€” convenience wrapper for all of the above</li>
  * </ul>
  */
 public class CSVExporter {
@@ -78,7 +78,7 @@ public class CSVExporter {
      * @throws IOException If write fails
      */
     public void exportCharacteristicNet(CharacteristicNet net, Path filePath) throws IOException {
-        LOG.debug("Exporting CSV characteristic net → {}", filePath);
+        LOG.debug("Exporting CSV characteristic net â†’ {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             // Header
             writer.write("row,index,x,y,mach,theta_deg,nu_deg,mu_deg,pressure,temperature,density,velocity,type");
@@ -105,7 +105,7 @@ public class CSVExporter {
      * @throws IOException If write fails
      */
     public void exportWallContour(CharacteristicNet net, Path filePath) throws IOException {
-        LOG.debug("Exporting CSV wall contour → {}", filePath);
+        LOG.debug("Exporting CSV wall contour â†’ {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("x,y,mach,theta_deg,pressure,temperature,velocity");
             writer.write(NEWLINE);
@@ -132,7 +132,7 @@ public class CSVExporter {
      * @throws IOException If write fails
      */
     public void exportContour(NozzleContour contour, Path filePath) throws IOException {
-        LOG.debug("Exporting CSV contour → {}", filePath);
+        LOG.debug("Exporting CSV contour â†’ {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("x,y,angle_deg");
             writer.write(NEWLINE);
@@ -166,9 +166,9 @@ public class CSVExporter {
         List<Point2D> points = fullGeometry.getWallPoints();
         if (points.isEmpty()) {
             throw new IllegalStateException(
-                    "FullNozzleGeometry has no wall points — call generate() first");
+                    "FullNozzleGeometry has no wall points â€” call generate() first");
         }
-        LOG.debug("Exporting geometry-complete CSV contour: {} wall points → {}",
+        LOG.debug("Exporting geometry-complete CSV contour: {} wall points â†’ {}",
                 points.size(), filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("x,y,angle_deg,section");
@@ -200,7 +200,7 @@ public class CSVExporter {
                 writer.write(NEWLINE);
             }
         }
-        LOG.debug("Geometry-complete CSV contour export complete → {}", filePath);
+        LOG.debug("Geometry-complete CSV contour export complete â†’ {}", filePath);
     }
 
     /**
@@ -211,7 +211,7 @@ public class CSVExporter {
      * @throws IOException If write fails
      */
     public void exportThermalProfile(HeatTransferModel heatTransfer, Path filePath) throws IOException {
-        LOG.debug("Exporting CSV thermal profile → {}", filePath);
+        LOG.debug("Exporting CSV thermal profile â†’ {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("x,y,wall_temp_K,total_heat_flux_W_m2,conv_heat_flux_W_m2,");
             writer.write("rad_heat_flux_W_m2,heat_transfer_coeff_W_m2K,recovery_temp_K");
@@ -241,7 +241,7 @@ public class CSVExporter {
      */
     public void exportBoundaryLayerProfile(BoundaryLayerCorrection boundaryLayer,
                                             Path filePath) throws IOException {
-        LOG.debug("Exporting CSV boundary layer profile → {}", filePath);
+        LOG.debug("Exporting CSV boundary layer profile â†’ {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("x,y,running_length,Reynolds,delta,delta_star,theta,cf,turbulent,mach");
             writer.write(NEWLINE);
@@ -271,7 +271,7 @@ public class CSVExporter {
      * @throws IOException If write fails
      */
     public void exportDesignParameters(NozzleDesignParameters params, Path filePath) throws IOException {
-        LOG.debug("Exporting CSV design parameters → {}", filePath);
+        LOG.debug("Exporting CSV design parameters â†’ {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("parameter,value,unit");
             writer.write(NEWLINE);
@@ -285,7 +285,7 @@ public class CSVExporter {
             writeParameter(writer, "ambient_pressure", params.ambientPressure(), "Pa");
             writeParameter(writer, "gamma", params.gasProperties().gamma(), "-");
             writeParameter(writer, "molecular_weight", params.gasProperties().molecularWeight(), "kg/kmol");
-            writeParameter(writer, "gas_constant", params.gasProperties().gasConstant(), "J/(kg·K)");
+            writeParameter(writer, "gas_constant", params.gasProperties().gasConstant(), "J/(kgÂ·K)");
             writeParameter(writer, "wall_angle_initial", Math.toDegrees(params.wallAngleInitial()), "deg");
             writeParameter(writer, "length_fraction", params.lengthFraction(), "-");
             writeParameter(writer, "num_char_lines", params.numberOfCharLines(), "-");
@@ -323,7 +323,7 @@ public class CSVExporter {
                                       HeatTransferModel heat,
                                       BoundaryLayerCorrection bl,
                                       Path outputDir) throws IOException {
-        LOG.debug("Exporting complete CSV report → {}", outputDir);
+        LOG.debug("Exporting complete CSV report â†’ {}", outputDir);
         Files.createDirectories(outputDir);
         
         exportDesignParameters(net.getParameters(), outputDir.resolve("design_parameters.csv"));
@@ -351,7 +351,7 @@ public class CSVExporter {
      * @throws IOException If write fails
      */
     public void exportStressProfile(ThermalStressAnalysis analysis, Path filePath) throws IOException {
-        LOG.debug("Exporting CSV stress profile → {}", filePath);
+        LOG.debug("Exporting CSV stress profile â†’ {}", filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("x_m,y_m,wall_temp_K,delta_T_K,"
                     + "sigma_thermal_MPa,sigma_hoop_pressure_MPa,sigma_axial_pressure_MPa,"
@@ -474,9 +474,9 @@ public class CSVExporter {
      *
      * <p>Creates three files:
      * <ul>
-     *   <li>{@code aerospike_design_parameters.csv} — scalar design parameters</li>
-     *   <li>{@code aerospike_spike_contour.csv} — full and truncated spike contours</li>
-     *   <li>{@code aerospike_altitude_performance.csv} — per-altitude thrust and Isp</li>
+     *   <li>{@code aerospike_design_parameters.csv} â€” scalar design parameters</li>
+     *   <li>{@code aerospike_spike_contour.csv} â€” full and truncated spike contours</li>
+     *   <li>{@code aerospike_altitude_performance.csv} â€” per-altitude thrust and Isp</li>
      * </ul>
      *
      * @param nozzle           Aerospike nozzle (must have been generated)
@@ -509,7 +509,7 @@ public class CSVExporter {
     public void exportDualBellContour(DualBellNozzle nozzle, Path filePath) throws IOException {
         List<Point2D> pts = nozzle.getContourPoints();
         int kinkIdx = nozzle.getKinkIndex();
-        LOG.debug("Exporting CSV dual-bell contour: {} points (kink at {}) → {}",
+        LOG.debug("Exporting CSV dual-bell contour: {} points (kink at {}) â†’ {}",
                 pts.size(), kinkIdx, filePath);
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write("x_m,y_m,section");
@@ -522,7 +522,7 @@ public class CSVExporter {
                 writer.write(NEWLINE);
             }
         }
-        LOG.debug("CSV dual-bell contour export complete → {}", filePath);
+        LOG.debug("CSV dual-bell contour export complete â†’ {}", filePath);
     }
 
     /**
@@ -530,10 +530,10 @@ public class CSVExporter {
      *
      * <p>Creates three files:
      * <ul>
-     *   <li>{@code dual_bell_design_parameters.csv} — scalar design parameters</li>
-     *   <li>{@code dual_bell_contour.csv} — wall profile with {@code BASE}/{@code EXTENSION}
+     *   <li>{@code dual_bell_design_parameters.csv} â€” scalar design parameters</li>
+     *   <li>{@code dual_bell_contour.csv} â€” wall profile with {@code BASE}/{@code EXTENSION}
      *       section labels</li>
-     *   <li>{@code dual_bell_performance.csv} — performance scalars: sea-level and
+     *   <li>{@code dual_bell_performance.csv} â€” performance scalars: sea-level and
      *       high-altitude Cf and Isp, transition pressure, nozzle lengths, kink geometry
      *       (inflection angle, exit angles, transition Mach)</li>
      * </ul>
@@ -543,7 +543,7 @@ public class CSVExporter {
      * @throws IOException If write fails
      */
     public void exportDualBellReport(DualBellNozzle nozzle, Path outputDir) throws IOException {
-        LOG.debug("Exporting dual-bell CSV report → {}", outputDir);
+        LOG.debug("Exporting dual-bell CSV report â†’ {}", outputDir);
         Files.createDirectories(outputDir);
         exportDesignParameters(nozzle.getParameters(),
                 outputDir.resolve("dual_bell_design_parameters.csv"));
@@ -565,6 +565,6 @@ public class CSVExporter {
             writeParameter(writer, "sea_level_isp",        nozzle.getSeaLevelIsp(),                     "s");
             writeParameter(writer, "high_altitude_isp",    nozzle.getHighAltitudeIsp(),                 "s");
         }
-        LOG.debug("Dual-bell CSV report export complete → {}", outputDir);
+        LOG.debug("Dual-bell CSV report export complete â†’ {}", outputDir);
     }
 }

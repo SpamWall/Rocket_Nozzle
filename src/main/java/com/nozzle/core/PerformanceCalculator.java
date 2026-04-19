@@ -228,7 +228,7 @@ public class PerformanceCalculator {
                 exitAngle = wallPoints.getLast().theta();
             }
         } else if (contour != null) {
-            List<com.nozzle.geometry.Point2D> points = contour.getContourPoints();
+            List<Point2D> points = contour.getContourPoints();
             if (points.size() >= 2) {
                 var last = points.getLast();
                 var prev = points.get(points.size() - 2);

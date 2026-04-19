@@ -24,7 +24,7 @@ import com.nozzle.core.GasProperties;
 import com.nozzle.core.NozzleDesignParameters;
 import com.nozzle.geometry.FullNozzleGeometry;
 import com.nozzle.geometry.NozzleContour;
-import com.nozzle.geometry.Point2D;
+import com.nozzle.core.Point2D;
 import com.nozzle.moc.AerospikeNozzle;
 
 import org.slf4j.Logger;
@@ -44,48 +44,48 @@ import java.util.List;
  * <pre>
  *   &lt;caseDir&gt;/
  *     system/
- *       blockMeshDict          – wedge mesh with spline wall profile
- *       controlDict            – rhoCentralFoam run control
- *       fvSchemes              – Kurganov-Tadmor central-upwind schemes
- *       fvSolution             – turbulence-scalar solvers
+ *       blockMeshDict          â€“ wedge mesh with spline wall profile
+ *       controlDict            â€“ rhoCentralFoam run control
+ *       fvSchemes              â€“ Kurganov-Tadmor central-upwind schemes
+ *       fvSolution             â€“ turbulence-scalar solvers
  *     constant/
- *       thermophysicalProperties – perfect-gas model from NozzleDesignParameters
- *       turbulenceProperties     – k-ω SST (or laminar)
+ *       thermophysicalProperties â€“ perfect-gas model from NozzleDesignParameters
+ *       turbulenceProperties     â€“ k-Ï‰ SST (or laminar)
  *     0/
- *       p                      – total-pressure BC at inlet, fixed at outlet
- *       T                      – total-temperature BC at inlet
- *       U                      – pressureInletOutletVelocity at inlet, zeroGradient at outlet
- *       k                      – turbulent kinetic energy   (if turbulence enabled)
- *       omega                  – specific dissipation rate  (if turbulence enabled)
+ *       p                      â€“ total-pressure BC at inlet, fixed at outlet
+ *       T                      â€“ total-temperature BC at inlet
+ *       U                      â€“ pressureInletOutletVelocity at inlet, zeroGradient at outlet
+ *       k                      â€“ turbulent kinetic energy   (if turbulence enabled)
+ *       omega                  â€“ specific dissipation rate  (if turbulence enabled)
  * </pre>
  *
  * <h2>Mesh topology</h2>
- * A 5° axisymmetric wedge (±{@value #DEFAULT_WEDGE_ANGLE_DEG}°) is generated with a
+ * A 5Â° axisymmetric wedge (Â±{@value #DEFAULT_WEDGE_ANGLE_DEG}Â°) is generated with a
  * single hex block.  The nozzle wall profile is embedded as a {@code spline} edge so
  * the mesh faithfully follows the contour.  Boundary patches:
  * <ul>
- *   <li>{@code inlet}  — {@code patch}</li>
- *   <li>{@code outlet} — {@code patch}</li>
- *   <li>{@code wall}   — {@code wall}</li>
- *   <li>{@code axis}   — {@code empty} (axisymmetric treatment)</li>
- *   <li>{@code front} / {@code back} — {@code wedge}</li>
+ *   <li>{@code inlet}  â€” {@code patch}</li>
+ *   <li>{@code outlet} â€” {@code patch}</li>
+ *   <li>{@code wall}   â€” {@code wall}</li>
+ *   <li>{@code axis}   â€” {@code empty} (axisymmetric treatment)</li>
+ *   <li>{@code front} / {@code back} â€” {@code wedge}</li>
  * </ul>
  *
  * <h2>Aerospike case</h2>
  * {@link #exportAerospikeCase(AerospikeNozzle, Path)} writes a rhoCentralFoam case
  * for the annular flow domain of an Aerospike nozzle.  The mesh spans the gap between
  * the spike surface (inner wall) and the cowl (outer wall at r = r_t).  There is no
- * axis patch — both inner and outer boundaries are solid walls.  Boundary patches:
+ * axis patch â€” both inner and outer boundaries are solid walls.  Boundary patches:
  * <ul>
- *   <li>{@code inlet}  — {@code patch} (annular throat plane)</li>
- *   <li>{@code outlet} — {@code patch} (annular exit plane at spike tip)</li>
- *   <li>{@code spike}  — {@code wall}  (spike inner surface)</li>
- *   <li>{@code cowl}   — {@code wall}  (constant-radius outer cowl)</li>
- *   <li>{@code wedge0} / {@code wedge1} — {@code wedge}</li>
+ *   <li>{@code inlet}  â€” {@code patch} (annular throat plane)</li>
+ *   <li>{@code outlet} â€” {@code patch} (annular exit plane at spike tip)</li>
+ *   <li>{@code spike}  â€” {@code wall}  (spike inner surface)</li>
+ *   <li>{@code cowl}   â€” {@code wall}  (constant-radius outer cowl)</li>
+ *   <li>{@code wedge0} / {@code wedge1} â€” {@code wedge}</li>
  * </ul>
  *
  * <h2>Solver</h2>
- * {@code rhoCentralFoam} (density-based, Kurganov-Tadmor central scheme) — suitable
+ * {@code rhoCentralFoam} (density-based, Kurganov-Tadmor central scheme) â€” suitable
  * for the full Mach range from subsonic chamber to supersonic exit.
  *
  * <h2>Usage</h2>
@@ -108,7 +108,7 @@ public class OpenFOAMExporter {
     /** Creates an {@code OpenFOAMExporter} with default mesh and solver settings. */
     public OpenFOAMExporter() {}
 
-    /** Half-angle of the axisymmetric wedge in degrees (default ±2.5° = 5° total). */
+    /** Half-angle of the axisymmetric wedge in degrees (default Â±2.5Â° = 5Â° total). */
     private static final double DEFAULT_WEDGE_ANGLE_DEG = 2.5;
 
     /** Number of cells in the axial (flow) direction of the hex block. */
@@ -119,14 +119,14 @@ public class OpenFOAMExporter {
     private double wedgeAngleDeg     = DEFAULT_WEDGE_ANGLE_DEG;
     /** Wall-normal mesh grading ratio (cell size at wall / cell size at axis). */
     private double radialGrading     = 4.0;
-    /** When {@code true}, writes k-ω SST turbulence model; when {@code false}, writes laminar. */
+    /** When {@code true}, writes k-Ï‰ SST turbulence model; when {@code false}, writes laminar. */
     private boolean turbulenceEnabled = true;
-    /** Turbulent intensity fraction used to initialise k and ω fields (default 5 %). */
+    /** Turbulent intensity fraction used to initialise k and Ï‰ fields (default 5 %). */
     private double turbulenceIntensity = 0.05;
     /**
-     * First cell height y₁ in metres for y⁺-controlled radial grading.
+     * First cell height yâ‚ in metres for yâº-controlled radial grading.
      * When positive, overrides {@link #radialGrading} in {@code blockMeshDict}:
-     * effective grading = r_exit / y₁.  Zero means disabled.
+     * effective grading = r_exit / yâ‚.  Zero means disabled.
      */
     private double firstLayerThickness = 0.0;
 
@@ -152,9 +152,9 @@ public class OpenFOAMExporter {
 
     /**
      * Sets the wedge half-angle used for the axisymmetric mesh (default
-     * {@value #DEFAULT_WEDGE_ANGLE_DEG}°).  The total wedge spans ±{@code deg} degrees.
+     * {@value #DEFAULT_WEDGE_ANGLE_DEG}Â°).  The total wedge spans Â±{@code deg} degrees.
      *
-     * @param deg Wedge half-angle in degrees (typically 2.5° for a 5° wedge)
+     * @param deg Wedge half-angle in degrees (typically 2.5Â° for a 5Â° wedge)
      * @return This instance for method chaining
      */
     public OpenFOAMExporter setWedgeAngleDeg(double deg) { this.wedgeAngleDeg = deg;    return this; }
@@ -164,17 +164,17 @@ public class OpenFOAMExporter {
      * axis to the cell size nearest the wall).  Values greater than 1 cluster cells
      * toward the wall to resolve the boundary layer.
      *
-     * @param g Grading ratio (≥ 1; use 1 for uniform spacing)
+     * @param g Grading ratio (â‰¥ 1; use 1 for uniform spacing)
      * @return This instance for method chaining
      */
     public OpenFOAMExporter setRadialGrading(double g)   { this.radialGrading = g;      return this; }
 
     /**
-     * Enables or disables turbulence modeling.  When enabled, k-ω SST is written
+     * Enables or disables turbulence modeling.  When enabled, k-Ï‰ SST is written
      * to {@code constant/turbulenceProperties} and the {@code 0/k} and {@code 0/omega}
      * fields are generated.  When disabled, a laminar simulation type is written.
      *
-     * @param b {@code true} to enable k-ω SST; {@code false} for laminar
+     * @param b {@code true} to enable k-Ï‰ SST; {@code false} for laminar
      * @return This instance for method chaining
      */
     public OpenFOAMExporter setTurbulenceEnabled(boolean b) { this.turbulenceEnabled = b; return this; }
@@ -182,7 +182,7 @@ public class OpenFOAMExporter {
     /**
      * Sets the turbulent intensity fraction used to initialize the {@code k} and
      * {@code omega} fields from the chamber speed of sound
-     * ({@code k₀ = 1.5 · (I · a₀)²}).
+     * ({@code kâ‚€ = 1.5 Â· (I Â· aâ‚€)Â²}).
      *
      * @param i Turbulent intensity as a fraction of the local velocity (e.g. 0.05 = 5 %)
      * @return This instance for method chaining
@@ -190,10 +190,10 @@ public class OpenFOAMExporter {
     public OpenFOAMExporter setTurbulenceIntensity(double i) { this.turbulenceIntensity = i; return this; }
 
     /**
-     * Sets the first cell height y₁ (metres) for y⁺-controlled radial grading,
+     * Sets the first cell height yâ‚ (metres) for yâº-controlled radial grading,
      * overriding the fixed {@link #setRadialGrading(double) radialGrading}.
      * The effective grading written to {@code blockMeshDict} is
-     * {@code r_exit / y₁}, where {@code r_exit} is the nozzle exit radius.
+     * {@code r_exit / yâ‚}, where {@code r_exit} is the nozzle exit radius.
      *
      * @param t First cell height in metres (must be positive)
      * @return This instance for method chaining
@@ -213,7 +213,7 @@ public class OpenFOAMExporter {
     /**
      * Writes a complete OpenFOAM case directory.
      *
-     * @param params   Nozzle design parameters — used to set BCs and thermophysical model
+     * @param params   Nozzle design parameters â€” used to set BCs and thermophysical model
      * @param contour  Pre-generated nozzle wall contour
      * @param caseDir  Output directory (created if absent)
      * @throws IOException on any file write failure
@@ -230,12 +230,12 @@ public class OpenFOAMExporter {
     /**
      * Exports a complete OpenFOAM case covering the full nozzle from injector face
      * to exit.  The wall-point list from {@link FullNozzleGeometry#getWallPoints()}
-     * spans the convergent section (x &lt; 0) and the divergent section (x ≥ 0), so
+     * spans the convergent section (x &lt; 0) and the divergent section (x â‰¥ 0), so
      * the resulting mesh captures the subsonic-to-supersonic transition and is
      * suitable for rhoCentralFoam simulations that include the combustion chamber
      * inlet.
      *
-     * @param params       Nozzle design parameters — used for BCs and thermophysical model
+     * @param params       Nozzle design parameters â€” used for BCs and thermophysical model
      * @param fullGeometry Full nozzle geometry (must have been generated)
      * @param caseDir      Output directory (created if absent)
      * @throws IllegalStateException If {@code fullGeometry} has not been generated
@@ -246,7 +246,7 @@ public class OpenFOAMExporter {
         List<Point2D> pts = fullGeometry.getWallPoints();
         if (pts.isEmpty()) {
             throw new IllegalStateException(
-                    "FullNozzleGeometry has no wall points — call generate() first");
+                    "FullNozzleGeometry has no wall points â€” call generate() first");
         }
         exportCaseFromPoints(params, pts, caseDir);
     }
@@ -256,16 +256,16 @@ public class OpenFOAMExporter {
      *
      * <p>The computational domain is the annular gap between the spike surface (inner
      * wall) and the cowl at {@code r = r_t} (outer wall).  The spike contour is
-     * embedded as a {@code spline} edge.  There is no axis patch — both inner and
+     * embedded as a {@code spline} edge.  There is no axis patch â€” both inner and
      * outer boundaries use wall boundary conditions.
      *
      * <p>Boundary patches written:
      * <ul>
-     *   <li>{@code inlet}  — annular face at the throat plane (x = 0)</li>
-     *   <li>{@code outlet} — annular face at the truncated spike tip (x = L)</li>
-     *   <li>{@code spike}  — inner spike surface (wall)</li>
-     *   <li>{@code cowl}   — outer cowl at constant r = r_t (wall)</li>
-     *   <li>{@code wedge0} / {@code wedge1} — axisymmetric wedge faces</li>
+     *   <li>{@code inlet}  â€” annular face at the throat plane (x = 0)</li>
+     *   <li>{@code outlet} â€” annular face at the truncated spike tip (x = L)</li>
+     *   <li>{@code spike}  â€” inner spike surface (wall)</li>
+     *   <li>{@code cowl}   â€” outer cowl at constant r = r_t (wall)</li>
+     *   <li>{@code wedge0} / {@code wedge1} â€” axisymmetric wedge faces</li>
      * </ul>
      *
      * @param nozzle  Aerospike nozzle (must have been generated)
@@ -277,7 +277,7 @@ public class OpenFOAMExporter {
         List<Point2D> spike = nozzle.getTruncatedSpikeContour();
         if (spike.size() < 2) {
             throw new IllegalArgumentException(
-                    "AerospikeNozzle has no contour — call generate() first");
+                    "AerospikeNozzle has no contour â€” call generate() first");
         }
         NozzleDesignParameters params = nozzle.getParameters();
         double rt   = params.throatRadius();          // cowl radius
@@ -285,7 +285,7 @@ public class OpenFOAMExporter {
         double rTip = nozzle.getTruncatedBaseRadius(); // spike tip radius at x = L
         double L    = nozzle.getTruncatedLength();    // axial length of spike
 
-        LOG.debug("Exporting Aerospike OpenFOAM case: {} spike pts, rt={} ri={} L={} → {}",
+        LOG.debug("Exporting Aerospike OpenFOAM case: {} spike pts, rt={} ri={} L={} â†’ {}",
                 spike.size(), rt, ri, L, caseDir);
 
         Path system   = caseDir.resolve("system");
@@ -311,7 +311,7 @@ public class OpenFOAMExporter {
             writeAeroSpikeOmegaField(params, ri, rt, zero.resolve("omega"));
         }
 
-        LOG.debug("Aerospike OpenFOAM case export complete → {}", caseDir);
+        LOG.debug("Aerospike OpenFOAM case export complete â†’ {}", caseDir);
     }
 
     /**
@@ -320,7 +320,7 @@ public class OpenFOAMExporter {
      */
     private void exportCaseFromPoints(NozzleDesignParameters params,
                                       List<Point2D> pts, Path caseDir) throws IOException {
-        LOG.debug("Exporting OpenFOAM case: {} wall points, axial={} radial={} turbulence={} → {}",
+        LOG.debug("Exporting OpenFOAM case: {} wall points, axial={} radial={} turbulence={} â†’ {}",
                 pts.size(), axialCells, radialCells, turbulenceEnabled, caseDir);
 
         Path system   = caseDir.resolve("system");
@@ -346,7 +346,7 @@ public class OpenFOAMExporter {
             writeOmegaField(params, pts, zero.resolve("omega"));
         }
 
-        LOG.debug("OpenFOAM case export complete → {}", caseDir);
+        LOG.debug("OpenFOAM case export complete â†’ {}", caseDir);
     }
 
     // -------------------------------------------------------------------------
@@ -354,7 +354,7 @@ public class OpenFOAMExporter {
     // -------------------------------------------------------------------------
 
     /**
-     * Writes {@code system/blockMeshDict} defining the 5° axisymmetric wedge mesh.
+     * Writes {@code system/blockMeshDict} defining the 5Â° axisymmetric wedge mesh.
      * Eight vertices form a single hex block; the wall profile is embedded as two
      * {@code spline} edges (front and back wedge faces).
      *
@@ -408,7 +408,7 @@ public class OpenFOAMExporter {
             w.println();
 
             // --- blocks ---
-            // i-direction: v0→v1 (axial), j-direction: v0→v3 (radial), k-direction: wedge
+            // i-direction: v0â†’v1 (axial), j-direction: v0â†’v3 (radial), k-direction: wedge
             w.println("blocks");
             w.println("(");
             double effectiveGrading = (firstLayerThickness > 0)
@@ -422,7 +422,7 @@ public class OpenFOAMExporter {
             // --- spline edges for wall profile ---
             w.println("edges");
             w.println("(");
-            // front face: vertex 3 (inlet wall) → vertex 2 (outlet wall)
+            // front face: vertex 3 (inlet wall) â†’ vertex 2 (outlet wall)
             w.println("    spline 3 2");
             w.println("    (");
             for (int i = 1; i < pts.size() - 1; i++) {
@@ -431,7 +431,7 @@ public class OpenFOAMExporter {
                         p.x(), p.y() * cosP, p.y() * sinP);
             }
             w.println("    )");
-            // back face: vertex 7 → vertex 6 (mirror of front)
+            // back face: vertex 7 â†’ vertex 6 (mirror of front)
             w.println("    spline 7 6");
             w.println("    (");
             for (int i = 1; i < pts.size() - 1; i++) {
@@ -608,8 +608,8 @@ public class OpenFOAMExporter {
         double cp  = gas.specificHeatCp();
         double mw  = gas.molecularWeight();
 
-        // Convert to OpenFOAM Sutherland form: μ = As·T^(3/2) / (T + Ts)
-        // from: μ = μ_ref·(T/T_ref)^(3/2)·(T_ref + S)/(T + S)
+        // Convert to OpenFOAM Sutherland form: Î¼ = AsÂ·T^(3/2) / (T + Ts)
+        // from: Î¼ = Î¼_refÂ·(T/T_ref)^(3/2)Â·(T_ref + S)/(T + S)
         double muRef = gas.viscosityRef();
         double tRef  = gas.tempRef();
         double S     = gas.sutherlandConst();
@@ -637,12 +637,12 @@ public class OpenFOAMExporter {
             w.println("    }");
             w.println("    thermodynamics");
             w.println("    {");
-            w.printf("        Cp   %.2f;  // J/(kg·K)%n", cp);
+            w.printf("        Cp   %.2f;  // J/(kgÂ·K)%n", cp);
             w.println("        Hf   0;");
             w.println("    }");
             w.println("    transport");
             w.println("    {");
-            w.printf("        As   %.6e;  // Sutherland coefficient [Pa·s/sqrt(K)]%n", as);
+            w.printf("        As   %.6e;  // Sutherland coefficient [PaÂ·s/sqrt(K)]%n", as);
             w.printf("        Ts   %.4f;  // Sutherland temperature [K]%n", S);
             w.println("    }");
             w.println("}");
@@ -655,7 +655,7 @@ public class OpenFOAMExporter {
     // -------------------------------------------------------------------------
 
     /**
-     * Writes {@code constant/turbulenceProperties} selecting either k-ω SST
+     * Writes {@code constant/turbulenceProperties} selecting either k-Ï‰ SST
      * (when {@link #turbulenceEnabled} is {@code true}) or a laminar simulation type.
      *
      * @param file Destination file path
@@ -681,7 +681,7 @@ public class OpenFOAMExporter {
     }
 
     // -------------------------------------------------------------------------
-    // 0/p  — pressure
+    // 0/p  â€” pressure
     // -------------------------------------------------------------------------
 
     /**
@@ -730,7 +730,7 @@ public class OpenFOAMExporter {
     }
 
     // -------------------------------------------------------------------------
-    // 0/T  — temperature
+    // 0/T  â€” temperature
     // -------------------------------------------------------------------------
 
     /**
@@ -738,7 +738,7 @@ public class OpenFOAMExporter {
      * inlet (stagnation temperature = chamber temperature), {@code zeroGradient} at
      * the outlet, and an adiabatic ({@code zeroGradient}) wall condition.
      *
-     * @param params Nozzle design parameters providing chamber temperature and γ
+     * @param params Nozzle design parameters providing chamber temperature and Î³
      * @param file   Destination file path
      * @throws IOException if the file cannot be written
      */
@@ -770,7 +770,7 @@ public class OpenFOAMExporter {
     }
 
     // -------------------------------------------------------------------------
-    // 0/U  — velocity
+    // 0/U  â€” velocity
     // -------------------------------------------------------------------------
 
     /**
@@ -806,13 +806,13 @@ public class OpenFOAMExporter {
     }
 
     // -------------------------------------------------------------------------
-    // 0/k  — turbulent kinetic energy
+    // 0/k  â€” turbulent kinetic energy
     // -------------------------------------------------------------------------
 
     /**
      * Writes {@code 0/k} (turbulent kinetic energy) with an initial value estimated
      * from the chamber speed of sound and the configured turbulence intensity
-     * ({@code k₀ = 1.5 · (I · a₀)²}).  Uses a {@code turbulentIntensityKineticEnergyInlet}
+     * ({@code kâ‚€ = 1.5 Â· (I Â· aâ‚€)Â²}).  Uses a {@code turbulentIntensityKineticEnergyInlet}
      * boundary condition at the inlet and a {@code kqRWallFunction} on the wall.
      *
      * @param params Nozzle design parameters providing gas and chamber conditions
@@ -847,13 +847,13 @@ public class OpenFOAMExporter {
     }
 
     // -------------------------------------------------------------------------
-    // 0/omega  — specific dissipation rate
+    // 0/omega  â€” specific dissipation rate
     // -------------------------------------------------------------------------
 
     /**
      * Writes {@code 0/omega} (specific turbulent dissipation rate) with an initial
      * value derived from a Bradshaw mixing-length estimate at the throat
-     * ({@code ω₀ = Cμ^(−¼) · √k₀ / lₜ}, where {@code lₜ = 0.07 · r_throat}).
+     * ({@code Ï‰â‚€ = CÎ¼^(âˆ’Â¼) Â· âˆškâ‚€ / lâ‚œ}, where {@code lâ‚œ = 0.07 Â· r_throat}).
      * Uses a {@code turbulentMixingLengthFrequencyInlet} inlet condition and an
      * {@code omegaWallFunction} on the wall.
      *
@@ -866,7 +866,7 @@ public class OpenFOAMExporter {
     private void writeOmegaField(NozzleDesignParameters params,
                                   List<Point2D> pts,
                                   Path file) throws IOException {
-        // Length scale ≈ 7% of throat radius (Bradshaw mixing-length estimate).
+        // Length scale â‰ˆ 7% of throat radius (Bradshaw mixing-length estimate).
         double lt = 0.07 * pts.getFirst().y();
         double a0 = params.gasProperties().speedOfSound(params.chamberTemperature());
         double k0 = 1.5 * Math.pow(turbulenceIntensity * a0, 2.0);
@@ -896,7 +896,7 @@ public class OpenFOAMExporter {
     }
 
     // -------------------------------------------------------------------------
-    // Aerospike case — blockMeshDict
+    // Aerospike case â€” blockMeshDict
     // -------------------------------------------------------------------------
 
     /**
@@ -910,7 +910,7 @@ public class OpenFOAMExporter {
      *
      * @param spike Ordered spike contour points (x monotonically increasing from 0 to L)
      * @param ri    Spike root radius at x = 0 (m)
-     * @param rt    Cowl radius — constant outer boundary (m)
+     * @param rt    Cowl radius â€” constant outer boundary (m)
      * @param rTip  Spike tip radius at x = L (m)
      * @param file  Destination file path
      * @throws IOException if the file cannot be written
@@ -955,8 +955,8 @@ public class OpenFOAMExporter {
             w.println();
 
             // --- blocks ---
-            // i-direction: v0→v1 (axial), j-direction: v0→v3 (radial, spike→cowl)
-            // k-direction: v0→v4 (wedge)
+            // i-direction: v0â†’v1 (axial), j-direction: v0â†’v3 (radial, spikeâ†’cowl)
+            // k-direction: v0â†’v4 (wedge)
             w.println("blocks");
             w.println("(");
             double gapWidth = rt - ri;
@@ -971,7 +971,7 @@ public class OpenFOAMExporter {
             // --- spline edges along spike (inner) surface ---
             w.println("edges");
             w.println("(");
-            // front face: vertex 0 (spike inlet) → vertex 1 (spike outlet)
+            // front face: vertex 0 (spike inlet) â†’ vertex 1 (spike outlet)
             w.println("    spline 0 1");
             w.println("    (");
             for (int i = 1; i < spike.size() - 1; i++) {
@@ -980,7 +980,7 @@ public class OpenFOAMExporter {
                         p.x(), p.y() * cosP, p.y() * sinP);
             }
             w.println("    )");
-            // back face: vertex 4 → vertex 5 (mirror of front)
+            // back face: vertex 4 â†’ vertex 5 (mirror of front)
             w.println("    spline 4 5");
             w.println("    (");
             for (int i = 1; i < spike.size() - 1; i++) {
@@ -1011,7 +1011,7 @@ public class OpenFOAMExporter {
     }
 
     // -------------------------------------------------------------------------
-    // Aerospike case — 0/ field files
+    // Aerospike case â€” 0/ field files
     // -------------------------------------------------------------------------
 
     /**
@@ -1064,7 +1064,7 @@ public class OpenFOAMExporter {
      * Writes {@code 0/T} for the Aerospike case.  Both spike and cowl walls use
      * adiabatic ({@code zeroGradient}) conditions; no {@code axis} patch.
      *
-     * @param params Nozzle design parameters providing chamber temperature and γ
+     * @param params Nozzle design parameters providing chamber temperature and Î³
      * @param file   Destination file path
      * @throws IOException if the file cannot be written
      */
@@ -1166,12 +1166,12 @@ public class OpenFOAMExporter {
 
     /**
      * Writes {@code 0/omega} for the Aerospike case.  The mixing-length estimate uses
-     * 7% of the annular gap width ({@code l_t = 0.07 · (r_t − r_i)}).  Both spike
+     * 7% of the annular gap width ({@code l_t = 0.07 Â· (r_t âˆ’ r_i)}).  Both spike
      * and cowl walls use {@code omegaWallFunction}; no {@code axis} patch.
      *
      * @param params Nozzle design parameters providing gas and chamber conditions
-     * @param ri     Spike root radius (m) — inner boundary of the annular gap
-     * @param rt     Cowl radius (m) — outer boundary of the annular gap
+     * @param ri     Spike root radius (m) â€” inner boundary of the annular gap
+     * @param rt     Cowl radius (m) â€” outer boundary of the annular gap
      * @param file   Destination file path
      * @throws IOException if the file cannot be written
      */
@@ -1212,12 +1212,12 @@ public class OpenFOAMExporter {
 
     /**
      * Returns a {@code blockMeshDict} grading specification string for wall-normal
-     * boundary-layer stretching.  For {@code ratio} ≤ 1 a plain {@code "1"} (uniform)
+     * boundary-layer stretching.  For {@code ratio} â‰¤ 1 a plain {@code "1"} (uniform)
      * is returned.  Otherwise, a two-sub-layer specification is produced: the inner
      * 20% of cells are stretched toward the wall at the given ratio; the outer 80%
      * relax back at the inverse ratio.
      *
-     * @param ratio Cell-size ratio (wall cell / axis cell); must be ≥ 1 for stretching
+     * @param ratio Cell-size ratio (wall cell / axis cell); must be â‰¥ 1 for stretching
      * @return OpenFOAM grading specification string, e.g. {@code "((0.2 0.2 4.00)(0.8 0.8 0.2500))"}
      */
     private static String gradingSpec(double ratio) {
