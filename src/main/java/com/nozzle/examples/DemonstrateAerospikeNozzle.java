@@ -32,6 +32,13 @@ import java.nio.file.Path;
 /** Demonstrates the aerospike (plug) nozzle: design, geometry, performance, and exports. */
 public class DemonstrateAerospikeNozzle {
 
+    private DemonstrateAerospikeNozzle() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     * @throws Exception on any I/O or calculation failure
+     */
     public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);

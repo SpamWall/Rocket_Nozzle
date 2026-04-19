@@ -35,6 +35,13 @@ import java.nio.file.Path;
 /** Demonstrates full convergent-section geometry, discharge coefficient, and geometry-complete exports. */
 public class DemonstrateConvergentSection {
 
+    private DemonstrateConvergentSection() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     * @throws Exception on any I/O or calculation failure
+     */
     public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);

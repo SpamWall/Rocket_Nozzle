@@ -28,6 +28,12 @@ import com.nozzle.core.ShockExpansionModel;
 /** Demonstrates flow separation prediction and shock-expansion off-design analysis. */
 public class DemonstrateFlowSeparationAndShockExpansion {
 
+    private DemonstrateFlowSeparationAndShockExpansion() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     */
     public static void main(String[] ignoredArgs) {
         System.out.println("\n--- FLOW SEPARATION & SHOCK-EXPANSION OFF-DESIGN ---\n");
 

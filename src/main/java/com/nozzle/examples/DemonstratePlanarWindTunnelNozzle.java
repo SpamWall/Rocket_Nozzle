@@ -34,6 +34,13 @@ import java.nio.file.Path;
 /** Demonstrates a planar (2-D rectangular) wind-tunnel nozzle with span sensitivity and exports. */
 public class DemonstratePlanarWindTunnelNozzle {
 
+    private DemonstratePlanarWindTunnelNozzle() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     * @throws Exception on any I/O or calculation failure
+     */
     public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);

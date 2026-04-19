@@ -33,6 +33,13 @@ import java.nio.file.Path;
 /** Demonstrates geometry-complete (chamber face → exit) nozzle with DXF exports. */
 public class DemonstrateFullNozzleGeometry {
 
+    private DemonstrateFullNozzleGeometry() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     * @throws Exception on any I/O or calculation failure
+     */
     public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);

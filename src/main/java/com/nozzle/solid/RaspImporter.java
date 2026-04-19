@@ -29,7 +29,7 @@ import java.util.List;
 /**
  * Parser for RASP {@code .eng} solid rocket motor thrust-curve files.
  *
- * <h3>File format</h3>
+ * <h2>File format</h2>
  * <p>A RASP {@code .eng} file consists of one or more motor definitions.
  * Lines beginning with {@code ;} are comments and are ignored.  Each motor
  * definition has:

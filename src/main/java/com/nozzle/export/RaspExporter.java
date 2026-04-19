@@ -46,7 +46,7 @@ import java.util.List;
  * String engText = RaspExporter.format(motor);
  * }</pre>
  *
- * <h3>Output format</h3>
+ * <h2>Output format</h2>
  * <p>Each motor block is written as:
  * <pre>
  * ; &lt;name&gt;

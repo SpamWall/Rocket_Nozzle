@@ -30,6 +30,12 @@ import java.util.List;
 /** Demonstrates the radiation-cooled extension model. */
 public class DemonstrateRadiationCooledExtension {
 
+    private DemonstrateRadiationCooledExtension() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     */
     public static void main(String[] ignoredArgs) {
         System.out.println("\n--- RADIATION-COOLED NOZZLE EXTENSION ---\n");
 

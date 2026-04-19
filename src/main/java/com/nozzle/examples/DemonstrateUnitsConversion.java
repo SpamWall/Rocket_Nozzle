@@ -27,6 +27,12 @@ import com.nozzle.core.Units;
 /** Demonstrates US-customary ↔ SI unit conversion utilities. */
 public class DemonstrateUnitsConversion {
 
+    private DemonstrateUnitsConversion() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     */
     public static void main(String[] ignoredArgs) {
         System.out.println("\n--- UNITS CONVERSION UTILITIES ---\n");
 

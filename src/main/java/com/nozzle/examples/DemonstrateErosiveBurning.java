@@ -26,6 +26,12 @@ import com.nozzle.solid.SolidPropellant;
 /** Demonstrates the Lenoir-Robillard erosive burning model for solid rocket grains. */
 public class DemonstrateErosiveBurning {
 
+    private DemonstrateErosiveBurning() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     */
     public static void main(String[] ignoredArgs) {
         System.out.println("\n--- EROSIVE BURNING MODEL (Lenoir-Robillard) ---\n");
 

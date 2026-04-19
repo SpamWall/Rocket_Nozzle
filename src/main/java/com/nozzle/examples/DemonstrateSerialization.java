@@ -35,6 +35,13 @@ import java.nio.file.Path;
 /** Demonstrates a three-stage persistent workflow using NozzleSerializer. */
 public class DemonstrateSerialization {
 
+    private DemonstrateSerialization() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     * @throws Exception on any I/O or calculation failure
+     */
     public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);

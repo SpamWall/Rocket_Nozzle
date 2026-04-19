@@ -27,6 +27,12 @@ import java.util.List;
 /** Demonstrates O/F sweep and optimum search across propellant families. */
 public class DemonstrateOFSweep {
 
+    private DemonstrateOFSweep() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     */
     public static void main(String[] ignoredArgs) {
         System.out.println("\n--- O/F SWEEP AND OPTIMUM SEARCH ---\n");
 

@@ -30,6 +30,12 @@ import com.nozzle.thermal.BoundaryLayerCorrection;
 /** Demonstrates boundary-layer calculation from the injector face vs. throat-only. */
 public class DemonstrateBoundaryLayerFromInjectorFace {
 
+    private DemonstrateBoundaryLayerFromInjectorFace() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     */
     public static void main(String[] ignoredArgs) {
         System.out.println("\n--- BOUNDARY LAYER FROM INJECTOR FACE ---\n");
 

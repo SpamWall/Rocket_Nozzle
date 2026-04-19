@@ -31,7 +31,7 @@ import com.nozzle.core.NozzleDesignParameters;
  * motor class, etc.) as well as a bridge to the nozzle design pipeline via
  * {@link #toNozzleParameters} and {@link #toNozzleParametersAtMaxPressure}.
  *
- * <h3>Chamber pressure inversion</h3>
+ * <h2>Chamber pressure inversion</h2>
  *
  * <p>A RASP file records thrust, not chamber pressure.  The bridge methods
  * recover chamber pressure from thrust by inverting the isentropic thrust
@@ -138,34 +138,66 @@ public final class RaspMotorData {
     // Raw-data accessors
     // -------------------------------------------------------------------------
 
-    /** Motor designation (e.g. {@code "F52-8"}). */
+    /**
+     * Motor designation (e.g. {@code "F52-8"}).
+     * @return motor designation
+     */
     public String name()             { return name; }
 
-    /** Casing outer diameter [mm]. */
+    /**
+     * Casing outer diameter.
+     * @return diameter [mm]
+     */
     public double diameterMm()       { return diameterMm; }
 
-    /** Motor overall length [mm]. */
+    /**
+     * Motor overall length.
+     * @return length [mm]
+     */
     public double lengthMm()         { return lengthMm; }
 
-    /** Ejection-charge delay string (e.g. {@code "8"}, {@code "P"}). */
+    /**
+     * Ejection-charge delay string (e.g. {@code "8"}, {@code "P"}).
+     * @return delay string
+     */
     public String delays()           { return delays; }
 
-    /** Propellant mass [kg]. */
+    /**
+     * Propellant mass.
+     * @return mass [kg]
+     */
     public double propellantMassKg() { return propellantMassKg; }
 
-    /** Loaded (total) motor mass [kg]. */
+    /**
+     * Loaded (total) motor mass.
+     * @return mass [kg]
+     */
     public double totalMassKg()      { return totalMassKg; }
 
-    /** Manufacturer identifier. */
+    /**
+     * Manufacturer identifier string.
+     * @return manufacturer
+     */
     public String manufacturer()     { return manufacturer; }
 
-    /** Number of data points in the thrust-time array. */
+    /**
+     * Number of data points in the thrust-time array.
+     * @return point count
+     */
     public int size()                { return timeSeconds.length; }
 
-    /** Elapsed time at index {@code i} [s]. */
+    /**
+     * Elapsed time at the given data-point index.
+     * @param i data-point index (0-based)
+     * @return time [s]
+     */
     public double timeAt(int i)      { return timeSeconds[i]; }
 
-    /** Thrust at index {@code i} [N]. */
+    /**
+     * Thrust at the given data-point index.
+     * @param i data-point index (0-based)
+     * @return thrust [N]
+     */
     public double thrustAt(int i)    { return thrustNewtons[i]; }
 
     // -------------------------------------------------------------------------

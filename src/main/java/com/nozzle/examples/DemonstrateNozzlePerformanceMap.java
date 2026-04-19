@@ -27,6 +27,12 @@ import com.nozzle.core.NozzlePerformanceMap;
 /** Demonstrates the 2D Isp performance map vs altitude and expansion ratio. */
 public class DemonstrateNozzlePerformanceMap {
 
+    private DemonstrateNozzlePerformanceMap() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     */
     public static void main(String[] ignoredArgs) {
         System.out.println("\n--- NOZZLE PERFORMANCE MAP (Isp vs altitude and expansion ratio) ---\n");
 

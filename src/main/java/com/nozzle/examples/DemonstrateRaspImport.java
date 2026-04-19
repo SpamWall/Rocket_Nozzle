@@ -35,6 +35,13 @@ import java.nio.file.Path;
 /** Demonstrates RASP .eng import and bridge to the nozzle design pipeline. */
 public class DemonstrateRaspImport {
 
+    private DemonstrateRaspImport() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     * @throws Exception on any I/O or calculation failure
+     */
     public static void main(String[] ignoredArgs) throws Exception {
         Path outputDir = Path.of("nozzle_output");
         Files.createDirectories(outputDir);

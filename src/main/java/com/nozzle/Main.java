@@ -33,6 +33,12 @@ public class Main {
 
     private Main() {}
 
+    /**
+     * Dispatcher entry point.
+     * @param args optional single argument: lower-case demo name (e.g. {@code solidmotor});
+     *             omit or pass any unrecognised value to run all demonstrations in sequence
+     * @throws Exception if any demonstration fails
+     */
     public static void main(String[] args) throws Exception {
         String target = args.length > 0 ? args[0].toLowerCase() : "all";
 

@@ -29,6 +29,12 @@ import java.util.List;
 /** Demonstrates altitude-adaptive optimization. */
 public class DemonstrateOptimization {
 
+    private DemonstrateOptimization() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     */
     public static void main(String[] ignoredArgs) {
         System.out.println("\n--- ALTITUDE-ADAPTIVE OPTIMIZATION ---\n");
 

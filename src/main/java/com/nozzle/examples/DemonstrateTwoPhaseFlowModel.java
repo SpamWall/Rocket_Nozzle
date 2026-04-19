@@ -28,6 +28,12 @@ import com.nozzle.thermal.TwoPhaseFlowModel;
 /** Demonstrates two-phase flow Isp loss modeling with Al2O3 particles (Lagrangian tracking). */
 public class DemonstrateTwoPhaseFlowModel {
 
+    private DemonstrateTwoPhaseFlowModel() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     */
     public static void main(String[] ignoredArgs) {
         System.out.println("\n--- TWO-PHASE FLOW MODEL (Al\u2082O\u2083 PARTICLES) ---\n");
 

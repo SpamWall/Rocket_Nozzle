@@ -28,6 +28,12 @@ import java.util.List;
 /** Demonstrates frozen/equilibrium chemistry modeling and Isp comparison. */
 public class DemonstrateChemistryModeling {
 
+    private DemonstrateChemistryModeling() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     */
     public static void main(String[] ignoredArgs) {
         System.out.println("\n--- CHEMISTRY MODELING ---\n");
 

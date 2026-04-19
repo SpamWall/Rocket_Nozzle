@@ -27,6 +27,12 @@ import com.nozzle.validation.NASASP8120Validator;
 /** Demonstrates NASA SP-8120 validation. */
 public class DemonstrateValidation {
 
+    private DemonstrateValidation() {}
+
+    /**
+     * Entry point.
+     * @param ignoredArgs unused
+     */
     public static void main(String[] ignoredArgs) {
         System.out.println("\n--- NASA SP-8120 VALIDATION ---\n");
 
