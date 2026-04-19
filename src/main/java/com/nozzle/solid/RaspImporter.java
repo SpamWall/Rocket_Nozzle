@@ -103,7 +103,7 @@ public final class RaspImporter {
      * @throws IllegalArgumentException if no valid motor is found or a header
      *                                  is malformed
      */
-    static RaspMotorData parse(String content) {
+    public static RaspMotorData parse(String content) {
         List<RaspMotorData> motors = parseAll(content);
         if (motors.isEmpty()) {
             throw new IllegalArgumentException(
@@ -119,7 +119,7 @@ public final class RaspImporter {
      * @return list of parsed motors; never null, may be empty
      * @throws IllegalArgumentException if a header line is malformed
      */
-    static List<RaspMotorData> parseAll(String content) {
+    public static List<RaspMotorData> parseAll(String content) {
         List<RaspMotorData> result = new ArrayList<>();
         String[]            lines  = content.split("\\r?\\n");
 
